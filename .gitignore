@@ -37,3 +37,7 @@ bug_tracking_llm_system/reports/fault_localization/
 *.onnx
 *.sqlite
 *.sqlite3
+
+# Integrated ticket workspace: runtime data and machine-specific config
+bug_tracking_llm_system/data/workspace/
+bug_tracking_llm_system/integration_config.json

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ticket 工作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9h24M4 16h16M4 23h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="22" r="4" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+      <div>
+        <h1>Ticket 工作台</h1>
+        <p>匯入錯誤回報，依序完成轉換、重複確認、優先級、分派與錯誤定位</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-quiet" id="statusButton" type="button">模型與資料狀態</button>
+      <button class="btn btn-primary" id="importButton" type="button">匯入 Ticket</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="inbox" aria-label="Ticket 清單">
+      <div class="inbox-head">
+        <div class="filters" role="tablist" aria-label="篩選">
+          <button class="filter is-active" data-filter="all" role="tab" aria-selected="true">全部 <span data-count="all">0</span></button>
+          <button class="filter" data-filter="review" role="tab" aria-selected="false">等你確認 <span data-count="review">0</span></button>
+          <button class="filter" data-filter="running" role="tab" aria-selected="false">處理中 <span data-count="running">0</span></button>
+          <button class="filter" data-filter="done" role="tab" aria-selected="false">已完成 <span data-count="done">0</span></button>
+        </div>
+      </div>
+      <ol class="ticket-list" id="ticketList"></ol>
+      <div class="inbox-empty" id="inboxEmpty" hidden>
+        <p>還沒有 Ticket。</p>
+        <button class="btn btn-primary" type="button" data-open-import>匯入第一批 Ticket</button>
+      </div>
+    </aside>
+
+    <section class="detail" id="detail" aria-live="polite">
+      <div class="detail-empty" id="detailEmpty">
+        <h2>選一張 Ticket 開始</h2>
+        <p>左側清單會標出需要你確認的 Ticket。每個步驟都會註明是哪一個子專案的程式產生結果；模型或資料沒載入時，會明確標示為「備援」。</p>
+      </div>
+      <div id="detailBody" hidden></div>
+    </section>
+  </main>
+
+  <dialog class="sheet" id="importDialog" aria-labelledby="importTitle">
+    <form method="dialog" class="sheet-inner" id="importForm" novalidate>
+      <header class="sheet-head">
+        <h2 id="importTitle">匯入 Ticket</h2>
+        <button class="icon-btn" value="cancel" aria-label="關閉">×</button>
+      </header>
+      <div class="segmented" role="tablist">
+        <button type="button" class="seg is-active" data-mode="file" role="tab">從檔案匯入</button>
+        <button type="button" class="seg" data-mode="form" role="tab">手動填寫一張</button>
+      </div>
+
+      <div data-pane="file">
+        <label class="drop" id="dropZone">
+          <input type="file" id="fileInput" accept=".json,.jsonl,.csv,.txt" hidden>
+          <strong>拖放檔案到這裡，或點一下選擇檔案</strong>
+          <span>支援 JSON、JSONL、CSV。也可以直接匯入 ToJson 的 unlabeled.jsonl 或 predicted.jsonl。</span>
+          <span class="drop-file" id="dropFile"></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="asHistory">
+          <span>這是歷史 Ticket（只加入比對資料庫，用於重複偵測與負責人推薦，不進入處理流程）</span>
+        </label>
+      </div>
+
+      <div data-pane="form" hidden>
+        <div class="form-grid">
+          <label class="field span-2">標題<input name="title" required placeholder="一句話描述發生的問題"></label>
+          <label class="field">Ticket 編號<input name="ticket_id" placeholder="選填，例如 WEB-1042"></label>
+          <label class="field">回報者<input name="reporter" placeholder="選填"></label>
+          <label class="field span-2">問題描述<textarea name="description" rows="3" placeholder="發生什麼事、影響誰"></textarea></label>
+          <label class="field span-2">重現步驟<textarea name="steps_to_reproduce" rows="2" placeholder="每行一個步驟"></textarea></label>
+          <label class="field">預期結果<textarea name="expected_behavior" rows="2"></textarea></label>
+          <label class="field">實際結果<textarea name="actual_behavior" rows="2"></textarea></label>
+          <label class="field span-2">錯誤訊息或 Log<textarea name="logs" rows="2" class="mono" placeholder="Traceback、錯誤碼"></textarea></label>
+          <label class="field">發生環境<input name="environment" placeholder="例如 Windows 11 / v4.2.0"></label>
+          <label class="field">產品<input name="product" placeholder="選填"></label>
+        </div>
+        <p class="hint">只填你知道的欄位；其餘欄位由 ToJson 的 Code Llama 抽取。</p>
+      </div>
+
+      <label class="field project-field">錯誤定位要用的專案（Repository）
+        <select id="importProject"></select>
+      </label>
+      <p class="form-error" id="importError" role="alert"></p>
+      <footer class="sheet-foot">
+        <button class="btn btn-quiet" value="cancel">取消</button>
+        <button class="btn btn-primary" id="importSubmit" type="submit" value="default">匯入並開始處理</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="sheet sheet-wide" id="statusDialog" aria-labelledby="statusTitle">
+    <div class="sheet-inner">
+      <header class="sheet-head">
+        <h2 id="statusTitle">模型與資料狀態</h2>
+        <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
+      </header>
+      <p class="hint">這裡列出每個步驟會呼叫的子專案程式，以及這台電腦上是否找得到訓練好的模型與資料。設定位置：<code id="configPath"></code></p>
+      <div id="statusBody"></div>
+      <h3 class="sub">專案程式碼索引</h3>
+      <div id="projectBody"></div>
+    </div>
+  </dialog>
+
+
+  <dialog class="sheet sheet-compare" id="compareDialog" aria-labelledby="compareTitle">
+    <div class="sheet-inner">
+      <header class="sheet-head compare-head">
+        <div class="compare-heading">
+          <p class="compare-pos" id="comparePos"></p>
+          <h2 id="compareTitle">並排比對</h2>
+          <div class="compare-scores" id="compareScores"></div>
+        </div>
+        <div class="compare-nav">
+          <button class="btn btn-quiet btn-small" type="button" data-compare-nav="-1">上一張候選</button>
+          <button class="btn btn-quiet btn-small" type="button" data-compare-nav="1">下一張候選</button>
+          <button class="icon-btn" type="button" data-compare-close aria-label="關閉">×</button>
+        </div>
+      </header>
+      <div class="compare-legend"><span class="legend-same">相同</span>兩邊欄位內容一樣 <mark>字詞</mark>兩張 Ticket 都出現的字詞</div>
+      <div class="compare-grid" id="compareGrid" role="table" aria-label="新 Ticket 與歷史 Ticket 對照"></div>
+      <footer class="sheet-foot compare-foot">
+        <label class="field compare-note">標註備註（選填）
+          <textarea id="compareNote" rows="2" placeholder="例如：錯誤訊息一樣，但發生的頁面不同"></textarea>
+        </label>
+        <div class="compare-actions">
+          <span class="compare-mark" id="compareMark"></span>
+          <button class="btn btn-quiet" type="button" data-compare-mark="not">不是這張</button>
+          <button class="btn btn-quiet" type="button" data-compare-mark="possible">標註可能重複</button>
+          <button class="btn btn-gate" type="button" id="compareConfirm" data-compare-confirm>確認是這張的重複</button>
+        </div>
+      </footer>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

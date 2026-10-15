@@ -1,0 +1,65 @@
+{
+  "_說明": "複製成 integration_config.json 後修改路徑。相對路徑以這個檔案所在的 bug_tracking_llm_system/ 為基準。沒填的模型路徑會讓該步驟標示為「備援」。",
+
+  "workspace_root": "..",
+  "store_dir": "data/workspace",
+
+  "historical_tickets_paths": [
+    "data/historical_tickets.jsonl"
+  ],
+
+  "extraction": {
+    "_說明": "呼叫 ToJson/scripts/To_Json/extract_to_json.py；需要本機 Ollama 已 pull 該模型。",
+    "enabled": true,
+    "ollama_url": "http://localhost:11434/api/generate",
+    "model": "codellama:7b-instruct",
+    "timeout_seconds": 180,
+    "prompt_mode": "zero_shot",
+    "fallback_to_rule_normalization": true
+  },
+
+  "duplicate": {
+    "_說明": "sbert_model_dir 指向 SbertDuplicateDetector.save() 的輸出資料夾（內含 title_model/、content_model/）。未設定時使用 DUP 的 TF-IDF baseline。",
+    "sbert_model_dir": null,
+    "combine": "weighted:0.6,0.4",
+    "metadata_rerank_fields": ["component:0.02"],
+    "stable_rerank": true,
+    "top_k": 10,
+    "auto_duplicate_threshold": null,
+    "review_threshold": null
+  },
+
+  "priority": {
+    "_說明": "預設會找 ../bug-priority-drone/models/recall_balanced_priority_model.joblib 與 data/processed/features_bm25_p2_error_keywords_train；history_csv 請指向清洗後的歷史 CSV（clean_bug_reports.py 的輸出）。",
+    "model_path": null,
+    "reference_feature_dir": null,
+    "history_csv": null,
+    "history_max_rows": 0,
+    "timeout_seconds": 900,
+    "fallback_to_baseline": true
+  },
+
+  "assignee": {
+    "_說明": "這些欄位直接傳給主系統 PipelineConfig；未指定 assignee_dataset_path 時會找 paper_grade 的 bmo 歷史資料，再找不到就用工作台匯入的歷史資料。",
+    "assignee_top_k": 5
+  },
+
+  "localization": {
+    "top_k": 5,
+    "embedding_backend": "tfidf",
+    "include_code_preview": true
+  },
+
+  "projects": {
+    "duplicate-detection": {
+      "repo_path": "../bug-duplicate-detection",
+      "code_index_path": "data/workspace/code_index/duplicate-detection.json",
+      "description": "範例：用組內的 bug-duplicate-detection 原始碼當作待定位的 Repository"
+    },
+    "smoke": {
+      "repo_path": "tests/fixtures/smoke_repo",
+      "description": "主系統測試用的小型 Repository"
+    }
+  },
+  "default_project": "duplicate-detection"
+}

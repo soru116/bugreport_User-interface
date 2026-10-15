@@ -9,6 +9,7 @@
 | [ticket_classification.md](ticket_classification.md) | Duplicate／retrieval 與 priority 的獨立研究和整合 baseline |
 | [assignee_routing.md](assignee_routing.md) | 負責人候選、人工確認、時間協定、部署限制 |
 | [fault_localization.md](fault_localization.md) | FL 版本邊界、Stage 1–3、預測 handoff |
+| [../bug_tracking_llm_system/workspace/README.md](../bug_tracking_llm_system/workspace/README.md) | 整合版 Ticket 工作台：五個已完成功能（ToJson、DUP、PRI、Assignee、FL）如何串接、設定檔、網頁與 CLI、備援規則與未驗證項目 |
 | [patch_generation.md](patch_generation.md) | 主系統 diff、獨立 FIM、統一 repair pipeline |
 | [datasets.md](datasets.md) | 資料位置、schema、gold／holdout 邊界 |
 | [evaluation.md](evaluation.md) | 現有 evaluator 語意、測試指令與驗證層級 |
