@@ -368,6 +368,11 @@ function renderInbox() {
   const others = atRoot ? shown : shown.filter((t) => !t.pinned);
   $(".shelf-pinned").hidden = atRoot || none;
   const showProject = atRoot; // search across projects: say which folder each card is in
+  if (!$("#homeView").hidden) {
+    // The ticket page's previous/next buttons follow exactly what this view shows.
+    state.navKeys = [...pinned, ...others].map((t) => t.key);
+    state.navLabel = terms.length ? `「${state.query.trim()}」的搜尋結果` : state.filter !== "all" ? FILTER_TEXT[state.filter] : "";
+  }
   $("#pinnedCount").textContent = pinned.length || "";
   $("#otherCount").textContent = others.length || "";
   $("#otherTitle").firstChild.textContent = atRoot ? "搜尋結果 " : "其他 Ticket ";
@@ -400,6 +405,46 @@ async function togglePin(key) {
     toast(pinned ? `已釘選 ${t.ticket_id}` : `已取消釘選 ${t.ticket_id}`);
     await refresh();
   } catch (err) { toast(err.message); }
+}
+
+/* ------------------------------------------------- previous / next ticket */
+const FILTER_TEXT = { review: "等你確認", running: "處理中", done: "已完成" };
+
+/* Tickets of the same project in the order the folder showed them (pinned first). If the ticket was
+   opened from a link instead, fall back to the folder's default order. */
+function navContext(r) {
+  const project = projectKey(r);
+  const inProject = (key) => { const t = state.tickets.find((x) => x.key === key); return t && projectKey(t) === project; };
+  let keys = (state.navKeys || []).filter(inProject);
+  let label = state.navLabel || "";
+  if (!keys.includes(r.key)) {
+    const all = state.tickets.filter((t) => projectKey(t) === project);
+    const pinned = all.filter((t) => t.pinned).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
+    keys = [...pinned, ...all.filter((t) => !t.pinned)].map((t) => t.key);
+    label = "";
+  }
+  return { keys, index: keys.indexOf(r.key), label };
+}
+
+function ticketNav(r) {
+  const { keys, index, label } = navContext(r);
+  if (keys.length < 2 || index < 0) return "";
+  const title = (key) => { const t = state.tickets.find((x) => x.key === key); return t ? `${t.ticket_id}：${t.title}` : key; };
+  const prev = keys[index - 1];
+  const next = keys[index + 1];
+  const arrow = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<nav class="ticket-nav" aria-label="同專案的其他 Ticket">
+    <button type="button" class="tn-btn" data-goto="${prev ? esc(prev) : ""}" ${prev ? "" : "disabled"} title="${prev ? `上一張（[）${esc(title(prev))}` : "已經是第一張"}" aria-label="上一張">${arrow("M14.5 6 8.5 12l6 6")}</button>
+    <span class="tn-pos">${label ? `<small>${esc(label)}</small>` : ""}${index + 1} / ${keys.length}</span>
+    <button type="button" class="tn-btn" data-goto="${next ? esc(next) : ""}" ${next ? "" : "disabled"} title="${next ? `下一張（]）${esc(title(next))}` : "已經是最後一張"}" aria-label="下一張">${arrow("M9.5 6l6 6-6 6")}</button>
+  </nav>`;
+}
+
+function gotoTicket(step) {
+  if (!state.detail) return;
+  const { keys, index } = navContext(state.detail);
+  const target = keys[index + step];
+  if (target) location.hash = `#/t/${encodeURIComponent(target)}`;
 }
 
 /* ----------------------------------------------------------------- routing */
@@ -535,6 +580,7 @@ function renderDetail() {
           <span class="id">${esc(r.ticket_id)}</span>
           <h2 title="${esc(r.title)}">${esc(r.title)}</h2>
         </div>
+        ${ticketNav(r)}
         <div class="pin-meta">
           <button type="button" class="pin-btn pin-btn-inline ${r.pinned ? "is-on" : ""}" data-action="pin" aria-pressed="${Boolean(r.pinned)}" title="${r.pinned ? "取消釘選" : "釘選到首頁上方"}" aria-label="${r.pinned ? "取消釘選" : "釘選"}">${PIN_ICON}</button>
           <span class="chip ${cls}">${esc(label)}</span>
@@ -943,6 +989,8 @@ function renderLocalization(r, o, projectOptions) {
 async function onDetailClick(event) {
   const opener = event.target.closest("[data-compare]");
   if (opener && state.detail && !event.target.closest("a")) { await openCompare(Number(opener.dataset.compare)); return; }
+  const go = event.target.closest("[data-goto]");
+  if (go) { if (go.dataset.goto) location.hash = `#/t/${encodeURIComponent(go.dataset.goto)}`; return; }
   const help = event.target.closest("[data-factor-help]");
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
@@ -1151,8 +1199,10 @@ async function init() {
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target.closest("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]")) return;
+    if ((e.key === "[" || e.key === "]") && state.selected) { e.preventDefault(); gotoTicket(e.key === "]" ? 1 : -1); return; }
+    if (e.key !== "/") return;
     e.preventDefault();
     search.focus();
     search.select();
