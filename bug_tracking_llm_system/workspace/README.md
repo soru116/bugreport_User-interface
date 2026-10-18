@@ -101,6 +101,34 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 範例資料是**示範用的虛構 Ticket**，內容描述 `bug-duplicate-detection` 原始碼中可能出現的錯誤，搭配設定檔中的 `duplicate-detection` 專案示範錯誤定位。它們不是評估資料，不能拿來算準確率。
 
+## 用組內的真實資料示範
+
+`scripts/build_real_dataset_demo.py` 會把子專案用過的真實 Bugzilla 資料，轉成工作台可以匯入的檔案。它只讀資料，不會改動原本的資料集：
+
+| 專案資料夾 | 來源 | 歷史資料 | 新 Ticket |
+|---|---|---|---|
+| Mozilla Firefox | `bug-duplicate-detection/data/mozilla_firefox_*.csv` | 約 1,760 筆，含重複標記與負責人 | 4 張真的是重複、2 張不是 |
+| Eclipse | `bug-priority-drone/data/raw/eclipse_bugzilla_raw_with_dupe.csv` | 隨機 1,500 筆（含正確答案） | PRI `natural_test` 中 P1–P5 各 1 張，加 1 張重複 |
+
+```bash
+python3 scripts/build_real_dataset_demo.py          # 自動尋找兩個子專案的 data 資料夾
+```
+
+輸出在 `data/real_datasets/`（不會上傳 GitHub）：
+
+1. 先用「匯入 Ticket」勾選「這是歷史 Ticket」匯入 `history.jsonl`。
+2. 再匯入 `new_tickets_firefox.jsonl`、`new_tickets_eclipse.jsonl`。每一筆都帶 `project`，會自動放進對應的專案資料夾。新 Ticket 已移除重複對象、優先級、負責人和處理結果。
+3. 處理完後對照 `answer_key.md`，裡面是被移除的真正答案。
+
+要注意：
+
+- 每張 Ticket 都要用 SBERT 比對約 1,500–1,800 筆歷史，再用 PRI 重算整份 Eclipse 歷史的特徵，一張大約需要 2–3 分鐘，Ticket 會一張一張依序處理。
+- 這兩個專案沒有 Repository，所以錯誤定位會顯示「略過」。
+- SBERT 是用 Firefox 重複資料訓練的，Firefox 的重複偵測結果會偏好看；PRI 只用 Eclipse 訓練，Firefox 的優先級是跨資料集推測。這是示範，不能拿來算準確率。
+- Eclipse 資料沒有負責人欄位，Eclipse Ticket 會建議人工分派。
+
+重複偵測和負責人推薦只會使用同一個專案（以及沒有標專案）的歷史資料，所以 Firefox 和 Eclipse 不會互相比對。優先級計算時，如果新 Ticket 本身就在 PRI 的歷史 CSV 裡，會先把那一筆排除，避免模型讀到自己的答案。
+
 ## 命令列（批次）
 
 ```bash
@@ -129,7 +157,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，13 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，14 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

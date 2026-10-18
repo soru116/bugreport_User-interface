@@ -186,10 +186,22 @@ class TeamPriorityPredictor:
             target_rows = self._target_rows(tickets, clean_module, tz_aware=_history_is_tz_aware(history_csv))
             pd.DataFrame(target_rows).to_csv(target_csv, index=False, encoding="utf-8-sig")
 
-            if settings.history_max_rows and settings.history_max_rows > 0:
+            # A ticket must never be its own history: when a real report from the history CSV is
+            # imported as a new ticket, its labelled copy would otherwise feed the related-report and
+            # author factors (build_features only de-duplicates by the internal target id).
+            target_ids = {str(ticket.get("ticket_id") or "").strip() for ticket in tickets} - {""}
+            try:
+                history_ids = pd.read_csv(history_csv, usecols=["id"], dtype=str)["id"].str.strip()
+                overlap = bool(target_ids) and bool(history_ids.isin(target_ids).any())
+            except ValueError:  # history without an id column: nothing to match against
+                overlap = False
+            if overlap or (settings.history_max_rows and settings.history_max_rows > 0):
                 history = pd.read_csv(history_csv)
-                history["creation_time"] = pd.to_datetime(history["creation_time"], errors="coerce")
-                history = history.dropna(subset=["creation_time"]).sort_values("creation_time").tail(settings.history_max_rows)
+                if overlap:
+                    history = history[~history["id"].astype(str).str.strip().isin(target_ids)]
+                if settings.history_max_rows and settings.history_max_rows > 0:
+                    history["creation_time"] = pd.to_datetime(history["creation_time"], errors="coerce")
+                    history = history.dropna(subset=["creation_time"]).sort_values("creation_time").tail(settings.history_max_rows)
                 history_csv = tmp_path / "history_window.csv"
                 history.to_csv(history_csv, index=False, encoding="utf-8-sig")
 

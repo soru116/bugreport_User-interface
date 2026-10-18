@@ -456,6 +456,7 @@ def _history_row(structured: dict[str, Any], record: dict[str, Any] | None = Non
         key: structured.get(key)
         for key in (
             "ticket_id",
+            "project",
             "title",
             "description",
             "product",

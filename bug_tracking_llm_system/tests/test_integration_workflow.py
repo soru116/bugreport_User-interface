@@ -232,6 +232,42 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertFalse(record["pinned"])
         self.assertEqual(record["pinned_at"], "")
 
+    def test_duplicate_and_assignee_history_stay_within_the_project(self) -> None:
+        config = config_from_mapping(
+            {
+                "workspace_root": str(WORKSPACE_ROOT),
+                "store_dir": str(self.root / "scoped_store"),
+                "priority": {"model_path": str(self.root / "missing.joblib")},
+                "projects": {"smoke": {"repo_path": str(SMOKE_REPO)}, "other": {"repo_path": str(SMOKE_REPO)}},
+                "default_project": "smoke",
+            }
+        )
+        pipeline = IntegratedPipeline(config, extractor=ToJsonExtractor(config, llm_call=fake_code_llama))
+        text = {"title": "Login page crashes when token is missing", "description": "Missing token crashes login.", "component": "authentication"}
+        pipeline.import_history(
+            [
+                {"ticket_id": "S-1", "project": "smoke", "assignee": "smoke-dev@example.com", **text},
+                {"ticket_id": "O-1", "project": "other", "assignee": "other-dev@example.com", **text},
+                {"ticket_id": "G-1", "assignee": "shared-dev@example.com", "title": "Session expires early", "description": "Session timeout", "component": "session"},
+            ]
+        )
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test", project="smoke")
+        record = pipeline.run_until_review(record["key"])
+        output = record["stages"]["duplicate"]["output"]
+        ids = [item["ticket_id"] for item in output["top_k_candidates"]]
+        self.assertIn("S-1", ids)
+        self.assertIn("G-1", ids, "history rows without a project are shared by every project")
+        self.assertNotIn("O-1", ids)
+        self.assertEqual(output["other_project_rows_skipped"], 1)
+        pipeline.decide_duplicate(record["key"], "not_duplicate")
+        record = pipeline.run_after_duplicate(record["key"])
+        assignee = record["stages"]["assignee"]
+        candidates = assignee["output"]["ranked_candidates"]
+        self.assertIn("smoke-dev@example.com", candidates)
+        self.assertNotIn("other-dev@example.com", candidates)
+        self.assertIn("smoke", assignee["details"]["history_source"])
+        self.assertTrue(any(row.get("ticket_id") == "T-1" and row.get("project") == "smoke" for row in pipeline.store.history_rows()))
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])
@@ -313,9 +349,15 @@ class PriorityModelIntegrationTests(unittest.TestCase):
                 [
                     {"ticket_id": "N1", "title": "Workspace corrupted crash data loss", "description": "hang deadlock", "severity": "blocker", "product": "platform", "component": "debug"},
                     {"ticket_id": "N2", "title": "Typo in javadoc wording", "description": "spelling documentation", "severity": "trivial", "product": "platform", "component": "ui"},
+                    # A real report that is also in the history CSV: it must not see its own labelled copy.
+                    {"ticket_id": rows[0]["id"], "title": rows[0]["summary"], "description": rows[0]["description"], "severity": rows[0]["severity"],
+                     "product": "platform", "component": rows[0]["component"], "reporter": rows[0]["creator"], "created_at": rows[0]["creation_time"]},
                 ]
             )
-            self.assertEqual([item["status"] for item in results], ["done", "done"], results[0].get("fallback_reason"))
+            own = results[2]["output"]["factor_values"]
+            self.assertEqual(own["related_report"]["related_top1_priority"], 0, "the earliest report has no earlier history once its own copy is dropped")
+            self.assertEqual(own["author"]["author_past_count"], 0)
+            self.assertEqual([item["status"] for item in results], ["done", "done", "done"], results[0].get("fallback_reason"))
             self.assertEqual(results[0]["output"]["model"], "recall_balanced_cost_sensitive")
             self.assertEqual(results[0]["output"]["predicted_priority"], "P1")
             self.assertEqual(results[1]["output"]["predicted_priority"], "P5")

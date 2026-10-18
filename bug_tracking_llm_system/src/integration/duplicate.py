@@ -165,10 +165,17 @@ class TeamDuplicateDetector:
         history, sources = self.history_rows(extra_history_paths)
         query_id = str(structured_ticket.get("ticket_id") or "__query__")
         excluded = {query_id, *(exclude_ids or set())}
+        # Only compare within the ticket's project; history rows without a project are shared.
+        query_project = str(structured_ticket.get("project") or "").strip()
+        other_project_rows = 0
 
         candidates = []
         raw_by_id: dict[str, dict[str, Any]] = {}
         for row in history:
+            row_project = str(row.get("project") or "").strip()
+            if query_project and row_project and row_project != query_project:
+                other_project_rows += 1
+                continue
             try:
                 record = _row_to_ticket({key: _stringify(value) for key, value in row.items()}, content_columns=DEFAULT_CONTENT_COLUMNS)
             except ValueError:
@@ -287,6 +294,8 @@ class TeamDuplicateDetector:
             "decision_policy": decision_policy,
             "top_k_candidates": top_candidates,
             "history_size": len(candidates),
+            "project_scope": query_project,
+            "other_project_rows_skipped": other_project_rows,
         }
         details = {
             "method": method,

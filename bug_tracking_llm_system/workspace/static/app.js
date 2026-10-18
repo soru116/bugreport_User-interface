@@ -296,7 +296,7 @@ function folderList() {
 function folderCard(f) {
   const name = projectName(f.key);
   const desc = f.key === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。"
-    : f.config ? (f.config.description || f.config.repo_path || "") : "設定檔裡已經沒有這個專案。";
+    : f.config ? (f.config.description || f.config.repo_path || "") : "設定檔沒有這個專案的 Repository，這些 Ticket 會略過錯誤定位。";
   // Up to three papers peek out of the folder, coloured by the status of the most recent tickets.
   const papers = f.tickets.slice(0, 3).map((t, i) => `<i data-tone="${coverTone(t)}" style="--i:${i}"></i>`).join("");
   const stats = [
@@ -350,7 +350,7 @@ function renderInbox() {
     if (showFolders) return;
   } else {
     const config = state.projects.find((p) => p.project === state.folder);
-    const desc = state.folder === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。" : config ? [config.description, config.repo_path].filter(Boolean).join("　") : "設定檔裡已經沒有這個專案。";
+    const desc = state.folder === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。" : config ? [config.description, config.repo_path].filter(Boolean).join("　") : "設定檔沒有這個專案的 Repository，這些 Ticket 會略過錯誤定位。";
     $("#homeHead").innerHTML = `<div class="folder-head">
         <a class="back-link" href="#/" title="回到所有專案" aria-label="回到所有專案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <div class="folder-head-text"><p class="crumb"><a href="#/">所有專案</a></p><h1 class="home-title">${esc(projectName(state.folder))}</h1>${desc ? `<p class="home-sub">${esc(desc)}</p>` : ""}</div>
@@ -651,7 +651,7 @@ function renderDuplicate(r, o) {
   const summary = possible.length
     ? `<p class="marked-summary">你標註為可能重複的：${possible.map((c) => `<b class="mono">${esc(c.ticket_id)}</b>`).join("、")}。打開並排比對後，可以在視窗裡確認是哪一張。</p>` : "";
   const hint = awaiting ? "點任一張候選，會並排顯示新 Ticket 和那張歷史 Ticket 的完整內容。" : "";
-  return `<p class="hint">${esc(o.decision_policy || "")}；比對了 ${o.history_size ?? "?"} 張歷史 Ticket。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
+  return `<p class="hint">${esc(o.decision_policy || "")}；比對了 ${o.history_size ?? "?"} 張${o.project_scope ? `「${esc(o.project_scope)}」及未標專案的` : ""}歷史 Ticket${o.other_project_rows_skipped ? `（略過其他專案 ${o.other_project_rows_skipped} 張）` : ""}。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
 }
 
 /* ---------------------------------------------------- compare dialog */
