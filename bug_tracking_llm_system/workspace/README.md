@@ -140,6 +140,24 @@ python3 scripts/build_real_dataset_demo.py          # 自動尋找兩個子專�
 
 重複偵測和負責人推薦只會使用同一個專案（以及沒有標專案）的歷史資料，所以 Firefox 和 Eclipse 不會互相比對。優先級計算時，如果新 Ticket 本身就在 PRI 的歷史 CSV 裡，會先把那一筆排除，避免模型讀到自己的答案。
 
+### SWE-bench：錯誤定位也用真實資料
+
+錯誤定位是在 SWE-bench 上開發和評估的。SWE-bench 的每一題都是真實的 GitHub issue，而且記錄了 issue 當時程式碼的版本（`base_commit`），所以五個步驟都能用真實資料跑。
+
+1. 用瀏覽器下載 SWE-bench Lite：<https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite/resolve/main/data/test-00000-of-00001.parquet>，放到 `data/real_datasets/`。
+2. 執行（需要 git 和網路；預設只取兩個小專案 `psf/requests`、`pallets/flask`，共 9 題）：
+
+   ```bash
+   pip install pyarrow
+   python3 scripts/build_swebench_demo.py --input data/real_datasets/test-00000-of-00001.parquet --config integration_config.json
+   ```
+
+   它會 clone 這兩個 repository，把每一題需要的版本匯出成 `data/swebench/snapshots/<repo>/<commit>/`，並把兩個專案加進設定檔（原檔備份為 `.bak`）。
+3. 匯入 `data/real_datasets/new_tickets_swebench.jsonl`。每張 Ticket 會在**自己那個版本**的程式碼裡做錯誤定位；第一次用到某個版本時會先建立程式碼索引，之後重用。
+4. 對照 `answer_key_swebench.md`：裡面是真正的修補改了哪些檔案。新 Ticket 只有 issue 本文，沒有 patch、測試或提示。
+
+注意：錯誤定位團隊在 SWE-bench 上調過方法，這不是沒看過的測試資料；這些專案沒有重複標記和負責人歷史；PRI 是用 Eclipse 訓練的。這是示範，不是評估。
+
 ## 命令列（批次）
 
 ```bash
@@ -168,7 +186,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，17 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，18 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

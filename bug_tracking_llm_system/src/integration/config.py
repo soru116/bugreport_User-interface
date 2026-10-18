@@ -86,6 +86,10 @@ class ProjectSettings:
     repo_path: Path
     code_index_path: Path | None = None
     description: str = ""
+    # Versioned repositories (e.g. SWE-bench): one source snapshot per base_commit in
+    # ``snapshots_dir/<commit>/``; a ticket with ``base_commit`` is localized in its own snapshot,
+    # with its code index cached as ``snapshots_dir/<commit>.index.json``.
+    snapshots_dir: Path | None = None
 
 
 @dataclass(slots=True)
@@ -172,6 +176,7 @@ class IntegrationConfig:
                     "repo_path": _p(project.repo_path),
                     "code_index_path": _p(project.code_index_path),
                     "description": project.description,
+                    "snapshots_dir": _p(project.snapshots_dir),
                 }
                 for name, project in self.projects.items()
             },
@@ -270,6 +275,7 @@ def config_from_mapping(
             repo_path=as_path(item["repo_path"]) or Path(str(item["repo_path"])),
             code_index_path=as_path(item.get("code_index_path")),
             description=str(item.get("description") or ""),
+            snapshots_dir=as_path(item.get("snapshots_dir")),
         )
     config.default_project = str(data.get("default_project") or "")
     return config

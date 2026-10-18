@@ -368,6 +368,72 @@ class IntegrationWorkflowTests(unittest.TestCase):
             self.assertEqual(record["stages"]["priority"]["status"], "fallback")
         self.assertIsNone(app.queue_info(keys[0]))
 
+    def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
+        import shutil as _shutil
+
+        if _shutil.which("git") is None:
+            self.skipTest("git is not installed")
+        upstream = self.root / "upstream"
+        (upstream / "pkg").mkdir(parents=True)
+
+        def run_git(*args: str) -> str:
+            return subprocess.run(["git", *args], cwd=upstream, check=True, capture_output=True, text=True).stdout.strip()
+
+        run_git("init", "-q")
+        run_git("config", "user.email", "t@example.com")
+        run_git("config", "user.name", "t")
+        (upstream / "pkg" / "session.py").write_text("def refresh_cookie_jar(jar):\n    return jar.expire()  # cookie jar refresh\n", encoding="utf-8")
+        (upstream / "pkg" / "util.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "v1")
+        first = run_git("rev-parse", "HEAD")
+        (upstream / "pkg" / "session.py").unlink()
+        (upstream / "pkg" / "cookies.py").write_text("def refresh_cookie_jar(jar):\n    return jar.expire()  # cookie jar refresh moved\n", encoding="utf-8")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "v2")
+        second = run_git("rev-parse", "HEAD")
+
+        issue = "Cookie jar refresh crashes\nrefresh_cookie_jar raises when the cookie jar expires."
+        rows = [
+            {"instance_id": f"demo__lib-{n}", "repo": "demo/lib", "base_commit": commit, "problem_statement": issue,
+             "created_at": f"2020-0{n}-01T00:00:00", "version": "1.0", "patch": f"diff --git a/{path} b/{path}\n", "test_patch": "secret",
+             "hints_text": "secret hint", "FAIL_TO_PASS": "[]", "PASS_TO_PASS": "[]"}
+            for n, commit, path in ((1, first, "pkg/session.py"), (2, second, "pkg/cookies.py"))
+        ]
+        rows_path = self.root / "rows.jsonl"
+        rows_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        config_path = self.root / "cfg.json"
+        config_path.write_text(json.dumps({"projects": {}}), encoding="utf-8")
+        done = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "build_swebench_demo.py"), "--input", str(rows_path), "--repos", "demo/lib",
+             "--work-dir", str(self.root / "swe"), "--output-dir", str(self.root / "out"), "--config", str(config_path),
+             "--repo-url", str(upstream)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        tickets = [json.loads(line) for line in (self.root / "out" / "new_tickets_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([t["base_commit"] for t in tickets], [first, second])
+        for ticket in tickets:
+            for secret in ("patch", "test_patch", "hints_text", "FAIL_TO_PASS", "PASS_TO_PASS"):
+                self.assertNotIn(secret, ticket)
+        answers = json.loads((self.root / "out" / "answer_key_swebench.json").read_text(encoding="utf-8"))["answers"]
+        self.assertEqual(answers[1]["fixed_files"], ["pkg/cookies.py"])
+
+        project_entry = json.loads(config_path.read_text(encoding="utf-8"))["projects"]["demo/lib"]
+        config = config_from_mapping({"workspace_root": str(WORKSPACE_ROOT), "projects": {"demo/lib": {
+            "repo_path": str(config_path.parent / project_entry["repo_path"]),
+            "snapshots_dir": str(config_path.parent / project_entry["snapshots_dir"])}}})
+        from integration.localization import ProjectLocalizer
+
+        localizer = ProjectLocalizer(config)
+        for ticket, expected in zip(tickets, ("pkg/session.py", "pkg/cookies.py")):
+            result, _ = localizer.localize(ticket, config.project("demo/lib"))
+            self.assertEqual(result["status"], "done", result.get("error"))
+            self.assertEqual(result["output"]["ranked_symbols"][0]["file_path"], expected)
+        self.assertTrue((config_path.parent / project_entry["snapshots_dir"] / f"{first}.index.json").is_file())
+        missing, _ = localizer.localize({**tickets[0], "base_commit": "0" * 40}, config.project("demo/lib"))
+        self.assertEqual(missing["status"], "failed")
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])
