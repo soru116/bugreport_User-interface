@@ -56,7 +56,11 @@ class IntegratedPipeline:
         )
         self.localizer = localizer or ProjectLocalizer(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
+        # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
+        # localization) use different models, so the two phases may run at the same time on different
+        # tickets; each phase is still one-at-a-time. All record writes go through the store's lock.
         self._run_lock = threading.Lock()
+        self._after_lock = threading.Lock()
 
     # ------------------------------------------------------------------ import
     def import_raw(self, raws: list[dict[str, Any]], *, source: str, project: str = "") -> list[dict[str, Any]]:
@@ -250,7 +254,7 @@ class IntegratedPipeline:
 
     # ------------------------------------------------------ stage 3, 4 and 5
     def run_after_duplicate(self, key: str, *, priority_result: dict[str, Any] | None = None) -> dict[str, Any]:
-        with self._run_lock:
+        with self._after_lock:
             return self._run_after_duplicate(key, priority_result=priority_result)
 
     def _run_after_duplicate(self, key: str, *, priority_result: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -304,7 +308,7 @@ class IntegratedPipeline:
             return self._fail(key, stage, exc)
 
     def rerun_localization(self, key: str, *, project: str | None = None) -> dict[str, Any]:
-        with self._run_lock:
+        with self._after_lock:
             record = self.get(key)
             if project is not None:
                 record = self.store.update(key, lambda rec: rec.update({"project": project}))
@@ -412,6 +416,23 @@ class IntegratedPipeline:
         return updated
 
     # --------------------------------------------------------------- batch/CLI
+    def predict_priority_batch(self, keys: list[str]) -> dict[str, dict[str, Any]]:
+        """One PRI call for every ticket that is ready to continue (build_features re-reads the whole
+        history once per call, so a batch costs about the same as a single ticket)."""
+
+        records = [self.get(key) for key in keys]
+        ready = [record for record in records if record["status"] == "ready_to_continue"]
+        if not ready:
+            return {}
+        tickets = [record["structured_ticket"] for record in ready]
+        candidates = [(record["stages"].get("duplicate", {}).get("output") or {}).get("top_k_candidates", []) for record in ready]
+        with self._after_lock:
+            results = self.priority_predictor.predict_many(tickets, candidates)
+        if len(ready) > 1:
+            for result in results:
+                result.setdefault("details", {})["batch_size"] = len(ready)
+        return {record["key"]: result for record, result in zip(ready, results)}
+
     def process_batch(
         self,
         keys: list[str],
@@ -438,7 +459,7 @@ class IntegratedPipeline:
             candidates = [
                 (record["stages"].get("duplicate", {}).get("output") or {}).get("top_k_candidates", []) for record in continuing
             ]
-            with self._run_lock:
+            with self._after_lock:
                 results = self.priority_predictor.predict_many(tickets, candidates)
             priority_results = {record["key"]: result for record, result in zip(continuing, results)}
 

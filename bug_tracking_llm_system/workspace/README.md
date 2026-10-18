@@ -25,6 +25,17 @@
 - 重複偵測依 DUP README 的建議採「半自動」：預設 Top-k 候選一律交給工程師確認。若要自動判定，在設定檔填 `duplicate.auto_duplicate_threshold` 或 `review_threshold`（分數是 SBERT／TF-IDF 的原始相似度）。
 - 負責人確認不會擋住錯誤定位，這和主系統 orchestrator 的行為一致。確認結果會用主系統的 `build_assignee_feedback_record` 寫進 `data/workspace/feedback/assignee_feedback.jsonl`。
 - 處理完的 Ticket 會加入工作台歷史資料（`data/workspace/history/workspace_history.jsonl`），之後匯入的 Ticket 可以和它比對重複。
+- 重複偵測只比對同一個專案、而且建立時間比這張 Ticket 早的歷史資料（真實系統裡，歷史一定比新回報早）；略過了幾張會寫在重複偵測的說明裡。
+- SBERT 會把歷史資料的向量存在 `data/workspace/cache/sbert/`，每份歷史只需要編碼一次，之後每張 Ticket 只算自己。換了 SBERT 模型會自動另存一份，不會混用。
+
+### 處理順序與排隊
+
+伺服器用兩條工作線依序處理：
+
+1. 「轉換 JSON＋重複偵測」一次一張，所以一批 Ticket 匯入後很快就可以開始確認重複。
+2. 「優先級＋負責人＋錯誤定位」：準備好的 Ticket 會**一起**計算優先級（PRI 每次都要重算整份歷史的特徵，一次算 6 張和算 1 張的時間差不多）。同一批匯入的 Ticket 還在做重複偵測時，最多會等 90 秒再一起算。
+
+卡片和 Ticket 頁面會顯示「排隊中，前面還有幾張，預計約幾分鐘」，畫面左下角會顯示目前處理中和排隊的數量。預估時間是依最近實際花的時間計算。伺服器關掉時還沒處理完的 Ticket，下次啟動會自動接著處理。
 
 ## 安裝
 
@@ -157,7 +168,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，14 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，17 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

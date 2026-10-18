@@ -161,6 +161,61 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(any(step.startswith("stable rerank") for step in result["details"]["pipeline"]))
         self.assertEqual(result["output"]["top_k_candidates"][0]["ticket_id"], "H-1")
 
+    def test_sbert_history_embeddings_are_cached_and_match_dup_scores(self) -> None:
+        import numpy as np
+
+        calls = []
+
+        class CountingEncoder(_Encoder):
+            def encode(self, texts, **kwargs):
+                calls.append(len(texts))
+                return super().encode(texts, **kwargs)
+
+        fake = _FakeSbert()
+        fake.title_model, fake.content_model = CountingEncoder(), CountingEncoder()
+        detector = TeamDuplicateDetector(self.config, sbert_detector=fake)
+        query = {"ticket_id": "Q", "title": "Login crash token", "description": "auth token crash", "component": "authentication"}
+        first = detector.detect(query)
+        history_size = first["output"]["history_size"]
+        self.assertEqual(first["details"]["sbert_newly_encoded"], 2 * history_size)
+        calls.clear()
+        second = detector.detect({**query, "ticket_id": "Q2", "title": "Session expires early", "description": "session timeout too short"})
+        self.assertEqual(second["details"]["sbert_newly_encoded"], 0, "history is not encoded again")
+        self.assertEqual(sum(calls), 2, "only the new ticket's title and content are encoded")
+
+        # Same numbers as DUP's own scoring function.
+        from duplicate_ticket_detection import cli as dup_cli
+        from duplicate_ticket_detection.dataset import DEFAULT_CONTENT_COLUMNS, _row_to_ticket
+
+        rows, _ = detector.history_rows()
+        candidates = [_row_to_ticket({k: str(v) for k, v in row.items() if v is not None}, content_columns=DEFAULT_CONTENT_COLUMNS) for row in rows]
+        q = _row_to_ticket({k: str(v) for k, v in query.items()}, content_columns=DEFAULT_CONTENT_COLUMNS)
+        expected_title, expected_content = dup_cli._sbert_score_matrices(_FakeSbert(), [q], candidates)
+        got_title, got_content, _ = detector._sbert_scores(fake, q, candidates)
+        np.testing.assert_allclose(got_title, expected_title, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(got_content, expected_content, rtol=1e-5, atol=1e-6)
+
+        # A new detector (server restart) reads the cache from disk.
+        calls.clear()
+        reloaded = TeamDuplicateDetector(self.config, sbert_detector=fake)
+        self.assertEqual(reloaded.detect(query)["details"]["sbert_newly_encoded"], 0)
+
+    def test_duplicate_detection_ignores_reports_filed_later(self) -> None:
+        later = self.root / "later.jsonl"
+        text = {"title": "Login crash when token is missing", "description": "Missing token crashes login.", "component": "authentication"}
+        later.write_text(
+            json.dumps({"ticket_id": "EARLY", "created_at": "2002-01-01T00:00:00Z", **text}) + "\n"
+            + json.dumps({"ticket_id": "LATE", "created_at": "2005-01-01 00:00:00+00:00", **text}) + "\n",
+            encoding="utf-8",
+        )
+        result = TeamDuplicateDetector(self.config).detect(
+            {"ticket_id": "Q", "created_at": "2003-06-01T00:00:00Z", **text}, extra_history_paths=[later]
+        )
+        ids = [item["ticket_id"] for item in result["output"]["top_k_candidates"]]
+        self.assertIn("EARLY", ids)
+        self.assertNotIn("LATE", ids)
+        self.assertEqual(result["output"]["later_rows_skipped"], 1)
+
     def test_auto_duplicate_threshold_closes_ticket(self) -> None:
         self.config.duplicate.auto_duplicate_threshold = 0.5
         result = TeamDuplicateDetector(self.config).detect({"ticket_id": "Q", "title": "Login crash when token missing", "description": "Missing auth token causes AttributeError during login validation."})
@@ -267,6 +322,51 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertNotIn("other-dev@example.com", candidates)
         self.assertIn("smoke", assignee["details"]["history_source"])
         self.assertTrue(any(row.get("ticket_id") == "T-1" and row.get("project") == "smoke" for row in pipeline.store.history_rows()))
+
+    def test_workspace_queue_batches_priority_and_reports_position(self) -> None:
+        import importlib.util
+        import threading
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        self.config.duplicate.review_threshold = 0.99  # every ticket continues without a human gate
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        gate = threading.Event()
+        calls = []
+        real = app.pipeline.priority_predictor.predict_many
+
+        def counting(tickets, candidates=None):
+            calls.append(len(tickets))
+            gate.wait(10)
+            return real(tickets, candidates)
+
+        app.pipeline.priority_predictor.predict_many = counting
+        raws = [{**self.raw_ticket(), "ticket_id": f"Q-{index}"} for index in range(3)]
+        keys = [record["key"] for record in app.pipeline.import_raw(raws, source="test")]
+        for key in keys:
+            self.assertTrue(app.start(key))
+        self.assertFalse(app.start(keys[0]), "a queued ticket is not queued twice")
+        deadline = _time.time() + 30
+        while not calls and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertEqual(calls, [3], "the three tickets share one PRI call")
+        info = app.queue_info(keys[2])
+        self.assertEqual(info["state"], "running")
+        self.assertEqual(info["phase"], "priority_batch")
+        self.assertEqual(info["batch_size"], 3)
+        gate.set()
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+        for key in keys:
+            record = app.pipeline.get(key)
+            self.assertEqual(record["status"], "processed")
+            self.assertEqual(record["stages"]["priority"]["status"], "fallback")
+        self.assertIsNone(app.queue_info(keys[0]))
 
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"

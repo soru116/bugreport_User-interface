@@ -207,6 +207,30 @@ function bucket(t) {
   return "other";
 }
 
+/* Queue: where a busy ticket stands and roughly how long it still needs. */
+function fmtEta(seconds) {
+  if (seconds == null) return "";
+  if (seconds < 60) return "不到 1 分鐘";
+  return `約 ${Math.round(seconds / 60)} 分鐘`;
+}
+const QUEUE_PHASE = {
+  review: "轉換 JSON 與重複偵測",
+  priority_batch: "優先級判定",
+  after: "分派負責人與錯誤定位",
+  localize: "錯誤定位",
+};
+function queueText(q, { short = false } = {}) {
+  if (!q) return "";
+  if (q.state === "running") {
+    const what = q.phase === "priority_batch" && q.batch_size > 1 ? `優先級判定（${q.batch_size} 張一起算）` : QUEUE_PHASE[q.phase] || "處理";
+    return short ? `${what}，${fmtEta(q.eta_seconds)}` : `正在執行「${what}」，預計還要${fmtEta(q.eta_seconds)}，完成後會自動更新。`;
+  }
+  const next = QUEUE_PHASE[q.phase] || "處理";
+  return short
+    ? `前面還有 ${q.ahead} 張，${fmtEta(q.eta_seconds)}`
+    : `排隊中：前面還有 ${q.ahead} 張，預計${fmtEta(q.eta_seconds)}後完成「${next}」。${q.phase === "priority_batch" && q.batch_size > 1 ? `等待中的 ${q.batch_size} 張會一起計算優先級。` : ""}`;
+}
+
 /* Search: every word must appear somewhere in the ticket's id, title, project, component, assignee, ... */
 function searchTerms() {
   return state.query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -241,7 +265,7 @@ function seed(text) {
 const PIN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8" fill="none" stroke-width="2" stroke-linecap="round"/></svg>`;
 
 function tile(t, terms, showProject = false) {
-  const [label] = TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
+  const [label] = t.queue && t.queue.state === "waiting" ? ["排隊中"] : TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
   const h = seed(t.ticket_id || t.key);
   const blobs = `--x1:${15 + (h % 55)}%;--y1:${10 + ((h >>> 6) % 45)}%;--r1:${38 + ((h >>> 12) % 30)}px;--x2:${45 + ((h >>> 17) % 50)}%;--y2:${45 + ((h >>> 22) % 45)}%;--r2:${22 + ((h >>> 27) % 22)}px`;
   const pebbles = STAGES.map(([key, name]) => {
@@ -265,7 +289,7 @@ function tile(t, terms, showProject = false) {
       <div class="tile-top"><span class="tile-id">${markTerms(t.ticket_id, terms)}</span><time>${esc(fmtTime(t.created_at))}</time></div>
       <a class="tile-link" href="#/t/${encodeURIComponent(t.key)}"><span class="tile-title">${markTerms(t.title, terms)}</span></a>
       ${meta ? `<div class="tile-meta">${meta}</div>` : ""}
-      ${attention ? `<p class="tile-attention">${esc(attention)}</p>` : ""}
+      ${t.queue ? `<p class="tile-queue">${esc(queueText(t.queue, { short: true }))}</p>` : attention ? `<p class="tile-attention">${esc(attention)}</p>` : ""}
     </div>
     <button type="button" class="pin-btn ${t.pinned ? "is-on" : ""}" data-pin="${esc(t.key)}" aria-pressed="${t.pinned}" title="${t.pinned ? "取消釘選" : "釘選到上方"}" aria-label="${t.pinned ? "取消釘選" : "釘選"} ${esc(t.ticket_id)}">${PIN_ICON}</button>
   </li>`;
@@ -389,6 +413,14 @@ function renderInbox() {
 async function loadTickets() {
   const data = await api("/api/tickets");
   state.tickets = data.tickets;
+  const q = data.queue || {};
+  const pill = $("#queuePill");
+  if (pill) {
+    const running = (q.running || []).length;
+    pill.hidden = !running && !q.waiting;
+    const batch = q.priority_batch || 0;
+    pill.innerHTML = `<i></i>${running ? `處理中 ${running} 張${batch > 1 ? `（${batch} 張一起算優先級）` : ""}` : ""}${q.waiting ? `${running ? "，" : ""}排隊 ${q.waiting} 張` : ""}`;
+  }
   renderInbox();
   if (state.selected && !state.tickets.some((t) => t.key === state.selected)) {
     toast("這張 Ticket 已不存在");
@@ -549,6 +581,7 @@ function renderDetail() {
   if (awaiting && tab !== "duplicate") hint = `<div class="pin-hint pin-gate"><span>重複偵測正在等你確認，確認後才會繼續後面的步驟。</span><button class="btn btn-gate btn-small" data-tab="duplicate">前往確認</button></div>`;
   else if (r.status === "failed") hint = `<div class="pin-hint pin-failed"><span>流程在「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", r.current_stage])[1])}」停止：${esc(r.error)}</span></div>`;
   else if (r.status === "duplicate") hint = `<div class="pin-hint pin-info"><span>已判定為 <b class="mono">${esc((r.decisions.duplicate || {}).duplicate_of || "")}</b> 的重複，流程結束。</span></div>`;
+  else if (r.queue) hint = `<div class="pin-hint pin-info"><span>${esc(queueText(r.queue))}</span></div>`;
   else if (r.busy || r.status === "running") hint = `<div class="pin-hint pin-info"><span>正在執行「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", "處理"])[1])}」，完成後會自動更新。</span></div>`;
 
   let panel;
@@ -697,7 +730,7 @@ function renderDuplicate(r, o) {
   const summary = possible.length
     ? `<p class="marked-summary">你標註為可能重複的：${possible.map((c) => `<b class="mono">${esc(c.ticket_id)}</b>`).join("、")}。打開並排比對後，可以在視窗裡確認是哪一張。</p>` : "";
   const hint = awaiting ? "點任一張候選，會並排顯示新 Ticket 和那張歷史 Ticket 的完整內容。" : "";
-  return `<p class="hint">${esc(o.decision_policy || "")}；比對了 ${o.history_size ?? "?"} 張${o.project_scope ? `「${esc(o.project_scope)}」及未標專案的` : ""}歷史 Ticket${o.other_project_rows_skipped ? `（略過其他專案 ${o.other_project_rows_skipped} 張）` : ""}。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
+  return `<p class="hint">${esc(o.decision_policy || "")}；比對了 ${o.history_size ?? "?"} 張${o.project_scope ? `「${esc(o.project_scope)}」及未標專案的` : ""}歷史 Ticket${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `比這張晚建立的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).length ? `（已略過${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `比這張晚建立的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).join("、")}）` : ""}。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
 }
 
 /* ---------------------------------------------------- compare dialog */
