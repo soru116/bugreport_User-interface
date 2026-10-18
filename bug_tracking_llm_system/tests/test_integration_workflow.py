@@ -220,6 +220,18 @@ class IntegrationWorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pipeline.mark_candidate(record["key"], "H-1", "maybe")
 
+    def test_pinning_survives_a_rerun(self) -> None:
+        pipeline = IntegratedPipeline(self.config, extractor=ToJsonExtractor(self.config, llm_call=fake_code_llama))
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test")
+        record = pipeline.set_pinned(record["key"], True)
+        self.assertTrue(record["pinned"])
+        self.assertTrue(record["pinned_at"])
+        record = pipeline.run_until_review(record["key"])
+        self.assertTrue(record["pinned"], "re-running the pipeline must not drop the pin")
+        record = pipeline.set_pinned(record["key"], False)
+        self.assertFalse(record["pinned"])
+        self.assertEqual(record["pinned_at"], "")
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])

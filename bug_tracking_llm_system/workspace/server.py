@@ -140,7 +140,28 @@ class WorkspaceApp:
     def ticket_summary(self, record: dict[str, Any]) -> dict[str, Any]:
         stages = record.get("stages", {})
         priority = (stages.get("priority", {}).get("output") or {}).get("predicted_priority")
+        structured = record.get("structured_ticket") or {}
+        raw = record.get("raw") or {}
+        decisions = record.get("decisions") or {}
+        assignee = (decisions.get("assignee") or {}).get("assignee") or (stages.get("assignee", {}).get("output") or {}).get("suggested_assignee")
+        description = structured.get("description") or raw.get("description") or raw.get("body") or ""
+
+        def known(*values: Any) -> str:
+            for value in values:
+                text = str(value or "").strip()
+                if text and text.lower() not in {"unknown", "none", "n/a", "--"}:
+                    return text
+            return ""
+
         return {
+            "pinned": bool(record.get("pinned")),
+            "pinned_at": record.get("pinned_at") or "",
+            "product": known(structured.get("product"), raw.get("product")),
+            "component": known(structured.get("component"), raw.get("component")),
+            "assignee": assignee or "",
+            "assignee_confirmed": bool(decisions.get("assignee")),
+            "duplicate_of": (decisions.get("duplicate") or {}).get("duplicate_of") or "",
+            "snippet": " ".join(known(description).split())[:160],
             "key": record["key"],
             "ticket_id": record.get("ticket_id"),
             "title": record.get("title"),
@@ -291,6 +312,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"created": [record["key"] for record in created]})
             if len(parts) == 4 and parts[:2] == ["api", "tickets"]:
                 key, action = parts[2], parts[3]
+                if action == "pin":  # display-only, allowed while the ticket is being processed
+                    record = app.pipeline.set_pinned(key, bool(body.get("pinned", True)))
+                    return self._json({"pinned": record["pinned"]})
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":

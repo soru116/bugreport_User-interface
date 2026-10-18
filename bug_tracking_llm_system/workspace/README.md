@@ -87,8 +87,12 @@ python3 workspace/server.py --config integration_config.json --port 8780
    - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
    - 也可以手動填寫一張。
-3. 左側清單的「等你確認」會列出需要判斷是否重複或確認負責人的 Ticket。
-4. 點進一張 Ticket 後，上方的進度列會一直固定在畫面上，顯示五個步驟各自的狀態。每個步驟是一個分頁：點進度列上的步驟就能切換，也可以用鍵盤左右鍵。畫面會自動停在需要你處理的那一步；你自己點過分頁後，就不會再自動跳走。
+3. 首頁是 Ticket 卡片牆：
+   - 最上方的搜尋欄可以找 Ticket 編號、標題、產品、元件、負責人或優先級；輸入多個字詞時要全部符合。按 `/` 可以直接開始輸入，按 Enter 會開啟第一張結果，按 Esc 清除。
+   - 搜尋欄下方的「等你確認」等標籤，會篩出需要判斷是否重複或確認負責人的 Ticket。
+   - 卡片封面的顏色代表狀態：橘色是等你確認，紫色是處理中，綠色是已完成，紅色是失敗。左下五顆小圓點是五個步驟的進度，右下圓形貼紙是優先級。
+   - 點卡片右上角的圖釘，可以把 Ticket 釘選到上方的「釘選的 Ticket」區，其餘 Ticket 放在下方。釘選狀態存在伺服器的 Ticket 紀錄裡，重開伺服器、重新執行流程都會保留。
+4. 點一張卡片會進入 Ticket 頁面，左上角的返回鍵回到卡片牆，也可以用瀏覽器的上一頁；每張 Ticket 都有自己的網址（`#/t/<編號>`）。進入後，上方的進度列會一直固定在畫面上，顯示五個步驟各自的狀態。每個步驟是一個分頁：點進度列上的步驟就能切換，也可以用鍵盤左右鍵。畫面會自動停在需要你處理的那一步；你自己點過分頁後，就不會再自動跳走。
 5. 每個步驟的分頁底部都會寫出使用的模組、程式路徑、耗時；用了備援時也會寫出原因。
 6. 右上「更多」裡可以下載完整結果 JSON、從頭重新執行或刪除 Ticket。
 
@@ -122,7 +126,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，11 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，13 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

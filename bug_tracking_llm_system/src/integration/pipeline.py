@@ -361,6 +361,15 @@ class IntegratedPipeline:
 
         return self.store.update(key, mutate)
 
+    def set_pinned(self, key: str, pinned: bool) -> dict[str, Any]:
+        """Pin a ticket to the top of the workspace home page (display only; does not touch any stage)."""
+
+        def mutate(rec: dict[str, Any]) -> None:
+            rec["pinned"] = bool(pinned)
+            rec["pinned_at"] = utc_now() if pinned else ""
+
+        return self.store.update(key, mutate)
+
     def confirm_assignee(self, key: str, assignee: str, *, decision: str = "accept", reviewer: str = "", note: str = "") -> dict[str, Any]:
         assignee = assignee.strip()
         if not assignee:

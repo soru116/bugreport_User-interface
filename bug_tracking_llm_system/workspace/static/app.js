@@ -55,7 +55,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -95,27 +95,102 @@ function bucket(t) {
   return "other";
 }
 
-function renderInbox() {
-  const counts = { all: state.tickets.length, review: 0, running: 0, done: 0 };
-  state.tickets.forEach((t) => { const b = bucket(t); if (b in counts) counts[b] += 1; });
-  $$("[data-count]").forEach((el) => (el.textContent = counts[el.dataset.count]));
-  const list = state.tickets.filter((t) => state.filter === "all" || bucket(t) === state.filter);
-  $("#inboxEmpty").hidden = state.tickets.length > 0;
-  $("#ticketList").innerHTML = list.map((t) => {
-    const [label, cls] = TICKET_STATUS[t.busy ? "running" : t.status] || [t.status, ""];
-    const track = STAGES.map(([key]) => {
-      const s = t.current_stage === key && (t.busy || t.status === "running") ? "running" : t.stage_status[key];
-      return `<i data-s="${esc(s)}" title="${esc(STAGES.find((x) => x[0] === key)[1])}：${esc(STATUS_TEXT[s] || s)}"></i>`;
-    }).join("");
-    const attention = (t.attention || []).filter((a) => !a.includes("備援")).slice(0, 1).map((a) => `<span class="chip chip-gate">${esc(a)}</span>`).join("");
-    return `<li><button class="ticket-row ${t.key === state.selected ? "is-selected" : ""}" data-key="${esc(t.key)}">
-      <div class="row-top"><span class="mono">${esc(t.ticket_id)}</span><span>${esc(fmtTime(t.created_at))}</span></div>
-      <div class="row-title">${esc(t.title)}</div>
-      <div class="row-bottom"><span class="mini-track">${track}</span>
-        <span class="chip ${cls}">${esc(label)}</span>
-        ${t.priority ? `<span class="chip chip-priority">${esc(t.priority)}</span>` : ""}${attention}</div>
-    </button></li>`;
+/* Search: every word must appear somewhere in the ticket's id, title, project, component, assignee, ... */
+function searchTerms() {
+  return state.query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+function haystack(t) {
+  const [label] = TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
+  return [t.ticket_id, t.key, t.title, t.project, t.product, t.component, t.assignee, t.priority, label, t.duplicate_of, t.snippet]
+    .filter(Boolean).join(" ").toLowerCase();
+}
+function markTerms(text, terms) {
+  const value = String(text ?? "");
+  if (!terms.length) return esc(value);
+  const pattern = new RegExp(`(${terms.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return value.split(pattern).map((part, i) => (i % 2 ? `<mark>${esc(part)}</mark>` : esc(part))).join("");
+}
+
+/* Cover colour follows what the ticket needs; the blob layout is seeded by the ticket id so each card is recognisable. */
+function coverTone(t) {
+  const b = bucket(t);
+  if (t.status === "failed") return "failed";
+  if (b === "review") return "gate";
+  if (b === "running") return "running";
+  if (t.status === "processed") return "done";
+  return "quiet";
+}
+function seed(text) {
+  let h = 2166136261;
+  for (const ch of String(text)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+const PIN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8" fill="none" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+function tile(t, terms) {
+  const [label] = TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
+  const h = seed(t.ticket_id || t.key);
+  const blobs = `--x1:${15 + (h % 55)}%;--y1:${10 + ((h >>> 6) % 45)}%;--r1:${38 + ((h >>> 12) % 30)}px;--x2:${45 + ((h >>> 17) % 50)}%;--y2:${45 + ((h >>> 22) % 45)}%;--r2:${22 + ((h >>> 27) % 22)}px`;
+  const pebbles = STAGES.map(([key, name]) => {
+    const s = t.current_stage === key && (t.busy || t.status === "running") ? "running" : t.stage_status[key];
+    return `<i data-s="${esc(s)}" title="${esc(name)}：${esc(STATUS_TEXT[s] || s)}"></i>`;
   }).join("");
+  const attention = (t.attention || []).find((a) => !a.includes("備援"));
+  const meta = [
+    t.component ? `<span class="tag">${markTerms(t.component, terms)}</span>` : "",
+    t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
+    t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
+  ].join("");
+  return `<li class="tile" data-tone="${coverTone(t)}" data-key="${esc(t.key)}">
+    <div class="tile-cover" style="${blobs}">
+      <span class="tile-status">${esc(label)}</span>
+      <span class="pebbles" aria-label="處理進度">${pebbles}</span>
+      ${t.priority ? `<span class="sticker" data-p="${esc(t.priority)}" title="優先級 ${esc(t.priority)}">${esc(t.priority)}</span>` : ""}
+    </div>
+    <div class="tile-body">
+      <div class="tile-top"><span class="tile-id">${markTerms(t.ticket_id, terms)}</span><time>${esc(fmtTime(t.created_at))}</time></div>
+      <a class="tile-link" href="#/t/${encodeURIComponent(t.key)}"><span class="tile-title">${markTerms(t.title, terms)}</span></a>
+      ${meta ? `<div class="tile-meta">${meta}</div>` : ""}
+      ${attention ? `<p class="tile-attention">${esc(attention)}</p>` : ""}
+    </div>
+    <button type="button" class="pin-btn ${t.pinned ? "is-on" : ""}" data-pin="${esc(t.key)}" aria-pressed="${t.pinned}" title="${t.pinned ? "取消釘選" : "釘選到上方"}" aria-label="${t.pinned ? "取消釘選" : "釘選"} ${esc(t.ticket_id)}">${PIN_ICON}</button>
+  </li>`;
+}
+
+function visibleTickets() {
+  const terms = searchTerms();
+  const matched = terms.length ? state.tickets.filter((t) => { const hay = haystack(t); return terms.every((x) => hay.includes(x)); }) : state.tickets;
+  return { terms, matched, shown: matched.filter((t) => state.filter === "all" || bucket(t) === state.filter) };
+}
+
+function renderInbox() {
+  const { terms, matched, shown } = visibleTickets();
+  const signature = JSON.stringify([state.tickets, state.filter, state.query]);
+  if (signature === state.homeSignature) return; // nothing changed: keep hover and focus
+  state.homeSignature = signature;
+
+  const counts = { all: matched.length, review: 0, running: 0, done: 0 };
+  matched.forEach((t) => { const b = bucket(t); if (b in counts) counts[b] += 1; });
+  $$("[data-count]").forEach((el) => (el.textContent = counts[el.dataset.count]));
+
+  const pinnedAll = state.tickets.filter((t) => t.pinned);
+  const pinned = shown.filter((t) => t.pinned).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
+  const others = shown.filter((t) => !t.pinned);
+  const none = state.tickets.length === 0;
+  $("#inboxEmpty").hidden = !none;
+  $$(".shelf").forEach((el) => (el.hidden = none));
+  $(".home-bar").hidden = none;
+
+  $("#pinnedCount").textContent = pinned.length || "";
+  $("#otherCount").textContent = others.length || "";
+  $("#pinnedTiles").innerHTML = pinned.length ? pinned.map((t) => tile(t, terms)).join("")
+    : pinnedAll.length ? `<li class="tile-note">釘選的 Ticket 裡沒有符合條件的。</li>`
+    : `<li class="tile-hint">點任一張卡片右上角的圖釘，常看的 Ticket 就會固定在這裡。</li>`;
+  $("#otherTiles").innerHTML = others.length ? others.map((t) => tile(t, terms)).join("")
+    : `<li class="tile-note">${terms.length || state.filter !== "all" ? "沒有符合條件的 Ticket。" : "所有 Ticket 都已釘選。"}</li>`;
+  $("#searchSummary").innerHTML = terms.length
+    ? `「${esc(state.query.trim())}」找到 ${shown.length} 張 <button type="button" class="link-btn" data-clear-search>清除搜尋</button>` : "";
 }
 
 async function loadTickets() {
@@ -123,8 +198,50 @@ async function loadTickets() {
   state.tickets = data.tickets;
   renderInbox();
   if (state.selected && !state.tickets.some((t) => t.key === state.selected)) {
+    toast("這張 Ticket 已不存在");
+    goHome();
+  }
+}
+
+async function togglePin(key) {
+  const t = state.tickets.find((x) => x.key === key) || (state.detail && state.detail.key === key ? state.detail : null);
+  if (!t) return;
+  const pinned = !t.pinned;
+  try {
+    await post(`/api/tickets/${encodeURIComponent(key)}/pin`, { pinned });
+    toast(pinned ? `已釘選 ${t.ticket_id}` : `已取消釘選 ${t.ticket_id}`);
+    await refresh();
+  } catch (err) { toast(err.message); }
+}
+
+/* ----------------------------------------------------------------- routing */
+function goHome() {
+  if (location.hash && location.hash !== "#/") location.hash = "#/";
+  else route();
+}
+async function route() {
+  const match = location.hash.match(/^#\/t\/(.+)$/);
+  const key = match ? decodeURIComponent(match[1]) : null;
+  $("#homeView").hidden = Boolean(key);
+  $("#detail").hidden = !key;
+  if (!key) {
     state.selected = null;
-    renderDetail();
+    state.detail = null;
+    state.detailSignature = null;
+    document.title = "Ticket 工作台";
+    state.homeSignature = null;
+    renderInbox();
+    return;
+  }
+  if (state.selected === key && state.detail) return;
+  state.selected = key;
+  try {
+    await loadDetail(key, { reset: true });
+    document.title = `${state.detail.ticket_id} · Ticket 工作台`;
+    $("#detail").scrollTop = 0;
+  } catch (err) {
+    toast(err.message);
+    goHome();
   }
 }
 
@@ -171,11 +288,8 @@ function selectTab(tab, { pinned = true } = {}) {
 
 function renderDetail() {
   const body = $("#detailBody");
-  const empty = $("#detailEmpty");
   const r = state.detail;
-  if (!state.selected || !r) { body.hidden = true; empty.hidden = false; return; }
-  empty.hidden = true;
-  body.hidden = false;
+  if (!state.selected || !r) { body.innerHTML = ""; return; }
   const [label, cls] = TICKET_STATUS[r.busy ? "running" : r.status] || [r.status, ""];
   const awaiting = r.status === "awaiting_duplicate_review";
   const tab = state.tab || "extraction";
@@ -217,13 +331,15 @@ function renderDetail() {
   }
 
   body.innerHTML = `
-    <div class="pinned">
+    <div class="pinned"><div class="pin-card">
       <div class="pin-head">
+        <a class="back-link" href="#/" title="回到所有 Ticket" aria-label="回到所有 Ticket"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <div class="pin-title">
           <span class="id">${esc(r.ticket_id)}</span>
           <h2 title="${esc(r.title)}">${esc(r.title)}</h2>
         </div>
         <div class="pin-meta">
+          <button type="button" class="pin-btn pin-btn-inline ${r.pinned ? "is-on" : ""}" data-action="pin" aria-pressed="${Boolean(r.pinned)}" title="${r.pinned ? "取消釘選" : "釘選到首頁上方"}" aria-label="${r.pinned ? "取消釘選" : "釘選"}">${PIN_ICON}</button>
           <span class="chip ${cls}">${esc(label)}</span>
           <span class="progress-count">${doneCount} / ${STAGES.length} 步完成</span>
           <details class="more">
@@ -244,7 +360,7 @@ function renderDetail() {
         <button type="button" class="log-tab ${logSelected ? "is-active" : ""}" role="tab" aria-selected="${logSelected}" data-tab="log">處理紀錄</button>
       </div>
       ${hint}
-    </div>
+    </div></div>
     <div class="tab-panel" id="tabPanel" role="tabpanel" tabindex="-1" aria-labelledby="tab-${esc(tab)}">${panel}</div>`;
 }
 
@@ -573,6 +689,7 @@ async function onDetailClick(event) {
   if (!btn || !state.detail) return;
   const key = state.detail.key;
   const path = `/api/tickets/${encodeURIComponent(key)}`;
+  if (btn.dataset.action === "pin") { await togglePin(key); return; }
   try {
     btn.disabled = true;
     if (["rerun", "not-duplicate", "is-duplicate", "localize"].includes(btn.dataset.action)) state.tabPinned = false;
@@ -608,9 +725,8 @@ async function onDetailClick(event) {
       case "delete":
         if (!confirm("刪除這張 Ticket 的處理紀錄？")) { btn.disabled = false; return; }
         await api(path, { method: "DELETE" });
-        state.selected = null;
-        state.detail = null;
-        renderDetail();
+        toast(`已刪除 ${state.detail.ticket_id}`);
+        goHome();
         break;
     }
     await refresh();
@@ -685,7 +801,8 @@ async function submitImport(event) {
       toast(`已加入 ${result.history_imported} 張歷史 Ticket，資料庫共 ${result.history_total} 張`);
     } else {
       toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
-      state.selected = result.created[0];
+      if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
+      else goHome();
     }
     await refresh();
   } catch (err) {
@@ -740,19 +857,41 @@ async function onProjectClick(event) {
 
 /* ------------------------------------------------------------------ init */
 async function init() {
-  $("#ticketList").addEventListener("click", async (e) => {
-    const row = e.target.closest(".ticket-row");
-    if (!row) return;
-    state.selected = row.dataset.key;
-    renderInbox();
-    await loadDetail(state.selected, { reset: true });
-    $("#detail").scrollTop = 0;
+  $("#homeView").addEventListener("click", (e) => {
+    const pin = e.target.closest("[data-pin]");
+    if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
+    if (e.target.closest("[data-clear-search]")) { setQuery(""); $("#search").focus(); return; }
+    const card = e.target.closest(".tile");
+    if (card && !e.target.closest("a")) location.hash = `#/t/${encodeURIComponent(card.dataset.key)}`;
   });
   $$(".filter").forEach((b) => b.addEventListener("click", () => {
     state.filter = b.dataset.filter;
     $$(".filter").forEach((x) => { x.classList.toggle("is-active", x === b); x.setAttribute("aria-selected", x === b); });
     renderInbox();
   }));
+  const search = $("#search");
+  const setQuery = (value) => {
+    search.value = value;
+    state.query = value;
+    if (state.selected) goHome(); // searching always shows the card wall
+    renderInbox();
+  };
+  search.addEventListener("input", () => setQuery(search.value));
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { setQuery(""); return; }
+    if (e.key === "Enter") {
+      const first = $("#homeView .tile");
+      if (first) location.hash = `#/t/${encodeURIComponent(first.dataset.key)}`;
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]")) return;
+    e.preventDefault();
+    search.focus();
+    search.select();
+  });
+  window.addEventListener("hashchange", route);
   $("#detail").addEventListener("click", onDetailClick);
   $("#compareDialog").addEventListener("click", onCompareClick);
   $("#compareDialog").addEventListener("close", () => { compare.history = {}; });
@@ -787,6 +926,7 @@ async function init() {
   state.projects = projects.projects;
   state.defaultProject = projects.default_project;
   await refresh();
+  await route();
 }
 
 init().catch((err) => toast(err.message));
