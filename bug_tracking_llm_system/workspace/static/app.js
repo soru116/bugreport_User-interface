@@ -167,7 +167,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -240,7 +240,7 @@ function seed(text) {
 
 const PIN_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8" fill="none" stroke-width="2" stroke-linecap="round"/></svg>`;
 
-function tile(t, terms) {
+function tile(t, terms, showProject = false) {
   const [label] = TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
   const h = seed(t.ticket_id || t.key);
   const blobs = `--x1:${15 + (h % 55)}%;--y1:${10 + ((h >>> 6) % 45)}%;--r1:${38 + ((h >>> 12) % 30)}px;--x2:${45 + ((h >>> 17) % 50)}%;--y2:${45 + ((h >>> 22) % 45)}%;--r2:${22 + ((h >>> 27) % 22)}px`;
@@ -250,6 +250,7 @@ function tile(t, terms) {
   }).join("");
   const attention = (t.attention || []).find((a) => !a.includes("備援"));
   const meta = [
+    showProject ? `<span class="tag tag-project" title="專案">${markTerms(projectName(projectKey(t)), terms)}</span>` : "",
     t.component ? `<span class="tag">${markTerms(t.component, terms)}</span>` : "",
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
@@ -270,39 +271,114 @@ function tile(t, terms) {
   </li>`;
 }
 
+/* Projects are the folders of the home page. A ticket's project is the repository chosen at import
+   (integration_config.json → projects); tickets without one go to the "未指定專案" folder. */
+const NO_PROJECT = "__none__";
+const projectKey = (t) => t.project || NO_PROJECT;
+const projectName = (key) => (key === NO_PROJECT ? "未指定專案" : key);
+const folderHref = (key) => `#/p/${encodeURIComponent(key)}`;
+
+function folderList() {
+  const configured = state.projects.map((p) => p.project);
+  const used = [...new Set(state.tickets.map(projectKey))];
+  const keys = [...configured, ...used.filter((k) => k !== NO_PROJECT && !configured.includes(k))];
+  if (used.includes(NO_PROJECT)) keys.push(NO_PROJECT);
+  return keys.map((key) => {
+    const config = state.projects.find((p) => p.project === key);
+    const tickets = state.tickets.filter((t) => projectKey(t) === key);
+    const counts = { review: 0, running: 0, done: 0 };
+    tickets.forEach((t) => { const b = bucket(t); if (b in counts) counts[b] += 1; });
+    const latest = tickets.reduce((acc, t) => (String(t.updated_at || "") > acc ? String(t.updated_at || "") : acc), "");
+    return { key, config, tickets, counts, latest, pinned: tickets.filter((t) => t.pinned).length };
+  });
+}
+
+function folderCard(f) {
+  const name = projectName(f.key);
+  const desc = f.key === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。"
+    : f.config ? (f.config.description || f.config.repo_path || "") : "設定檔裡已經沒有這個專案。";
+  // Up to three papers peek out of the folder, coloured by the status of the most recent tickets.
+  const papers = f.tickets.slice(0, 3).map((t, i) => `<i data-tone="${coverTone(t)}" style="--i:${i}"></i>`).join("");
+  const stats = [
+    `<span class="fstat">共 <b>${f.tickets.length}</b> 張</span>`,
+    f.counts.review ? `<span class="fstat fstat-gate">等你確認 <b>${f.counts.review}</b></span>` : "",
+    f.counts.running ? `<span class="fstat fstat-running">處理中 <b>${f.counts.running}</b></span>` : "",
+    f.counts.done ? `<span class="fstat fstat-done">已完成 <b>${f.counts.done}</b></span>` : "",
+  ].join("");
+  return `<li class="folder ${f.tickets.length ? "" : "is-empty"}" data-folder="${esc(f.key)}">
+    <div class="folder-back"><span class="folder-tab"></span><span class="papers">${papers}</span></div>
+    <div class="folder-front">
+      <div class="folder-top">
+        <a class="folder-link" href="${folderHref(f.key)}"><h3>${esc(name)}</h3></a>
+        ${f.pinned ? `<span class="folder-pins" title="${f.pinned} 張釘選">${PIN_ICON}${f.pinned}</span>` : ""}
+      </div>
+      <p class="folder-desc" title="${esc(desc)}">${esc(desc)}</p>
+      <div class="folder-stats">${stats}</div>
+      <p class="folder-foot">${f.tickets.length ? `最近更新 ${esc(fmtTime(f.latest))}` : "還沒有 Ticket"}</p>
+    </div>
+  </li>`;
+}
+
 function visibleTickets() {
   const terms = searchTerms();
-  const matched = terms.length ? state.tickets.filter((t) => { const hay = haystack(t); return terms.every((x) => hay.includes(x)); }) : state.tickets;
-  return { terms, matched, shown: matched.filter((t) => state.filter === "all" || bucket(t) === state.filter) };
+  const scope = state.folder === null ? state.tickets : state.tickets.filter((t) => projectKey(t) === state.folder);
+  const matched = terms.length ? scope.filter((t) => { const hay = haystack(t); return terms.every((x) => hay.includes(x)); }) : scope;
+  return { terms, scope, matched, shown: matched.filter((t) => state.filter === "all" || bucket(t) === state.filter) };
 }
 
 function renderInbox() {
-  const { terms, matched, shown } = visibleTickets();
-  const signature = JSON.stringify([state.tickets, state.filter, state.query]);
+  const { terms, scope, matched, shown } = visibleTickets();
+  const signature = JSON.stringify([state.tickets, state.projects, state.filter, state.query, state.folder]);
   if (signature === state.homeSignature) return; // nothing changed: keep hover and focus
   state.homeSignature = signature;
+
+  const atRoot = state.folder === null;
+  const showFolders = atRoot && !terms.length;
+  const none = state.tickets.length === 0 && state.projects.length === 0;
+  $("#inboxEmpty").hidden = !none;
+  $("#folderSection").hidden = !showFolders || none;
+  $$(".shelf").forEach((el) => (el.hidden = showFolders || none));
+  $(".home-bar").hidden = showFolders || none;
+
+  if (atRoot) {
+    const folders = folderList();
+    const review = state.tickets.filter((t) => bucket(t) === "review").length;
+    $("#homeHead").innerHTML = terms.length
+      ? `<h1 class="home-title">搜尋全部專案</h1>`
+      : `<h1 class="home-title">專案</h1><p class="home-sub">${folders.length} 個專案，共 ${state.tickets.length} 張 Ticket${review ? `，<b class="gate-text">${review} 張等你確認</b>` : ""}。點資料夾查看裡面的 Ticket。</p>`;
+    $("#folderGrid").innerHTML = folders.map(folderCard).join("");
+    if (showFolders) return;
+  } else {
+    const config = state.projects.find((p) => p.project === state.folder);
+    const desc = state.folder === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。" : config ? [config.description, config.repo_path].filter(Boolean).join("　") : "設定檔裡已經沒有這個專案。";
+    $("#homeHead").innerHTML = `<div class="folder-head">
+        <a class="back-link" href="#/" title="回到所有專案" aria-label="回到所有專案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <div class="folder-head-text"><p class="crumb"><a href="#/">所有專案</a></p><h1 class="home-title">${esc(projectName(state.folder))}</h1>${desc ? `<p class="home-sub">${esc(desc)}</p>` : ""}</div>
+        <button type="button" class="btn btn-quiet btn-small" data-open-import>匯入到這個專案</button>
+      </div>`;
+  }
 
   const counts = { all: matched.length, review: 0, running: 0, done: 0 };
   matched.forEach((t) => { const b = bucket(t); if (b in counts) counts[b] += 1; });
   $$("[data-count]").forEach((el) => (el.textContent = counts[el.dataset.count]));
 
-  const pinnedAll = state.tickets.filter((t) => t.pinned);
-  const pinned = shown.filter((t) => t.pinned).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
-  const others = shown.filter((t) => !t.pinned);
-  const none = state.tickets.length === 0;
-  $("#inboxEmpty").hidden = !none;
-  $$(".shelf").forEach((el) => (el.hidden = none));
-  $(".home-bar").hidden = none;
-
+  // Inside a folder: pinned shelf on top, the rest below. Searching all projects: one result list.
+  const pinnedAll = scope.filter((t) => t.pinned);
+  const pinned = atRoot ? [] : shown.filter((t) => t.pinned).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
+  const others = atRoot ? shown : shown.filter((t) => !t.pinned);
+  $(".shelf-pinned").hidden = atRoot || none;
+  const showProject = atRoot; // search across projects: say which folder each card is in
   $("#pinnedCount").textContent = pinned.length || "";
   $("#otherCount").textContent = others.length || "";
-  $("#pinnedTiles").innerHTML = pinned.length ? pinned.map((t) => tile(t, terms)).join("")
+  $("#otherTitle").firstChild.textContent = atRoot ? "搜尋結果 " : "其他 Ticket ";
+  $("#pinnedTiles").innerHTML = pinned.length ? pinned.map((t) => tile(t, terms, showProject)).join("")
     : pinnedAll.length ? `<li class="tile-note">釘選的 Ticket 裡沒有符合條件的。</li>`
+    : atRoot ? `<li class="tile-note">沒有符合的釘選 Ticket。</li>`
     : `<li class="tile-hint">點任一張卡片右上角的圖釘，常看的 Ticket 就會固定在這裡。</li>`;
-  $("#otherTiles").innerHTML = others.length ? others.map((t) => tile(t, terms)).join("")
-    : `<li class="tile-note">${terms.length || state.filter !== "all" ? "沒有符合條件的 Ticket。" : "所有 Ticket 都已釘選。"}</li>`;
+  $("#otherTiles").innerHTML = others.length ? others.map((t) => tile(t, terms, showProject)).join("")
+    : `<li class="tile-note">${!scope.length ? "這個專案還沒有 Ticket，按右上角「匯入到這個專案」開始。" : terms.length || state.filter !== "all" ? "沒有符合條件的 Ticket。" : "所有 Ticket 都已釘選。"}</li>`;
   $("#searchSummary").innerHTML = terms.length
-    ? `「${esc(state.query.trim())}」找到 ${shown.length} 張 <button type="button" class="link-btn" data-clear-search>清除搜尋</button>` : "";
+    ? `${atRoot ? "" : `在「${esc(projectName(state.folder))}」`}找到 ${shown.length} 張 <button type="button" class="link-btn" data-clear-search>清除搜尋</button>${atRoot ? "" : ` <a class="link-btn" href="#/">改搜尋全部專案</a>`}` : "";
 }
 
 async function loadTickets() {
@@ -327,22 +403,30 @@ async function togglePin(key) {
 }
 
 /* ----------------------------------------------------------------- routing */
-function goHome() {
-  if (location.hash && location.hash !== "#/") location.hash = "#/";
+/* #/ = project folders, #/p/<project> = tickets in one project, #/t/<key> = one ticket. */
+function goHome(folder = null) {
+  const target = folder === null ? "#/" : folderHref(folder);
+  if (location.hash !== target && !(target === "#/" && !location.hash)) location.hash = target;
   else route();
 }
 async function route() {
-  const match = location.hash.match(/^#\/t\/(.+)$/);
-  const key = match ? decodeURIComponent(match[1]) : null;
+  const ticket = location.hash.match(/^#\/t\/(.+)$/);
+  const folder = location.hash.match(/^#\/p\/(.+)$/);
+  const key = ticket ? decodeURIComponent(ticket[1]) : null;
   $("#homeView").hidden = Boolean(key);
   $("#detail").hidden = !key;
   if (!key) {
+    const nextFolder = folder ? decodeURIComponent(folder[1]) : null;
+    if (nextFolder !== state.folder) state.filter = "all";
+    state.folder = nextFolder;
+    $$(".filter").forEach((x) => { const on = x.dataset.filter === state.filter; x.classList.toggle("is-active", on); x.setAttribute("aria-selected", on); });
     state.selected = null;
     state.detail = null;
     state.detailSignature = null;
-    document.title = "Ticket 工作台";
+    document.title = state.folder === null ? "Ticket 工作台" : `${projectName(state.folder)} · Ticket 工作台`;
     state.homeSignature = null;
     renderInbox();
+    $("#homeView").scrollTop = 0;
     return;
   }
   if (state.selected === key && state.detail) return;
@@ -445,8 +529,9 @@ function renderDetail() {
   body.innerHTML = `
     <div class="pinned"><div class="pin-card">
       <div class="pin-head">
-        <a class="back-link" href="#/" title="回到所有 Ticket" aria-label="回到所有 Ticket"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="back-link" href="${folderHref(projectKey(r))}" title="回到「${esc(projectName(projectKey(r)))}」" aria-label="回到「${esc(projectName(projectKey(r)))}」"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <div class="pin-title">
+          <a class="pin-project" href="${folderHref(projectKey(r))}">${esc(projectName(projectKey(r)))}</a>
           <span class="id">${esc(r.ticket_id)}</span>
           <h2 title="${esc(r.title)}">${esc(r.title)}</h2>
         </div>
@@ -903,7 +988,7 @@ async function onDetailClick(event) {
         if (!confirm("刪除這張 Ticket 的處理紀錄？")) { btn.disabled = false; return; }
         await api(path, { method: "DELETE" });
         toast(`已刪除 ${state.detail.ticket_id}`);
-        goHome();
+        goHome(projectKey(state.detail));
         break;
     }
     await refresh();
@@ -914,6 +999,7 @@ async function onDetailClick(event) {
 }
 
 async function refresh() {
+  try { const pj = await api("/api/projects"); state.projects = pj.projects; } catch { /* keep the last list */ }
   await loadTickets();
   if (state.selected) await loadDetail(state.selected);
   schedulePoll();
@@ -936,7 +1022,7 @@ function openImport() {
   $("#asHistory").checked = false;
   $("#importForm").reset();
   $("#importProject").innerHTML = state.projects.length
-    ? state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === state.defaultProject ? "selected" : ""}>${esc(p.project)}　${esc(p.repo_path)}</option>`).join("")
+    ? state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === (state.folder && state.folder !== NO_PROJECT ? state.folder : state.defaultProject) ? "selected" : ""}>${esc(p.project)}　${esc(p.repo_path)}</option>`).join("") + (state.folder === NO_PROJECT ? `<option value="" selected>不指定專案（略過錯誤定位）</option>` : "")
     : `<option value="">（設定檔沒有專案，將略過錯誤定位）</option>`;
   setImportMode("file");
   $("#importDialog").showModal();
@@ -979,7 +1065,7 @@ async function submitImport(event) {
     } else {
       toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
       if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
-      else goHome();
+      else goHome(body.project || NO_PROJECT);
     }
     await refresh();
   } catch (err) {
@@ -1038,6 +1124,9 @@ async function init() {
     const pin = e.target.closest("[data-pin]");
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
     if (e.target.closest("[data-clear-search]")) { setQuery(""); $("#search").focus(); return; }
+    if (e.target.closest("[data-open-import]")) { openImport(); return; }
+    const folder = e.target.closest(".folder");
+    if (folder && !e.target.closest("a")) { location.hash = folderHref(folder.dataset.folder); return; }
     const card = e.target.closest(".tile");
     if (card && !e.target.closest("a")) location.hash = `#/t/${encodeURIComponent(card.dataset.key)}`;
   });
@@ -1087,7 +1176,6 @@ async function init() {
     if (target) target.focus();
   });
   $("#importButton").addEventListener("click", openImport);
-  $$("[data-open-import]").forEach((b) => b.addEventListener("click", openImport));
   $("#statusButton").addEventListener("click", openStatus);
   $("#projectBody").addEventListener("click", onProjectClick);
   $$(".seg").forEach((b) => b.addEventListener("click", () => setImportMode(b.dataset.mode)));

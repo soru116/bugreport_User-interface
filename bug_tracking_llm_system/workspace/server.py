@@ -275,6 +275,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.app.maybe_reload_config()
                 return self._json(readiness_report(self.app.config, store_history_path=self.app.pipeline.store.history_path))
             if parts[1:] == ["projects"]:
+                self.app.maybe_reload_config()  # new projects in the config show up as folders without a restart
                 return self._json({"projects": self.app.projects(), "default_project": self.app.config.default_project})
             if len(parts) == 3 and parts[1] == "history":
                 row = self.app.pipeline.find_history_ticket(parts[2])
