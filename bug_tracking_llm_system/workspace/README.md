@@ -144,6 +144,15 @@ python3 scripts/build_real_dataset_demo.py          # 自動尋找兩個子專�
 
 錯誤定位是在 SWE-bench 上開發和評估的。SWE-bench 的每一題都是真實的 GitHub issue，而且記錄了 issue 當時程式碼的版本（`base_commit`），所以五個步驟都能用真實資料跑。
 
+如果錯誤定位組員的資料夾已經下載過完整的 SWE-bench（`fault-localization-feature-files/data/fault_localization/swebench_full/raw/test-00000-of-00001.parquet`），可以直接用它，並加上 `--only-ids .../swebench_full/protocol_v1/development_tickets.jsonl` 只取開發集，避開保留測試集：
+
+```bash
+python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of-00001.parquet \
+  --only-ids <swebench_full>/protocol_v1/development_tickets.jsonl --limit-per-repo 6 --config integration_config.json
+```
+
+沒有的話：
+
 1. 用瀏覽器下載 SWE-bench Lite：<https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite/resolve/main/data/test-00000-of-00001.parquet>，放到 `data/real_datasets/`。
 2. 執行（需要 git 和網路；預設只取兩個小專案 `psf/requests`、`pallets/flask`，共 9 題）：
 

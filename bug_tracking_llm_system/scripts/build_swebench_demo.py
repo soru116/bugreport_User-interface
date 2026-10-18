@@ -52,6 +52,22 @@ def load_rows(path: Path) -> list[dict[str, Any]]:
     return frame.to_dict(orient="records")
 
 
+def read_ids(path: Path) -> set[str]:
+    ids: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("{"):
+            row = json.loads(line)
+            value = row.get("instance_id") or row.get("ticket_id")
+            if value:
+                ids.add(str(value))
+        else:
+            ids.add(line)
+    return ids
+
+
 def git(args: list[str], cwd: Path | None = None) -> str:
     done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if done.returncode != 0:
@@ -118,6 +134,13 @@ def main() -> None:
     parser.add_argument("--input", type=Path, required=True, help="SWE-bench parquet（或 jsonl）")
     parser.add_argument("--repos", default=",".join(DEFAULT_REPOS), help="要使用的 repository，逗號分隔（預設 psf/requests,pallets/flask，兩個都很小）")
     parser.add_argument("--limit-per-repo", type=int, default=0, help="每個 repository 最多幾張（0 = 全部）")
+    parser.add_argument(
+        "--only-ids",
+        type=Path,
+        default=None,
+        help="只用這個清單裡的題目（jsonl 的 ticket_id／instance_id，或每行一個 id）。"
+        "用錯誤定位的 development_tickets.jsonl 可避開保留測試集。",
+    )
     parser.add_argument("--work-dir", type=Path, default=MAIN_ROOT / "data" / "swebench", help="clone 與版本快照存放處")
     parser.add_argument("--output-dir", type=Path, default=MAIN_ROOT / "data" / "real_datasets")
     parser.add_argument("--config", type=Path, default=None, help="把每個 repository 加成專案（例如 integration_config.json）")
@@ -126,6 +149,10 @@ def main() -> None:
 
     wanted = [item.strip() for item in args.repos.split(",") if item.strip()]
     rows = [row for row in load_rows(args.input) if row.get("repo") in wanted]
+    if args.only_ids:
+        allowed = read_ids(args.only_ids)
+        rows = [row for row in rows if str(row.get("instance_id")) in allowed]
+        print(f"只使用 {args.only_ids.name} 裡的題目：{len(rows)} 張")
     if not rows:
         raise SystemExit(f"{args.input} 裡沒有 {', '.join(wanted)} 的資料。")
     rows.sort(key=lambda row: (row["repo"], iso(row.get("created_at"))))
@@ -207,7 +234,7 @@ def main() -> None:
             projects[repo] = {
                 "repo_path": relative(clones / repo.replace("/", "__"), base),
                 "snapshots_dir": relative(snapshots_root / repo.replace("/", "__"), base),
-                "description": f"SWE-bench Lite：{repo}（每張 Ticket 用自己 base_commit 的程式碼定位）",
+                "description": f"SWE-bench：{repo}（每張 Ticket 用自己 base_commit 的程式碼定位）",
             }
         config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"已把 {', '.join(repo for repo in wanted if repo in projects)} 加進 {config_path}（原檔備份為 .bak）")
