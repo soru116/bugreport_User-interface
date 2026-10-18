@@ -100,7 +100,9 @@ def import_package_from_root(package: str, source_root: Path) -> ModuleType:
 
 
 def relative_to_workspace(path: Path, workspace_root: Path) -> str:
+    """Workspace-relative path shown on screen; always with '/' so Windows and Linux read the same."""
+
     try:
-        return str(Path(path).resolve().relative_to(Path(workspace_root).resolve()))
+        return Path(path).resolve().relative_to(Path(workspace_root).resolve()).as_posix()
     except ValueError:
-        return str(path)
+        return Path(path).as_posix()
