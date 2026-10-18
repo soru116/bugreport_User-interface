@@ -47,6 +47,118 @@ const FACTOR_TEXT = {
   severity_factor: "嚴重性因子",
   component_factor: "元件因子",
 };
+/* Priority factor explanations. Definitions follow bug-priority-drone/scripts/build_features.py
+   (add_temporal_features, add_author_features, build_related_feature_rows) and
+   bug_tracking_llm_system/src/modules/priority_classifier.py for the fallback formula. */
+const SEVERITY_TEXT = {
+  blocker: "阻斷", critical: "嚴重", major: "重大", normal: "一般", minor: "輕微", trivial: "細微", enhancement: "功能需求", unknown: "未填",
+};
+const OLD_HISTORY_NOTE = "這一項只看這張 Ticket 建立時間往前推的一段期間。參考的歷史資料（設定檔的 priority.history_csv）如果比這張 Ticket 早很多，這段期間內就找不到任何回報，數值會是 0。組內目前的 Eclipse 歷史資料是 2001–2005 年的回報，新 Ticket 的建立時間是現在，所以通常是 0。這不是程式錯誤，但代表這一項沒有提供資訊。";
+const NO_DATA_NOTE = "0 代表沒有資料，不是「P0」。優先級的數字是 P1 = 1 到 P5 = 5。";
+const FACTOR_GROUP_HELP = {
+  textual: ["從回報的文字判斷緊急程度", "文本因子看的是回報寫了什麼。PRI 把標題和描述轉成 TF-IDF 字詞特徵（單字與相鄰兩字），也會偵測 crash、hang、data loss、security、regression 等代表嚴重問題的關鍵字，以及 typo、enhancement 等通常比較不急的字詞。"],
+  temporal: ["最近一段時間整體的回報量", "時間因子看的是這張 Ticket 建立前，整個專案最近有多少回報。短時間內大量回報，常代表新版本出問題或有問題大量爆發，同時也會影響工程師能分配給每張 Ticket 的時間。"],
+  author: ["回報者過去的回報紀錄", "作者因子看的是同一位回報者以前回報過多少張、那些回報平均被排成什麼優先級。經驗多的回報者，或過去常回報緊急問題的人，回報的優先級往往有一定的傾向。"],
+  related_report: ["最像的歷史回報被排成什麼優先級", "相關報告因子先用 REP- 相似度找出和這張最像的歷史回報，再看它們被排成什麼優先級。REP- 比對標題與描述的字詞（BM25F，單字與相鄰兩字），並加上同產品、同元件的加權。內容很像的問題，優先級通常也接近。"],
+  severity: ["回報者填寫的嚴重度", "嚴重度是「影響有多大」，優先級是「要多快處理」，兩者相關但不相同。例如 blocker 通常很急，但也可能因為只影響少數人而排在後面。"],
+  product_component: ["同產品、同元件最近的狀況", "產品／元件因子看的是同一個產品或元件最近有多少回報、被排成什麼優先級。有些元件（例如核心模組）的問題通常比較急，最近問題很多的元件也值得注意。"],
+};
+const FACTOR_HELP = {
+  summary_terms: {
+    label: "標題清洗結果", group: "textual",
+    short: "標題清洗後的文字，模型用它算字詞特徵",
+    detail: "PRI 先把標題轉成小寫，把網址、Email、十六進位碼換成 <URL>、<EMAIL>、<HEX>，移除過長的 log 殘段與重複符號。之後模型再去掉 the、and 這類停用詞、做簡單的詞幹化（例如 crashes 變成 crash），把字詞轉成 TF-IDF 特徵。這裡顯示的是清洗後、轉成特徵前的文字。",
+  },
+  past_7d_count: {
+    label: "過去 7 天的回報數", group: "temporal",
+    short: "建立前 7 天內，整個專案共有幾張回報",
+    detail: "以這張 Ticket 的建立時間為準，往前推 7 天，數歷史資料中建立時間落在這段期間的回報有幾張。不分產品、元件或嚴重度，反映整個專案最近的回報量。",
+    zero: OLD_HISTORY_NOTE,
+  },
+  past_30d_count: {
+    label: "過去 30 天的回報數", group: "temporal",
+    short: "建立前 30 天內，整個專案共有幾張回報",
+    detail: "和「過去 7 天的回報數」一樣，但期間拉長到 30 天，比較能看出一段時間的整體趨勢，不容易受單日暴增影響。",
+    zero: OLD_HISTORY_NOTE,
+  },
+  past_30d_same_or_higher_severity_count: {
+    label: "過去 30 天同等或更嚴重的回報數", group: "temporal",
+    short: "建立前 30 天內，嚴重度和這張相同或更高的回報有幾張",
+    detail: "嚴重度由高到低是 blocker、critical、major、normal、minor、trivial、enhancement。例如這張是 major，就數過去 30 天內 blocker、critical、major 的回報。數字大代表同一段時間有很多同樣嚴重、甚至更嚴重的問題在排隊。",
+    zero: OLD_HISTORY_NOTE,
+  },
+  author_past_count: {
+    label: "回報者過去的回報數", group: "author",
+    short: "同一位回報者在這張之前回報過幾張",
+    detail: "用回報者帳號（歷史資料的 creator 欄位，通常是 email）比對，數他在這張 Ticket 之前回報過幾張。",
+    zero: "歷史資料裡找不到這位回報者。新系統的回報者通常不在 Eclipse 歷史資料裡，所以多半是 0。",
+  },
+  author_past_mean_priority: {
+    label: "回報者過去的平均優先級", group: "author",
+    short: "這位回報者以前的回報平均被排成多少（1 = P1）",
+    detail: "把這位回報者以前每張回報的優先級換成數字（P1 = 1 到 P5 = 5）再取平均。數字越小，代表他過去回報的問題越常被當成緊急。",
+    zero: NO_DATA_NOTE + "這一項是 0 表示歷史資料裡找不到這位回報者。",
+  },
+  related_top1_priority: {
+    label: "最相似回報的優先級", group: "related_report",
+    short: "和這張最像的那張歷史回報是 P 幾",
+    detail: "用 REP- 相似度在所有更早的歷史回報裡找出最像的一張，取它的優先級（P1 = 1 到 P5 = 5）。比對時看標題與描述的字詞，同產品、同元件會加分。",
+    zero: NO_DATA_NOTE + "只有歷史資料是空的時候才會是 0。",
+  },
+  related_top5_avg_priority: {
+    label: "最相似 5 張的平均優先級", group: "related_report",
+    short: "最像的 5 張歷史回報，優先級平均是多少",
+    detail: "取 REP- 相似度最高的 5 張歷史回報，把它們的優先級（P1 = 1 到 P5 = 5）取平均。比只看最像的一張穩定，不容易被單一例外影響。",
+    zero: NO_DATA_NOTE + "只有歷史資料是空的時候才會是 0。",
+  },
+  related_similarity_top1: {
+    label: "和最相似回報的相似度", group: "related_report",
+    short: "和最像那張的 REP- 相似度，越大越像",
+    detail: "這是 REP- 分數，不是 0 到 1 的百分比，也不能直接換算成「幾成像」。它只能拿來比較：分數越大代表越像。分數很低時，上面兩項「最相似回報的優先級」參考價值也比較低。",
+  },
+  severity: {
+    label: "嚴重度", group: "severity",
+    short: "回報者填寫的嚴重度（blocker 到 enhancement）",
+    detail: "回報者填寫，或由轉換 JSON 步驟從內容抽取的嚴重度。等級由高到低是 blocker（阻斷）、critical（嚴重）、major（重大）、normal（一般）、minor（輕微）、trivial（細微）、enhancement（功能需求）。unknown 表示沒有填，模型會把它當成一個獨立的類別。",
+  },
+  product_past_30d_count: {
+    label: "同產品過去 30 天的回報數", group: "product_component",
+    short: "建立前 30 天內，同一個產品有幾張回報",
+    detail: "只數和這張 Ticket 同一個產品（product 欄位）的回報。某個產品最近回報特別多，通常代表它正在出問題。",
+    zero: OLD_HISTORY_NOTE + "另外，新 Ticket 的產品名稱若和 Eclipse 資料（例如 JDT、Platform）不同，也會是 0。",
+  },
+  component_past_30d_mean_priority: {
+    label: "同元件過去 30 天的平均優先級", group: "product_component",
+    short: "同一個元件最近 30 天的回報，平均被排成多少（1 = P1）",
+    detail: "取建立前 30 天內、同一個元件（component 欄位）的回報，把優先級（P1 = 1 到 P5 = 5）取平均。數字越小，代表這個元件最近的問題越常被當成緊急。",
+    zero: NO_DATA_NOTE + "這一項是 0 表示這 30 天內沒有同元件的回報，原因和「同元件過去 30 天的回報數」相同。",
+  },
+  component_past_30d_count: {
+    label: "同元件過去 30 天的回報數", group: "product_component",
+    short: "建立前 30 天內，同一個元件有幾張回報",
+    detail: "只數和這張 Ticket 同一個元件（component 欄位）的回報。範圍比產品更小，更能看出是不是同一塊程式最近一直出問題。",
+    zero: OLD_HISTORY_NOTE + "另外，新 Ticket 的元件名稱若和 Eclipse 資料（例如 UI、Debug、Core）不同，也會是 0。",
+  },
+};
+/* Fallback formula (主系統 PriorityClassifier): six 0–1 scores combined with fixed weights. */
+const FALLBACK_FACTOR_HELP = {
+  textual_factor: ["24%", "標題與描述中有沒有特定字詞", "出現 data loss、security、crash、cannot login、production、outage 等字詞給 0.88；exception、timeout、failed、regression 等給 0.65；typo、cosmetic、wording 等給 0.15；都沒有給 0.45。"],
+  temporal_factor: ["10%", "最近類似回報的數量", "取 Ticket 的 recent_similar_count 除以 10，最多 1。工作台匯入的 Ticket 通常沒有這個欄位，所以多半是 0。"],
+  author_factor: ["8%", "回報者過去的回報數", "取 Ticket 的 reporter_past_bug_count 除以 20，最多 1。工作台匯入的 Ticket 通常沒有這個欄位，所以多半是 0。"],
+  related_report_factor: ["18%", "重複偵測找到的相似 Ticket", "取重複偵測前 5 名候選的優先級（換成 0 到 1 的分數，越急越高）平均乘 0.75，加上相似度平均乘 0.25；候選都沒有優先級時，改用相似度平均。"],
+  severity_factor: ["28%", "嚴重度與問題類型", "blocker、critical，或問題類型是 security、crash 時給 0.95；major、normal，或 runtime_error、build_error 給 0.70；minor、trivial、enhancement，或 ui_bug 給 0.25；其他給 0.50。"],
+  component_factor: ["12%", "元件名稱", "元件名稱含 security、auth、payment、database、core 給 0.82；含 ui、frontend、docs 給 0.35；其他給 0.50。"],
+};
+
+function factorValueText(key, value) {
+  if (key === "severity") return `${value}（${SEVERITY_TEXT[String(value).toLowerCase()] || "未知"}）`;
+  if (typeof value !== "number") return String(value ?? "—");
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(3);
+  if (/_priority$/.test(key) && value === 0) return `${text}（無資料）`;
+  if (/_priority$/.test(key) && Number.isInteger(value) && value >= 1 && value <= 5) return `${text}（P${value}）`;
+  return text;
+}
+
 const FIELD_LABELS = [
   ["ticket_id", "編號"], ["product", "產品"], ["component", "元件"], ["severity", "嚴重度"],
   ["bug_type", "問題類型"], ["os", "作業系統"], ["version", "版本"], ["reporter", "回報者"],
@@ -612,20 +724,83 @@ function renderPriority(o) {
   const max = Math.max(0.0001, ...keys.map((k) => dist[k] || 0));
   const distHtml = Object.keys(dist).length ? `<div class="dist" aria-label="各級機率">${keys.map((k) => `<div class="${k === o.predicted_priority ? "is-max" : ""}" title="${k} ${num(dist[k])}"><span style="height:${(((dist[k] || 0) / max) * 100).toFixed(0)}%"></span>${k}</div>`).join("")}</div>` : "";
   let factors = "";
+  const groupHead = (name, helpKey, short) => `<h4>${esc(FACTOR_TEXT[name] || name)}<button type="button" class="fx-q" data-factor-help="${esc(helpKey)}" data-tip="${esc(short)}" aria-label="${esc(FACTOR_TEXT[name] || name)}說明">?</button></h4>`;
   if (o.factor_values) {
     factors = Object.entries(o.factor_values).map(([name, vals]) => {
-      if (name === "textual") return `<div class="factor"><h4>${esc(FACTOR_TEXT[name])}</h4><p class="factor-text">清洗後摘要：${esc(vals.summary_terms || "")}</p></div>`;
-      return `<div class="factor"><h4>${esc(FACTOR_TEXT[name] || name)}</h4><dl>${Object.entries(vals).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(3)) : v)}</dd>`).join("")}</dl></div>`;
+      const head = groupHead(name, `group:${name}`, (FACTOR_GROUP_HELP[name] || [""])[0]);
+      if (name === "textual") {
+        const h = FACTOR_HELP.summary_terms;
+        return `<div class="factor">${head}<button type="button" class="fx" data-factor-help="summary_terms" data-tip="${esc(h.short)}">${esc(h.label)}</button><p class="factor-text">${esc(vals.summary_terms || "（空白）")}</p></div>`;
+      }
+      return `<div class="factor">${head}<dl>${Object.entries(vals).map(([k, v]) => {
+        const h = FACTOR_HELP[k];
+        const label = h ? `${esc(h.label)}<small>${esc(k)}</small>` : esc(k);
+        return `<dt><button type="button" class="fx" data-factor-help="${esc(k)}" data-tip="${esc(h ? h.short : "點一下看說明")}">${label}</button></dt><dd>${esc(factorValueText(k, v))}</dd>`;
+      }).join("")}</dl></div>`;
     }).join("");
   } else if (o.factor_scores) {
-    factors = Object.entries(o.factor_scores).map(([k, v]) => `<div class="factor"><h4>${esc(FACTOR_TEXT[k] || k)}</h4>${scoreRow("分數", v)}</div>`).join("");
+    factors = Object.entries(o.factor_scores).map(([k, v]) => {
+      const h = FALLBACK_FACTOR_HELP[k];
+      return `<div class="factor">${groupHead(k, `score:${k}`, h ? `${h[1]}（權重 ${h[0]}）` : "點一下看說明")}${scoreRow("分數", v)}</div>`;
+    }).join("");
   }
+  if (factors) factors += `<p class="hint factor-hint">滑鼠移到項目上可以看簡短說明，點一下會開啟每一項的詳細解釋。</p>`;
   return `<div class="priority-main">
       <div class="p-badge">${esc(o.predicted_priority || "—")}<small>${esc(o.priority_name || "")}${o.confidence != null ? `，信心 ${num(o.confidence, 2)}` : ""}</small></div>
       ${distHtml}
       ${o.reported_priority ? `<span class="chip">回報者填寫 ${esc(o.reported_priority)}</span>` : ""}
     </div>
     <div class="factor-grid">${factors}</div>`;
+}
+
+/* ------------------------------------------- priority factor explanations */
+function openFactorHelp(target) {
+  const o = ((state.detail || {}).stages.priority || {}).output || {};
+  let html;
+  if (o.factor_values) {
+    let historyNoteShown = false;
+    const zeroNote = (text) => {
+      if (!text.startsWith(OLD_HISTORY_NOTE)) return text;
+      if (!historyNoteShown) { historyNoteShown = true; return text; }
+      return "原因和前面相同：參考的歷史資料比這張 Ticket 早很多，這段期間內找不到任何回報。" + text.slice(OLD_HISTORY_NOTE.length);
+    };
+    html = `<p class="fx-intro">這些數字是 PRI 模型的<b>輸入特徵</b>：模型從 Eclipse 歷史資料學會怎麼組合它們來判斷優先級，所以單看某一項的大小，不能直接看出它把結果推向哪一級，也不是各因子的貢獻比例。畫面只列出幾項代表性的特徵，模型實際用到的更多，例如過去 1／3 天的回報數、各優先級所占比例、錯誤關鍵字。</p>` +
+      Object.entries(o.factor_values).map(([name, vals]) => {
+        const [, groupDetail] = FACTOR_GROUP_HELP[name] || ["", ""];
+        const items = Object.entries(vals).map(([k, v]) => {
+          const h = FACTOR_HELP[k] || { label: k, detail: "這一項沒有說明。" };
+          const isZero = v === 0 || v === "0";
+          return `<article class="fx-item" data-help-key="${esc(k)}">
+            <header><h4>${esc(h.label)}</h4><code>${esc(k)}</code><span class="fx-value">${k === "summary_terms" ? "見下方" : `這張：<b>${esc(factorValueText(k, v))}</b>`}</span></header>
+            <p>${esc(h.detail)}</p>
+            ${k === "summary_terms" ? `<p class="fx-sample">${esc(v || "（空白）")}</p>` : ""}
+            ${isZero && h.zero ? `<p class="fx-zero"><b>為什麼是 0？</b>${esc(zeroNote(h.zero))}</p>` : ""}
+          </article>`;
+        }).join("");
+        return `<section class="fx-group" data-help-key="group:${esc(name)}"><h3>${esc(FACTOR_TEXT[name] || name)}</h3><p class="fx-group-desc">${esc(groupDetail)}</p>${items}</section>`;
+      }).join("");
+  } else if (o.factor_scores) {
+    html = `<p class="fx-intro">這張 Ticket 的優先級是用<b>備援公式</b>算的（主系統的 PriorityClassifier），不是 PRI 訓練好的模型。六個因子各算出 0 到 1 的分數，越接近 1 越緊急，再依下面的權重加總：0.85 以上是 P1，0.65 以上是 P2，0.40 以上是 P3，以此類推。</p>` +
+      Object.entries(o.factor_scores).map(([k, v]) => {
+        const [weight, short, detail] = FALLBACK_FACTOR_HELP[k] || ["—", k, "這一項沒有說明。"];
+        return `<article class="fx-item" data-help-key="score:${esc(k)}">
+          <header><h4>${esc(FACTOR_TEXT[k] || k)}</h4><code>${esc(k)}</code><span class="fx-value">權重 <b>${esc(weight)}</b>，這張 <b>${esc(num(v, 2))}</b></span></header>
+          <p><b>${esc(short)}。</b>${esc(detail)}</p></article>`;
+      }).join("");
+  } else {
+    return;
+  }
+  $("#factorBody").innerHTML = html;
+  const dialog = $("#factorDialog");
+  if (!dialog.open) dialog.showModal();
+  const focus = $(`#factorBody [data-help-key="${CSS.escape(target)}"]`);
+  $$("#factorBody .is-focus").forEach((el) => el.classList.remove("is-focus"));
+  if (focus) {
+    focus.classList.add("is-focus");
+    requestAnimationFrame(() => focus.scrollIntoView({ block: target.startsWith("group:") ? "start" : "center" }));
+  } else {
+    $("#factorDialog .sheet-inner").scrollTop = 0;
+  }
 }
 
 function renderAssignee(r, o) {
@@ -683,6 +858,8 @@ function renderLocalization(r, o, projectOptions) {
 async function onDetailClick(event) {
   const opener = event.target.closest("[data-compare]");
   if (opener && state.detail && !event.target.closest("a")) { await openCompare(Number(opener.dataset.compare)); return; }
+  const help = event.target.closest("[data-factor-help]");
+  if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
   const btn = event.target.closest("[data-action]");
