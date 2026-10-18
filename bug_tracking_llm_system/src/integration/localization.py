@@ -173,7 +173,7 @@ class ProjectLocalizer:
         output = {
             "project": project.name,
             "repository": raw.get("repo") or project.name,
-            "base_commit": raw.get("base_commit", ""),
+            "base_commit": str(structured_ticket.get("base_commit") or "") or raw.get("base_commit", ""),
             "status": user_facing.get("status"),
             "summary": user_facing.get("summary", {}),
             "confidence_level": raw.get("confidence_level"),
