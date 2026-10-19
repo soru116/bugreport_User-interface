@@ -74,7 +74,7 @@ cp integration_config.example.json integration_config.json
 把各自電腦上的模型與資料路徑填進去，相對路徑以 `bug_tracking_llm_system/` 為基準：
 
 - `duplicate.sbert_model_dir`：SBERT 微調模型資料夾
-- `historical_tickets_paths`：重複偵測用的歷史 Ticket（CSV／JSONL，欄位名稱同 DUP 的 `load_tickets`）
+- `historical_tickets_paths`：額外的重複偵測歷史檔（CSV／JSONL，欄位名稱同 DUP 的 `load_tickets`）。檔案裡沒有 `project` 的列會和**所有專案**比對，所以範例設定預設是空的；歷史資料建議改用工作台「匯入 Ticket → 這是歷史 Ticket」匯入並選好專案。
 - `priority.model_path`、`priority.reference_feature_dir`、`priority.history_csv`
 - `assignee.assignee_dataset_path`：負責人歷史資料
 - `projects.<名稱>.repo_path`：要做錯誤定位的 Repository；建議同時設定 `code_index_path`，在狀態頁預先建立索引
@@ -95,7 +95,7 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 1. 右上「模型與資料狀態」：檢查每一步會用到的程式和產物在這台電腦上找不找得到，也可以建立 Repository 的程式碼索引。
 2. 「匯入 Ticket」：
-   - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。
+   - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。下拉選單選這批歷史屬於哪個專案，它們就只會和那個專案的新 Ticket 比對；檔案裡已經寫好 `project` 的列照檔案。選「不指定」的歷史會和所有專案比對。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
    - 也可以手動填寫一張。
 3. 首頁依專案分成資料夾。專案就是設定檔 `projects` 裡的 Repository，匯入 Ticket 時選的專案決定它放在哪個資料夾，也決定錯誤定位要在哪個程式碼庫裡找。匯入時沒選專案的 Ticket 放在「未指定專案」資料夾。如果檔案裡的每一筆已經帶 `project`（例如 `new_tickets_*.jsonl`），匯入視窗會改成列出檔案裡的專案，不再顯示專案選單。
@@ -194,7 +194,7 @@ python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of
 | 要刪什麼 | 怎麼做 |
 |---|---|
 | 一張 Ticket | 打開 Ticket →「更多」→「刪除」 |
-| 好幾張 Ticket | 在首頁或專案資料夾按「選取」→ 點要刪的卡片 → 下方「刪除」 |
+| 好幾張 Ticket | 在首頁或專案資料夾按「選取」→ 點要刪的卡片 → 下方「刪除」（同一條工具列的「重新執行」可以把選取的 Ticket 一起從頭再跑一次） |
 | 整個專案 | 打開專案資料夾 → 右上「刪除專案」→ 勾選要刪的內容 |
 
 規則：

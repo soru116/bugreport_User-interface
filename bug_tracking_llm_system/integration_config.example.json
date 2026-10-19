@@ -4,9 +4,8 @@
   "workspace_root": "..",
   "store_dir": "data/workspace",
 
-  "historical_tickets_paths": [
-    "data/historical_tickets.jsonl"
-  ],
+  "_historical_tickets_說明": "額外的歷史 Ticket 檔（沒有 project 欄位的列會和所有專案比對）。工作台匯入的歷史會存在 store_dir，通常不需要這項。",
+  "historical_tickets_paths": [],
 
   "extraction": {
     "_說明": "呼叫 ToJson/scripts/To_Json/extract_to_json.py；需要本機 Ollama 已 pull 該模型。",

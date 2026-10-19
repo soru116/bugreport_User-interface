@@ -508,7 +508,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if not records:
                     return self._error("沒有讀到任何 Ticket，請確認檔案內容。")
                 if body.get("as_history"):
-                    total = app.pipeline.import_history(records)
+                    total = app.pipeline.import_history(records, project=str(body.get("project") or ""))
                     return self._json({"history_imported": len(records), "history_total": total})
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):

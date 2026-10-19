@@ -92,7 +92,9 @@ class IntegratedPipeline:
             records.append(self.store.save(record))
         return records
 
-    def import_history(self, rows: list[dict[str, Any]]) -> int:
+    def import_history(self, rows: list[dict[str, Any]], *, project: str = "") -> int:
+        """Add rows to the comparison history. Rows without their own ``project`` get ``project``
+        so they are only compared with that project's tickets (an empty value keeps them shared)."""
         normalized = []
         for row in rows:
             ticket_id = raw_ticket_id(row)
@@ -101,6 +103,8 @@ class IntegratedPipeline:
             item = dict(row)
             item["ticket_id"] = ticket_id
             item.setdefault("title", raw_title(row))
+            if project and not str(item.get("project") or "").strip():
+                item["project"] = project
             normalized.append(item)
         return self.store.upsert_history(normalized)
 

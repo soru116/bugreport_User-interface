@@ -498,6 +498,20 @@ function renderPickBar() {
   $("#pickBar").hidden = !state.selecting;
   $("#pickCount").textContent = state.picked.size;
   $("[data-pick-delete]").disabled = state.picked.size === 0;
+  $("[data-pick-rerun]").disabled = state.picked.size === 0;
+}
+
+async function rerunPicked() {
+  const keys = [...state.picked];
+  if (!keys.length) return;
+  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n每張都會重新跑五個步驟，原本的處理結果會被新的結果取代。`)) return;
+  let started = 0, skipped = 0;
+  for (const key of keys) {
+    try { await post(`/api/tickets/${encodeURIComponent(key)}/run`); started += 1; } catch { skipped += 1; }
+  }
+  toast(`已開始重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
+  setSelecting(false);
+  await refresh();
 }
 
 async function deletePicked() {
@@ -1216,22 +1230,39 @@ function recordsFromText(text, name) {
   }
 }
 
+function importProjectOptions(history) {
+  const select = $("#importProject");
+  if (select.dataset.history === String(history) && select.options.length) return;
+  const previous = select.dataset.history ? select.value : null;
+  const preferred = previous ?? (state.folder && state.folder !== NO_PROJECT ? state.folder : state.folder === NO_PROJECT ? "" : state.defaultProject);
+  const none = history ? "不指定（和所有專案的 Ticket 比對）" : state.projects.length ? "不指定專案（略過錯誤定位）" : "（設定檔沒有專案，將略過錯誤定位）";
+  const options = state.projects.map((p) => [p.project, history ? p.project : `${p.project}　${p.repo_path}`]);
+  if (history || !state.projects.length || preferred === "") options.push(["", none]);
+  select.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join("");
+  select.value = options.some(([value]) => value === preferred) ? preferred : options[0][0];
+  select.dataset.history = String(history);
+}
+
 // The project dropdown only applies to tickets that do not name a project
 // themselves, so it is hidden when every record in the file already does.
 function renderImportProjectNote() {
   const note = $("#importProjectNote");
   const history = importMode === "file" && $("#asHistory").checked;
-  const counts = importMode === "file" && !history ? importFileProjects : null;
+  importProjectOptions(history);
+  const counts = importMode === "file" ? importFileProjects : null;
   const named = counts ? Object.entries(counts).filter(([p]) => p) : [];
   const unnamed = counts ? counts[""] || 0 : 0;
-  $(".project-field").hidden = history || (named.length > 0 && !unnamed);
+  $(".project-field").hidden = named.length > 0 && !unnamed;
+  const base = history ? "這批歷史 Ticket 屬於哪個專案（只會和這個專案的 Ticket 比對）" : "錯誤定位要用的專案（Repository）";
   $("#importProjectLabel").textContent = named.length && unnamed
-    ? `其餘 ${unnamed} 張沒寫專案的 Ticket，錯誤定位要用的專案（Repository）`
-    : "錯誤定位要用的專案（Repository）";
+    ? `其餘 ${unnamed} 張沒寫專案的${history ? "歷史 Ticket 屬於哪個專案" : " Ticket，錯誤定位要用的專案（Repository）"}`
+    : base;
   if (!named.length) { note.hidden = true; note.innerHTML = ""; return; }
   const known = new Set(state.projects.map((p) => p.project));
   const list = named.map(([p, n]) => `<li><b>${esc(p)}</b> ${n} 張${known.has(p) ? "" : `<span class="note-warn">（設定檔沒有這個專案，錯誤定位會略過）</span>`}</li>`).join("");
-  note.innerHTML = `<p>${unnamed ? "這個檔案有些" : "這個檔案的"} Ticket 已經寫好自己的專案，會照檔案分到各自的資料夾，錯誤定位也用各自專案的程式碼：</p><ul>${list}</ul>`;
+  note.innerHTML = history
+    ? `<p>${unnamed ? "這個檔案有些" : "這個檔案的"}歷史 Ticket 已經寫好自己的專案，只會和同一個專案的新 Ticket 比對：</p><ul>${list.replace(/<span class="note-warn">.*?<\/span>/g, "")}</ul>`
+    : `<p>${unnamed ? "這個檔案有些" : "這個檔案的"} Ticket 已經寫好自己的專案，會照檔案分到各自的資料夾，錯誤定位也用各自專案的程式碼：</p><ul>${list}</ul>`;
   note.hidden = false;
 }
 
@@ -1242,9 +1273,8 @@ function openImport() {
   $("#importError").textContent = "";
   $("#asHistory").checked = false;
   $("#importForm").reset();
-  $("#importProject").innerHTML = state.projects.length
-    ? state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === (state.folder && state.folder !== NO_PROJECT ? state.folder : state.defaultProject) ? "selected" : ""}>${esc(p.project)}　${esc(p.repo_path)}</option>`).join("") + (state.folder === NO_PROJECT ? `<option value="" selected>不指定專案（略過錯誤定位）</option>` : "")
-    : `<option value="">（設定檔沒有專案，將略過錯誤定位）</option>`;
+  delete $("#importProject").dataset.history;
+  importProjectOptions(false);
   setImportMode("file");
   $("#importDialog").showModal();
 }
@@ -1414,6 +1444,7 @@ async function init() {
   $("#pickBar").addEventListener("click", (e) => {
     if (e.target.closest("[data-pick-cancel]")) setSelecting(false);
     else if (e.target.closest("[data-pick-delete]")) deletePicked();
+    else if (e.target.closest("[data-pick-rerun]")) rerunPicked();
     else if (e.target.closest("[data-pick-all]")) {
       $$("#homeView .tile").forEach((tile) => state.picked.add(tile.dataset.key));
       state.homeSignature = null;

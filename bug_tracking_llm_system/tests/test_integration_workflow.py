@@ -463,6 +463,11 @@ class IntegrationWorkflowTests(unittest.TestCase):
         pipeline = app.pipeline
         pipeline.extractor = ToJsonExtractor(config, llm_call=fake_code_llama)
         pipeline.import_history([{"ticket_id": "IMPORTED-1", "project": "smoke", "title": "old", "description": "old report"}])
+        pipeline.import_history(
+            [{"ticket_id": "H-OWN", "project": "other", "title": "a"}, {"ticket_id": "H-NONE", "title": "b"}], project="smoke"
+        )
+        projects = {row["ticket_id"]: row.get("project") for row in pipeline.store.history_rows()}
+        self.assertEqual((projects["H-OWN"], projects["H-NONE"]), ("other", "smoke"), "only rows without a project take the chosen one")
         [first, second] = pipeline.import_raw([{**self.raw_ticket(), "ticket_id": "D-1"}, {**self.raw_ticket(), "ticket_id": "D-2"}], source="test", project="smoke")
         pipeline.process_batch([first["key"], second["key"]])
         self.assertTrue(any(row["ticket_id"] == "D-1" for row in pipeline.store.history_rows()))
