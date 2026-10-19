@@ -167,7 +167,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -279,7 +279,9 @@ function tile(t, terms, showProject = false) {
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
   ].join("");
-  return `<li class="tile" data-tone="${coverTone(t)}" data-key="${esc(t.key)}">
+  const picked = state.selecting && state.picked.has(t.key);
+  return `<li class="tile ${state.selecting ? "is-selecting" : ""} ${picked ? "is-picked" : ""}" data-tone="${coverTone(t)}" data-key="${esc(t.key)}">
+    ${state.selecting ? `<span class="pick" aria-hidden="true">${picked ? "✓" : ""}</span>` : ""}
     <div class="tile-cover" style="${blobs}">
       <span class="tile-status">${esc(label)}</span>
       <span class="pebbles" aria-label="處理進度">${pebbles}</span>
@@ -291,7 +293,7 @@ function tile(t, terms, showProject = false) {
       ${meta ? `<div class="tile-meta">${meta}</div>` : ""}
       ${t.queue ? `<p class="tile-queue">${esc(queueText(t.queue, { short: true }))}</p>` : attention ? `<p class="tile-attention">${esc(attention)}</p>` : ""}
     </div>
-    <button type="button" class="pin-btn ${t.pinned ? "is-on" : ""}" data-pin="${esc(t.key)}" aria-pressed="${t.pinned}" title="${t.pinned ? "取消釘選" : "釘選到上方"}" aria-label="${t.pinned ? "取消釘選" : "釘選"} ${esc(t.ticket_id)}">${PIN_ICON}</button>
+    ${state.selecting ? "" : `<button type="button" class="pin-btn ${t.pinned ? "is-on" : ""}" data-pin="${esc(t.key)}" aria-pressed="${t.pinned}" title="${t.pinned ? "取消釘選" : "釘選到上方"}" aria-label="${t.pinned ? "取消釘選" : "釘選"} ${esc(t.ticket_id)}">${PIN_ICON}</button>`}
   </li>`;
 }
 
@@ -352,7 +354,7 @@ function visibleTickets() {
 
 function renderInbox() {
   const { terms, scope, matched, shown } = visibleTickets();
-  const signature = JSON.stringify([state.tickets, state.projects, state.filter, state.query, state.folder]);
+  const signature = JSON.stringify([state.tickets, state.projects, state.filter, state.query, state.folder, state.selecting, [...state.picked]]);
   if (signature === state.homeSignature) return; // nothing changed: keep hover and focus
   state.homeSignature = signature;
 
@@ -378,7 +380,10 @@ function renderInbox() {
     $("#homeHead").innerHTML = `<div class="folder-head">
         <a class="back-link" href="#/" title="回到所有專案" aria-label="回到所有專案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <div class="folder-head-text"><p class="crumb"><a href="#/">所有專案</a></p><h1 class="home-title">${esc(projectName(state.folder))}</h1>${desc ? `<p class="home-sub">${esc(desc)}</p>` : ""}</div>
-        <button type="button" class="btn btn-quiet btn-small" data-open-import>匯入到這個專案</button>
+        <div class="folder-head-actions">
+          <button type="button" class="btn btn-quiet btn-small" data-open-import>匯入到這個專案</button>
+          <button type="button" class="btn btn-danger-quiet btn-small" data-delete-project>刪除專案</button>
+        </div>
       </div>`;
   }
 
@@ -479,6 +484,80 @@ function gotoTicket(step) {
   if (target) location.hash = `#/t/${encodeURIComponent(target)}`;
 }
 
+/* ------------------------------------------------------------ deleting */
+function setSelecting(on, { render = true } = {}) {
+  state.selecting = on;
+  state.picked = new Set();
+  const button = $("#selectModeButton");
+  if (button) button.textContent = on ? "完成" : "選取";
+  renderPickBar();
+  if (render) { state.homeSignature = null; renderInbox(); }
+}
+
+function renderPickBar() {
+  $("#pickBar").hidden = !state.selecting;
+  $("#pickCount").textContent = state.picked.size;
+  $("[data-pick-delete]").disabled = state.picked.size === 0;
+}
+
+async function deletePicked() {
+  const keys = [...state.picked];
+  if (!keys.length) return;
+  const ids = keys.map((key) => (state.tickets.find((t) => t.key === key) || {}).ticket_id || key);
+  const preview = ids.slice(0, 5).join("、") + (ids.length > 5 ? ` 等 ${ids.length} 張` : "");
+  if (!confirm(`刪除 ${preview}？\n\n這些 Ticket 的處理結果會一起刪除，無法復原。`)) return;
+  try {
+    const result = await post("/api/delete-tickets", { keys });
+    toast(`已刪除 ${result.deleted.length} 張${result.skipped.length ? `；${result.skipped.length} 張正在處理，沒有刪除` : ""}`);
+    setSelecting(false);
+    await refresh();
+  } catch (err) { toast(err.message); }
+}
+
+async function openDeleteProject() {
+  const name = state.folder;
+  if (name === null) return;
+  const label = projectName(name);
+  const usage = await api(`/api/projects/${encodeURIComponent(name)}/usage`);
+  const option = (key, checked, disabled, text) =>
+    `<label class="check del-option"><input type="checkbox" data-del="${key}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}><span>${text}</span></label>`;
+  $("#deleteProjectTitle").textContent = `刪除專案「${label}」`;
+  $("#deleteProjectBody").innerHTML = `
+    <p class="hint">勾選要刪除的內容。刪除後無法復原。</p>
+    ${option("tickets", usage.tickets > 0, usage.tickets === 0, `刪除這個專案的 <b>${usage.tickets}</b> 張 Ticket（含處理結果）`)}
+    ${name === NO_PROJECT ? "" : option("history", usage.history_rows > 0, usage.history_rows === 0, `刪除這個專案的 <b>${usage.history_rows}</b> 筆比對歷史（重複偵測與負責人推薦用的資料）`)}
+    ${usage.configured ? option("config", true, false, `從設定檔移除這個專案（程式碼與版本快照不會刪除；設定檔會先備份成 <code>.bak</code>）`) : ""}
+    ${usage.busy.length ? `<p class="form-error">有 ${usage.busy.length} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。</p>` : ""}
+    ${!usage.configured && name !== NO_PROJECT ? `<p class="hint">這個專案不在設定檔裡；Ticket 和比對歷史都刪除後，資料夾就會消失。</p>` : ""}`;
+  $("#deleteProjectConfirm").disabled = usage.busy.length > 0;
+  $("#deleteProjectDialog").showModal();
+}
+
+async function confirmDeleteProject() {
+  const name = state.folder;
+  const picked = (key) => { const box = $(`#deleteProjectBody [data-del="${key}"]`); return Boolean(box && box.checked && !box.disabled); };
+  const body = { tickets: picked("tickets"), history: picked("history"), config: picked("config") };
+  if (!body.tickets && !body.history && !body.config) { toast("沒有勾選要刪除的內容"); return; }
+  const button = $("#deleteProjectConfirm");
+  try {
+    button.disabled = true;
+    const result = await post(`/api/projects/${encodeURIComponent(name)}/delete`, body);
+    $("#deleteProjectDialog").close();
+    const parts = [
+      result.tickets_removed.length ? `${result.tickets_removed.length} 張 Ticket` : "",
+      result.history_rows_removed ? `${result.history_rows_removed} 筆比對歷史` : "",
+    ].filter(Boolean);
+    const removedConfig = result.config_removed ? `已從設定檔移除「${projectName(name)}」` : "";
+    toast([parts.length ? `已刪除 ${parts.join("、")}` : "", removedConfig].filter(Boolean).join("，") || "沒有需要刪除的內容");
+    goHome();
+    await refresh();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* ----------------------------------------------------------------- routing */
 /* #/ = project folders, #/p/<project> = tickets in one project, #/t/<key> = one ticket. */
 function goHome(folder = null) {
@@ -495,6 +574,7 @@ async function route() {
   if (!key) {
     const nextFolder = folder ? decodeURIComponent(folder[1]) : null;
     if (nextFolder !== state.folder) state.filter = "all";
+    if (nextFolder !== state.folder || state.selecting) setSelecting(false, { render: false });
     state.folder = nextFolder;
     $$(".filter").forEach((x) => { const on = x.dataset.filter === state.filter; x.classList.toggle("is-active", on); x.setAttribute("aria-selected", on); });
     state.selected = null;
@@ -1090,7 +1170,7 @@ async function onDetailClick(event) {
         break;
       }
       case "delete":
-        if (!confirm("刪除這張 Ticket 的處理紀錄？")) { btn.disabled = false; return; }
+        if (!confirm(`刪除 ${state.detail.ticket_id}？\n\n這張 Ticket 的處理結果會一起刪除，無法復原。`)) { btn.disabled = false; return; }
         await api(path, { method: "DELETE" });
         toast(`已刪除 ${state.detail.ticket_id}`);
         goHome(projectKey(state.detail));
@@ -1230,6 +1310,18 @@ async function init() {
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
     if (e.target.closest("[data-clear-search]")) { setQuery(""); $("#search").focus(); return; }
     if (e.target.closest("[data-open-import]")) { openImport(); return; }
+    if (e.target.closest("[data-delete-project]")) { openDeleteProject(); return; }
+    if (e.target.closest("[data-select-mode]")) { setSelecting(!state.selecting); return; }
+    if (state.selecting) {
+      const picked = e.target.closest(".tile");
+      if (picked) {
+        e.preventDefault();
+        state.picked.has(picked.dataset.key) ? state.picked.delete(picked.dataset.key) : state.picked.add(picked.dataset.key);
+        renderInbox();
+        renderPickBar();
+      }
+      return;
+    }
     const folder = e.target.closest(".folder");
     if (folder && !e.target.closest("a")) { location.hash = folderHref(folder.dataset.folder); return; }
     const card = e.target.closest(".tile");
@@ -1265,6 +1357,17 @@ async function init() {
     search.select();
   });
   window.addEventListener("hashchange", route);
+  $("#pickBar").addEventListener("click", (e) => {
+    if (e.target.closest("[data-pick-cancel]")) setSelecting(false);
+    else if (e.target.closest("[data-pick-delete]")) deletePicked();
+    else if (e.target.closest("[data-pick-all]")) {
+      $$("#homeView .tile").forEach((tile) => state.picked.add(tile.dataset.key));
+      state.homeSignature = null;
+      renderInbox();
+      renderPickBar();
+    }
+  });
+  $("#deleteProjectConfirm").addEventListener("click", confirmDeleteProject);
   $("#detail").addEventListener("click", onDetailClick);
   $("#compareDialog").addEventListener("click", onCompareClick);
   $("#compareDialog").addEventListener("close", () => { compare.history = {}; });

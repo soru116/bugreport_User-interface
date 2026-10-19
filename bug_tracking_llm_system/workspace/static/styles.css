@@ -702,3 +702,32 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .loc-other summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: 13.5px; }
 .loc-other[open] summary { margin-bottom: 8px; }
 .loc-other .hint { margin-top: 6px; }
+
+/* ------------------------------------------------ deleting */
+.btn-danger { background: var(--failed); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #a02a41; }
+.btn-danger-quiet { background: var(--surface); border-color: #efb3bf; color: var(--failed); }
+.btn-danger-quiet:hover:not(:disabled) { background: var(--failed-soft); }
+.folder-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.home-bar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+.sheet-narrow { width: min(560px, calc(100vw - 32px)); }
+.del-option { margin-top: 4px; color: var(--ink); }
+.del-option input:disabled + span { color: var(--ink-3); }
+
+.tile.is-selecting { cursor: pointer; }
+.tile.is-selecting:hover { transform: none; }
+.pick {
+  position: absolute; top: 14px; right: 14px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255, 255, 255, .92); border: 2px solid var(--line-strong);
+  color: #fff; font-weight: 800; font-size: 15px; pointer-events: none;
+}
+.tile.is-picked { box-shadow: 0 0 0 3px var(--failed), var(--shadow-1); }
+.tile.is-picked .pick { background: var(--failed); border-color: var(--failed); }
+.pick-bar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 45;
+  display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 999px;
+  padding: 8px 10px 8px 18px; box-shadow: var(--shadow-2); font-size: 14px; font-weight: 600; white-space: nowrap;
+  max-width: calc(100vw - 24px);
+}
+.pick-bar b { color: var(--failed); }
+@media (max-width: 520px) { .pick-bar { bottom: 64px; gap: 6px; padding-left: 12px; font-size: 13px; } }

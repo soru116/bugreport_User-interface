@@ -346,6 +346,40 @@ class IntegratedPipeline:
                 return row
         return None
 
+    # ------------------------------------------------------------ deleting
+    def delete_ticket(self, key: str) -> dict[str, Any]:
+        """Delete a ticket, its result files, and the history row the workspace added for it when it was
+        processed. History rows imported as historical tickets are left alone."""
+
+        record = self.store.get(key)
+        if record is None:
+            raise KeyError(key)
+        ticket_id = str(record.get("ticket_id") or key)
+        removed = self.store.remove_history(
+            lambda row: str(row.get("ticket_id")) == ticket_id and row.get("source") == "integrated_workspace"
+        )
+        self.store.delete(key)
+        return {"deleted": key, "history_rows_removed": removed}
+
+    def project_usage(self, project: str) -> dict[str, Any]:
+        """What deleting a project would remove (``project`` "" means tickets without a project)."""
+
+        tickets = [record for record in self.store.list() if str(record.get("project") or "") == project]
+        history = [row for row in self.store.history_rows() if project and str(row.get("project") or "") == project]
+        return {"project": project, "tickets": len(tickets), "ticket_keys": [record["key"] for record in tickets], "history_rows": len(history)}
+
+    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True) -> dict[str, Any]:
+        removed_tickets = []
+        if tickets:
+            for record in self.store.list():
+                if str(record.get("project") or "") == project:
+                    self.store.delete(record["key"])
+                    removed_tickets.append(record["key"])
+        removed_history = 0
+        if history and project:
+            removed_history = self.store.remove_history(lambda row: str(row.get("project") or "") == project)
+        return {"tickets_removed": removed_tickets, "history_rows_removed": removed_history}
+
     def mark_candidate(self, key: str, candidate_id: str, mark: str, *, note: str = "") -> dict[str, Any]:
         """Engineer's review note on one duplicate candidate: possible / not / cleared."""
 

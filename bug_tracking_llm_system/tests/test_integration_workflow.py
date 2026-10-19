@@ -444,6 +444,51 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertIn("「Eclipse」在設定檔裡沒有程式碼庫", result["warnings"][0])
         self.assertEqual(result["details"]["skip_reason"], "project_without_repository")
 
+    def test_deleting_tickets_and_projects(self) -> None:
+        import importlib.util
+
+        config_path = self.root / "integration_config.json"
+        config_path.write_text(json.dumps({
+            "workspace_root": str(WORKSPACE_ROOT), "store_dir": str(self.root / "del_store"),
+            "priority": {"model_path": str(self.root / "missing.joblib")},
+            "projects": {"smoke": {"repo_path": str(SMOKE_REPO)}, "other": {"repo_path": str(SMOKE_REPO)}},
+            "default_project": "other",
+        }), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("workspace_server_del", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+        config = server.load_integration_config(config_path)
+        config.duplicate.review_threshold = 0.99
+        app = server.WorkspaceApp(config)
+        pipeline = app.pipeline
+        pipeline.extractor = ToJsonExtractor(config, llm_call=fake_code_llama)
+        pipeline.import_history([{"ticket_id": "IMPORTED-1", "project": "smoke", "title": "old", "description": "old report"}])
+        [first, second] = pipeline.import_raw([{**self.raw_ticket(), "ticket_id": "D-1"}, {**self.raw_ticket(), "ticket_id": "D-2"}], source="test", project="smoke")
+        pipeline.process_batch([first["key"], second["key"]])
+        self.assertTrue(any(row["ticket_id"] == "D-1" for row in pipeline.store.history_rows()))
+        self.assertTrue(pipeline.store.artifact_path(first["key"], "localization_result.json").parent.is_dir())
+
+        result = pipeline.delete_ticket(first["key"])
+        self.assertEqual(result["history_rows_removed"], 1)
+        self.assertIsNone(pipeline.store.get(first["key"]))
+        self.assertFalse(pipeline.store.artifact_path(first["key"], "x").parent.exists())
+        ids = {row["ticket_id"] for row in pipeline.store.history_rows()}
+        self.assertNotIn("D-1", ids)
+        self.assertIn("IMPORTED-1", ids, "imported history is not touched by deleting a ticket")
+
+        usage = app.project_usage("smoke")
+        self.assertEqual((usage["tickets"], usage["configured"]), (1, True))
+        self.assertGreaterEqual(usage["history_rows"], 2)
+        outcome = app.delete_project("smoke", tickets=True, history=True, config=True)
+        self.assertEqual(outcome["tickets_removed"], [second["key"]])
+        self.assertTrue(outcome["config_removed"])
+        saved = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertNotIn("smoke", saved["projects"])
+        self.assertIn("other", saved["projects"])
+        self.assertTrue((self.root / "integration_config.json.bak").is_file())
+        self.assertEqual([row for row in pipeline.store.history_rows() if row.get("project") == "smoke"], [])
+        self.assertTrue(SMOKE_REPO.is_dir(), "the repository itself is never deleted")
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])

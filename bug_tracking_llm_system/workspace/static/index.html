@@ -47,7 +47,10 @@
             <button class="filter" data-filter="running" role="tab" aria-selected="false">處理中 <span data-count="running">0</span></button>
             <button class="filter" data-filter="done" role="tab" aria-selected="false">已完成 <span data-count="done">0</span></button>
           </div>
-          <p class="search-summary" id="searchSummary" aria-live="polite"></p>
+          <div class="home-bar-right">
+            <p class="search-summary" id="searchSummary" aria-live="polite"></p>
+            <button type="button" class="btn btn-quiet btn-small" id="selectModeButton" data-select-mode>選取</button>
+          </div>
         </div>
 
         <section class="shelf shelf-pinned" aria-labelledby="pinnedTitle">
@@ -178,6 +181,27 @@
         <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
       </header>
       <div id="factorBody"></div>
+    </div>
+  </dialog>
+
+  <div class="pick-bar" id="pickBar" role="toolbar" aria-label="選取的 Ticket" hidden>
+    <span>已選取 <b id="pickCount">0</b> 張</span>
+    <button type="button" class="btn btn-quiet btn-small" data-pick-all>全選</button>
+    <button type="button" class="btn btn-danger btn-small" data-pick-delete>刪除</button>
+    <button type="button" class="btn btn-quiet btn-small" data-pick-cancel>取消</button>
+  </div>
+
+  <dialog class="sheet sheet-narrow" id="deleteProjectDialog" aria-labelledby="deleteProjectTitle">
+    <div class="sheet-inner">
+      <header class="sheet-head">
+        <h2 id="deleteProjectTitle">刪除專案</h2>
+        <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
+      </header>
+      <div id="deleteProjectBody"></div>
+      <footer class="sheet-foot">
+        <form method="dialog"><button class="btn btn-quiet">取消</button></form>
+        <button type="button" class="btn btn-danger" id="deleteProjectConfirm">刪除</button>
+      </footer>
     </div>
   </dialog>
 

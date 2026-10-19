@@ -189,6 +189,22 @@ python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of
 
    存檔後重新整理頁面，首頁就會多一個資料夾，不用重開伺服器。大型專案建議同時設定 `code_index_path`，並在「模型與資料狀態」裡先建立索引。
 
+## 刪除 Ticket 或專案
+
+| 要刪什麼 | 怎麼做 |
+|---|---|
+| 一張 Ticket | 打開 Ticket →「更多」→「刪除」 |
+| 好幾張 Ticket | 在首頁或專案資料夾按「選取」→ 點要刪的卡片 → 下方「刪除」 |
+| 整個專案 | 打開專案資料夾 → 右上「刪除專案」→ 勾選要刪的內容 |
+
+規則：
+
+1. 刪除 Ticket 會一起刪掉它的處理結果。它在確認負責人時寫進比對歷史的那筆也會移除；匯入的歷史資料（例如 Firefox、Eclipse）不受影響。
+2. 刪除專案可以分開勾選：這個專案的 Ticket、這個專案的比對歷史、設定檔裡的專案。從設定檔移除前會先備份成 `integration_config.json.bak`。
+3. 程式碼、程式碼索引與 SWE-bench 版本快照**不會**被刪除。
+4. 正在處理或排隊中的 Ticket 不能刪，等它處理完再刪。
+5. 刪除後無法從介面復原。
+
 ## 命令列（批次）
 
 ```bash
@@ -217,7 +233,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，19 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，20 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

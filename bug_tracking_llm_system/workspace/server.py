@@ -266,6 +266,45 @@ class WorkspaceApp:
                 "average_seconds": dict(self._avg),
             }
 
+    # ------------------------------------------------------------ deleting
+    NO_PROJECT = "__none__"
+
+    def project_usage(self, name: str) -> dict[str, Any]:
+        project = "" if name == self.NO_PROJECT else name
+        usage = self.pipeline.project_usage(project)
+        usage["busy"] = [key for key in usage.pop("ticket_keys") if self.busy(key)]
+        usage["configured"] = bool(project) and project in self.config.projects
+        usage["config_path"] = str(self.config.config_path or "")
+        return usage
+
+    def delete_project(self, name: str, *, tickets: bool, history: bool, config: bool) -> dict[str, Any]:
+        project = "" if name == self.NO_PROJECT else name
+        usage = self.project_usage(name)
+        if usage["busy"]:
+            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。")
+        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history)
+        result["config_removed"] = self.remove_project_from_config(project) if config and project else False
+        return result
+
+    def remove_project_from_config(self, project: str) -> bool:
+        """Drop one entry from integration_config.json (a .bak copy is written first). The repository
+        and any snapshots on disk are not touched."""
+
+        path = self.config.config_path
+        if not path or not Path(path).is_file():
+            raise ValueError("沒有使用設定檔啟動，無法從設定檔移除專案。")
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        projects = data.get("projects") or {}
+        if project not in projects:
+            return False
+        Path(str(path) + ".bak").write_text(Path(path).read_text(encoding="utf-8"), encoding="utf-8")
+        del projects[project]
+        if data.get("default_project") == project:
+            data["default_project"] = next(iter(projects), "")
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        self.maybe_reload_config()
+        return True
+
     def start(self, key: str) -> bool:
         self.maybe_reload_config()
         return self._submit(key, "full")
@@ -440,6 +479,8 @@ class Handler(SimpleHTTPRequestHandler):
             if parts[1:] == ["projects"]:
                 self.app.maybe_reload_config()  # new projects in the config show up as folders without a restart
                 return self._json({"projects": self.app.projects(), "default_project": self.app.config.default_project})
+            if len(parts) == 4 and parts[1] == "projects" and parts[3] == "usage":
+                return self._json(self.app.project_usage(parts[2]))
             if len(parts) == 3 and parts[1] == "history":
                 row = self.app.pipeline.find_history_ticket(parts[2])
                 if row is None:
@@ -474,6 +515,22 @@ class Handler(SimpleHTTPRequestHandler):
                     for record in created:
                         app.start(record["key"])
                 return self._json({"created": [record["key"] for record in created]})
+            if parts == ["api", "delete-tickets"]:
+                deleted, skipped = [], []
+                for key in [str(item) for item in body.get("keys") or []]:
+                    if app.busy(key):
+                        skipped.append(key)
+                        continue
+                    try:
+                        app.pipeline.delete_ticket(key)
+                        deleted.append(key)
+                    except KeyError:
+                        skipped.append(key)
+                return self._json({"deleted": deleted, "skipped": skipped})
+            if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "delete":
+                return self._json(app.delete_project(
+                    parts[2], tickets=bool(body.get("tickets", True)), history=bool(body.get("history", False)), config=bool(body.get("config", False))
+                ))
             if len(parts) == 4 and parts[:2] == ["api", "tickets"]:
                 key, action = parts[2], parts[3]
                 if action == "pin":  # display-only, allowed while the ticket is being processed
@@ -532,8 +589,10 @@ class Handler(SimpleHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["api", "tickets"]:
             if self.app.busy(parts[2]):
                 return self._error("這張 Ticket 正在處理中，請稍候。", 409)
-            self.app.pipeline.store.delete(parts[2])
-            return self._json({"deleted": parts[2]})
+            try:
+                return self._json(self.app.pipeline.delete_ticket(parts[2]))
+            except KeyError:
+                return self._error("找不到這張 Ticket。", 404)
         return self._error("Not found", 404)
 
 
