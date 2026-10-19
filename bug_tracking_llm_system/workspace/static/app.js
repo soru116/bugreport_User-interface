@@ -1199,9 +1199,39 @@ function schedulePoll() {
 /* ---------------------------------------------------------------- import */
 let importFile = null;
 let importMode = "file";
+let importFileProjects = null; // {project: count} for records that name their own project
+
+function recordsFromText(text, name) {
+  const trimmed = text.trim();
+  if (!trimmed || /\.csv$/i.test(name)) return [];
+  try {
+    const data = JSON.parse(trimmed);
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.tickets)) return data.tickets;
+    return [data];
+  } catch {
+    return trimmed.split(/\r?\n/).flatMap((line) => {
+      try { return line.trim() ? [JSON.parse(line)] : []; } catch { return []; }
+    });
+  }
+}
+
+function renderImportProjectNote() {
+  const note = $("#importProjectNote");
+  const counts = importMode === "file" ? importFileProjects : null;
+  const named = counts ? Object.entries(counts).filter(([p]) => p) : [];
+  if (!named.length) { note.hidden = true; note.innerHTML = ""; return; }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const unnamed = counts[""] || 0;
+  const known = new Set(state.projects.map((p) => p.project));
+  const list = named.map(([p, n]) => `<li><b>${esc(p)}</b> ${n} 張${known.has(p) ? "" : `<span class="note-warn">（設定檔沒有這個專案，錯誤定位會略過）</span>`}</li>`).join("");
+  note.innerHTML = `<p>這個檔案的 Ticket ${unnamed ? `有 ${total - unnamed} 張` : "都"}已經寫好自己的專案，會照檔案分到各自的資料夾，<b>不受上面的選擇影響</b>：</p><ul>${list}</ul>${unnamed ? `<p>其餘 ${unnamed} 張沒寫專案，會用上面選的專案。</p>` : "<p>上面選哪個都可以。</p>"}`;
+  note.hidden = false;
+}
 
 function openImport() {
   importFile = null;
+  importFileProjects = null;
   $("#dropFile").textContent = "";
   $("#importError").textContent = "";
   $("#asHistory").checked = false;
@@ -1220,6 +1250,7 @@ function setImportMode(mode) {
   const history = mode === "file" && $("#asHistory").checked;
   $("#importSubmit").textContent = history ? "加入歷史資料庫" : "匯入並開始處理";
   $(".project-field").hidden = history;
+  renderImportProjectNote();
 }
 
 async function submitImport(event) {
@@ -1250,7 +1281,11 @@ async function submitImport(event) {
     } else {
       toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
       if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
-      else goHome(body.project || NO_PROJECT);
+      else {
+        const named = importMode === "file" && importFileProjects ? Object.keys(importFileProjects) : [];
+        const target = named.length > 1 ? null : (named[0] || body.project || NO_PROJECT);
+        goHome(target);
+      }
     }
     await refresh();
   } catch (err) {
@@ -1260,9 +1295,23 @@ async function submitImport(event) {
   }
 }
 
-function pickFile(file) {
+async function pickFile(file) {
   importFile = file;
+  importFileProjects = null;
   $("#dropFile").textContent = file ? `${file.name}（${Math.ceil(file.size / 1024)} KB）` : "";
+  if (file) {
+    try {
+      const records = recordsFromText(await file.text(), file.name);
+      const counts = {};
+      for (const r of records) {
+        if (!r || typeof r !== "object") continue;
+        const p = String(r.project || "");
+        counts[p] = (counts[p] || 0) + 1;
+      }
+      if (importFile === file) importFileProjects = counts;
+    } catch { /* the server reports parse errors on import */ }
+  }
+  renderImportProjectNote();
 }
 
 /* ---------------------------------------------------------------- status */
