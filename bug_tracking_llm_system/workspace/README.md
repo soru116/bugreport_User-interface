@@ -98,7 +98,7 @@ python3 workspace/server.py --config integration_config.json --port 8780
    - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
    - 也可以手動填寫一張。
-3. 首頁依專案分成資料夾。專案就是設定檔 `projects` 裡的 Repository，匯入 Ticket 時選的專案決定它放在哪個資料夾，也決定錯誤定位要在哪個程式碼庫裡找。匯入時沒選專案的 Ticket 放在「未指定專案」資料夾。
+3. 首頁依專案分成資料夾。專案就是設定檔 `projects` 裡的 Repository，匯入 Ticket 時選的專案決定它放在哪個資料夾，也決定錯誤定位要在哪個程式碼庫裡找。匯入時沒選專案的 Ticket 放在「未指定專案」資料夾。如果檔案裡的每一筆已經帶 `project`（例如 `new_tickets_*.jsonl`），匯入視窗會改成列出檔案裡的專案，不再顯示專案選單。
    - 資料夾上會顯示 Ticket 數、等你確認和處理中的數量；露出來的紙張顏色是最近幾張 Ticket 的狀態。
    - 點開資料夾才看到一張張 Ticket 卡片：上方是「釘選的 Ticket」區，其餘放在下方。點卡片右上角的圖釘可以釘選；釘選狀態存在伺服器的 Ticket 紀錄裡，重開伺服器、重新執行流程都會保留。
    - 卡片封面的顏色代表狀態：橘色是等你確認，紫色是處理中，綠色是已完成，紅色是失敗。左下五顆小圓點是五個步驟的進度，右下圓形貼紙是優先級。

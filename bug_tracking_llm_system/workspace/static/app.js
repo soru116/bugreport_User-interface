@@ -1216,16 +1216,22 @@ function recordsFromText(text, name) {
   }
 }
 
+// The project dropdown only applies to tickets that do not name a project
+// themselves, so it is hidden when every record in the file already does.
 function renderImportProjectNote() {
   const note = $("#importProjectNote");
-  const counts = importMode === "file" ? importFileProjects : null;
+  const history = importMode === "file" && $("#asHistory").checked;
+  const counts = importMode === "file" && !history ? importFileProjects : null;
   const named = counts ? Object.entries(counts).filter(([p]) => p) : [];
+  const unnamed = counts ? counts[""] || 0 : 0;
+  $(".project-field").hidden = history || (named.length > 0 && !unnamed);
+  $("#importProjectLabel").textContent = named.length && unnamed
+    ? `其餘 ${unnamed} 張沒寫專案的 Ticket，錯誤定位要用的專案（Repository）`
+    : "錯誤定位要用的專案（Repository）";
   if (!named.length) { note.hidden = true; note.innerHTML = ""; return; }
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const unnamed = counts[""] || 0;
   const known = new Set(state.projects.map((p) => p.project));
   const list = named.map(([p, n]) => `<li><b>${esc(p)}</b> ${n} 張${known.has(p) ? "" : `<span class="note-warn">（設定檔沒有這個專案，錯誤定位會略過）</span>`}</li>`).join("");
-  note.innerHTML = `<p>這個檔案的 Ticket ${unnamed ? `有 ${total - unnamed} 張` : "都"}已經寫好自己的專案，會照檔案分到各自的資料夾，<b>不受上面的選擇影響</b>：</p><ul>${list}</ul>${unnamed ? `<p>其餘 ${unnamed} 張沒寫專案，會用上面選的專案。</p>` : "<p>上面選哪個都可以。</p>"}`;
+  note.innerHTML = `<p>${unnamed ? "這個檔案有些" : "這個檔案的"} Ticket 已經寫好自己的專案，會照檔案分到各自的資料夾，錯誤定位也用各自專案的程式碼：</p><ul>${list}</ul>`;
   note.hidden = false;
 }
 
@@ -1249,7 +1255,6 @@ function setImportMode(mode) {
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== mode));
   const history = mode === "file" && $("#asHistory").checked;
   $("#importSubmit").textContent = history ? "加入歷史資料庫" : "匯入並開始處理";
-  $(".project-field").hidden = history;
   renderImportProjectNote();
 }
 
