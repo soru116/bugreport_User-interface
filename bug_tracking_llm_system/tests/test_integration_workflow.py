@@ -434,6 +434,16 @@ class IntegrationWorkflowTests(unittest.TestCase):
         missing, _ = localizer.localize({**tickets[0], "base_commit": "0" * 40}, config.project("demo/lib"))
         self.assertEqual(missing["status"], "failed")
 
+    def test_localization_explains_a_project_without_repository(self) -> None:
+        from integration.localization import ProjectLocalizer
+
+        localizer = ProjectLocalizer(self.config)
+        result, raw = localizer.localize({"ticket_id": "E-1", "title": "x"}, None, project_name="Eclipse")
+        self.assertEqual(result["status"], "skipped")
+        self.assertIsNone(raw)
+        self.assertIn("「Eclipse」在設定檔裡沒有程式碼庫", result["warnings"][0])
+        self.assertEqual(result["details"]["skip_reason"], "project_without_repository")
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])

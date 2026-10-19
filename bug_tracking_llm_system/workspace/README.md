@@ -167,6 +167,28 @@ python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of
 
 注意：錯誤定位團隊在 SWE-bench 上調過方法，這不是沒看過的測試資料；這些專案沒有重複標記和負責人歷史；PRI 是用 Eclipse 訓練的。這是示範，不是評估。
 
+## 錯誤定位用哪份程式碼
+
+錯誤定位一定要在程式碼裡找，所以每張 Ticket 用的是**它所屬專案的程式碼**（設定檔 `projects` 裡的 `repo_path`；SWE-bench 專案會用 Ticket 自己 `base_commit` 的版本）。
+
+| 情況 | 第 5 步會怎樣 | 你可以做什麼 |
+|---|---|---|
+| 專案有設定程式碼 | 自動定位 | 「重新定位」：用同一份程式碼再跑一次（例如程式碼更新後） |
+| 專案沒有設定程式碼（例如 Mozilla Firefox、Eclipse） | 略過，並寫出原因 | 在設定檔 `projects` 加入這個專案的 `repo_path`，再按「執行錯誤定位」 |
+| 匯入時選錯專案 | 用錯的程式碼定位，結果沒有參考價值 | 展開「改用其他專案的程式碼定位…」，選正確的專案並確認 |
+
+規則：
+
+1. 只有在 Ticket **真的屬於**那個專案時，才改用那個專案的程式碼。拿不相關的程式碼也會排出檔案，但那些結果沒有意義。
+2. 改用其他專案會把 Ticket **移到那個專案的資料夾**，畫面會先跳出確認。
+3. 新增專案：在 `integration_config.json` 的 `projects` 加上：
+
+   ```json
+   "my-project": { "repo_path": "C:/path/to/repo", "description": "說明文字" }
+   ```
+
+   存檔後重新整理頁面，首頁就會多一個資料夾，不用重開伺服器。大型專案建議同時設定 `code_index_path`，並在「模型與資料狀態」裡先建立索引。
+
 ## 命令列（批次）
 
 ```bash
@@ -195,7 +217,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，18 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，19 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

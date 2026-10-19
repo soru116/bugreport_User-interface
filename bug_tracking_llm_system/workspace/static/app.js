@@ -987,10 +987,25 @@ function renderAssignee(r, o) {
     ${confirmed ? `<p class="confirmed-line">已確認負責人：<b>${esc(confirmed.assignee)}</b>（${esc(fmtTime(confirmed.at))}）</p>` : ""}`;
 }
 
-function locControls(r, projectOptions) {
+/* Localization runs in the code of the ticket's own project. Using another project's code is a
+   deliberate, confirmed move: the ticket changes folder, and it only makes sense when the ticket
+   really belongs to that project. */
+function locControls(r) {
   if (!state.projects.length) return `<p class="hint" style="margin-top:10px">設定檔裡還沒有任何專案，請在 integration_config.json 的 projects 加入 repo_path。</p>`;
-  return `<div class="loc-controls"><label>專案 <select id="locProject">${projectOptions}</select></label>
-    <button class="btn btn-quiet btn-small" data-action="localize">${r.stages.localization.status === "done" ? "重新定位" : "執行錯誤定位"}</button></div>`;
+  const current = r.project || "";
+  const hasCode = state.projects.some((p) => p.project === current);
+  const others = state.projects.filter((p) => p.project !== current);
+  const rerun = hasCode
+    ? `<div class="loc-controls"><button class="btn btn-quiet btn-small" data-action="localize" data-project="${esc(current)}">${r.stages.localization.status === "done" ? "重新定位" : "執行錯誤定位"}</button><span class="hint">使用「${esc(current)}」的程式碼</span></div>`
+    : `<p class="loc-note">${current ? `要定位這張 Ticket，請在設定檔 projects 加入「${esc(current)}」的 repo_path，再按「執行錯誤定位」。` : "要定位這張 Ticket，請先指定它屬於哪個專案。"}如果它其實屬於下面某個專案，也可以手動改過去。</p>`;
+  const options = `<option value="">請選擇專案</option>` + others.map((p) => `<option value="${esc(p.project)}">${esc(p.project)}</option>`).join("");
+  const other = others.length ? `<details class="loc-other">
+      <summary>${hasCode ? "改用其他專案的程式碼定位…" : "手動指定專案…"}</summary>
+      <div class="loc-controls"><select id="locProject" aria-label="要改到哪個專案">${options}</select>
+        <button class="btn btn-quiet btn-small" data-action="localize-other">改到這個專案並定位</button></div>
+      <p class="hint">只在這張 Ticket 真的屬於那個專案時使用。Ticket 會移到那個專案的資料夾，並用那份程式碼重新定位。</p>
+    </details>` : "";
+  return `<div class="loc-box">${rerun}${other}</div>`;
 }
 
 function renderLocalization(r, o, projectOptions) {
@@ -1035,7 +1050,7 @@ async function onDetailClick(event) {
   if (btn.dataset.action === "pin") { await togglePin(key); return; }
   try {
     btn.disabled = true;
-    if (["rerun", "not-duplicate", "is-duplicate", "localize"].includes(btn.dataset.action)) state.tabPinned = false;
+    if (["rerun", "not-duplicate", "is-duplicate", "localize", "localize-other"].includes(btn.dataset.action)) state.tabPinned = false;
     switch (btn.dataset.action) {
       case "rerun":
         await post(`${path}/run`);
@@ -1062,9 +1077,18 @@ async function onDetailClick(event) {
         break;
       }
       case "localize":
-        await post(`${path}/localize`, { project: ($("#locProject") || {}).value });
+        await post(`${path}/localize`, { project: btn.dataset.project });
         toast("已開始錯誤定位");
         break;
+      case "localize-other": {
+        const target = ($("#locProject") || {}).value;
+        if (!target) { toast("請先選擇專案"); btn.disabled = false; return; }
+        const from = state.detail.project || "未指定專案";
+        if (!confirm(`會把這張 Ticket 從「${from}」移到「${target}」資料夾，並用「${target}」的程式碼做錯誤定位。\n\n只有這張 Ticket 真的屬於「${target}」時才這樣做。確定嗎？`)) { btn.disabled = false; return; }
+        await post(`${path}/localize`, { project: target });
+        toast(`已移到「${target}」並開始錯誤定位`);
+        break;
+      }
       case "delete":
         if (!confirm("刪除這張 Ticket 的處理紀錄？")) { btn.disabled = false; return; }
         await api(path, { method: "DELETE" });

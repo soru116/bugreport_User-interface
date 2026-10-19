@@ -278,7 +278,7 @@ class IntegratedPipeline:
             stage = "localization"
             self._mark_running(key, stage)
             project = self.config.project(record.get("project"))
-            result, raw = self.localizer.localize(structured, project)
+            result, raw = self.localizer.localize(structured, project, project_name=str(record.get("project") or ""))
             if raw is not None:
                 self.store.write_artifact(key, "bug_location_raw.json", raw)
             assignee_output = (self.get(key)["stages"]["assignee"].get("output") or {})
@@ -316,7 +316,9 @@ class IntegratedPipeline:
                 raise ValueError("Ticket 尚未完成 JSON 轉換。")
             try:
                 self._mark_running(key, "localization")
-                result, raw = self.localizer.localize(record["structured_ticket"], self.config.project(record.get("project")))
+                result, raw = self.localizer.localize(
+                    record["structured_ticket"], self.config.project(record.get("project")), project_name=str(record.get("project") or "")
+                )
                 if raw is not None:
                     self.store.write_artifact(key, "bug_location_raw.json", raw)
 

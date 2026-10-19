@@ -120,16 +120,24 @@ class ProjectLocalizer:
             "duration_ms": int((time.perf_counter() - started) * 1000),
         }
 
-    def localize(self, structured_ticket: dict[str, Any], project: ProjectSettings | None) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    def localize(
+        self, structured_ticket: dict[str, Any], project: ProjectSettings | None, *, project_name: str = ""
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         started = time.perf_counter()
         if project is None:
+            reason = (
+                f"「{project_name}」在設定檔裡沒有程式碼庫（integration_config.json 的 projects 沒有這個專案的 repo_path），所以略過錯誤定位。"
+                if project_name
+                else "這張 Ticket 沒有指定專案，所以略過錯誤定位。"
+            )
             return (
                 stage_result(
                     stage="localization",
                     status="skipped",
                     module=self.MODULE_LABEL,
                     implementation=self.IMPLEMENTATION,
-                    warnings=["此 Ticket 沒有指定專案／Repository，無法執行錯誤定位。請在設定檔 projects 加入 repo_path。"],
+                    warnings=[reason],
+                    details={"skip_reason": "project_without_repository" if project_name else "no_project"},
                     started=started,
                 ),
                 None,

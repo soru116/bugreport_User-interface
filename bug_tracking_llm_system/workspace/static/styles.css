@@ -694,3 +694,11 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .queue-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: pulse 1s ease-in-out infinite alternate; }
 .tile-queue { margin-top: auto; align-self: flex-start; background: var(--primary-soft); color: var(--primary); border-radius: 10px; padding: 3px 10px; font-size: 12.5px; font-weight: 700; }
 @media (max-width: 520px) { .queue-pill { left: 12px; bottom: 12px; padding: 7px 12px; font-size: 12.5px; } }
+
+/* ------------------------------------------------ localization project controls */
+.loc-box { display: grid; gap: 8px; margin-top: 12px; }
+.loc-box .loc-controls { margin-top: 0; }
+.loc-note { font-size: 13.5px; color: var(--ink-2); max-width: 80ch; }
+.loc-other summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: 13.5px; }
+.loc-other[open] summary { margin-bottom: 8px; }
+.loc-other .hint { margin-top: 6px; }
