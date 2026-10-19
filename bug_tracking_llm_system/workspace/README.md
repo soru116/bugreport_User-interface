@@ -165,6 +165,8 @@ python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of
 3. 匯入 `data/real_datasets/new_tickets_swebench.jsonl`。每張 Ticket 會在**自己那個版本**的程式碼裡做錯誤定位；第一次用到某個版本時會先建立程式碼索引，之後重用。
 4. 對照 `answer_key_swebench.md`：裡面是真正的修補改了哪些檔案。新 Ticket 只有 issue 本文，沒有 patch、測試或提示。
 
+同時會產生 `history_swebench.jsonl`：同一個 repository、同一份 id 清單裡**沒被選成新 Ticket 的其他 issue**（只有標題、內文、時間）。先用「這是歷史 Ticket」匯入它，重複偵測就有真實的比對對象。搭配 `--limit-per-repo` 時，預設 `--pick latest` 會把每個 repository 最新的幾題當新 Ticket、較早的當歷史，因為工作台不會拿比新 Ticket 晚的報告來比對。SWE-bench 沒有重複標記和負責人，所以候選都應該判為「不是重複」，負責人會建議人工分派。
+
 注意：錯誤定位團隊在 SWE-bench 上調過方法，這不是沒看過的測試資料；這些專案沒有重複標記和負責人歷史；PRI 是用 Eclipse 訓練的。這是示範，不是評估。
 
 ## 錯誤定位用哪份程式碼

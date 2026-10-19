@@ -418,6 +418,21 @@ class IntegrationWorkflowTests(unittest.TestCase):
                 self.assertNotIn(secret, ticket)
         answers = json.loads((self.root / "out" / "answer_key_swebench.json").read_text(encoding="utf-8"))["answers"]
         self.assertEqual(answers[1]["fixed_files"], ["pkg/cookies.py"])
+        self.assertEqual((self.root / "out" / "history_swebench.jsonl").read_text(encoding="utf-8"), "")
+
+        # With a limit, the newest issue becomes the ticket and the earlier one the comparison history.
+        limited = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "build_swebench_demo.py"), "--input", str(rows_path), "--repos", "demo/lib",
+             "--limit-per-repo", "1", "--work-dir", str(self.root / "swe"), "--output-dir", str(self.root / "out2"), "--repo-url", str(upstream)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(limited.returncode, 0, limited.stderr)
+        newest = [json.loads(line) for line in (self.root / "out2" / "new_tickets_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        history = [json.loads(line) for line in (self.root / "out2" / "history_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(([t["ticket_id"] for t in newest], [h["ticket_id"] for h in history]), (["demo__lib-2"], ["demo__lib-1"]))
+        self.assertEqual(history[0]["project"], "demo/lib")
+        for secret in ("patch", "test_patch", "hints_text", "FAIL_TO_PASS", "PASS_TO_PASS", "base_commit"):
+            self.assertNotIn(secret, history[0])
 
         project_entry = json.loads(config_path.read_text(encoding="utf-8"))["projects"]["demo/lib"]
         config = config_from_mapping({"workspace_root": str(WORKSPACE_ROOT), "projects": {"demo/lib": {

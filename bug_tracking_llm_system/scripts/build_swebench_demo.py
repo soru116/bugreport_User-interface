@@ -13,7 +13,11 @@ This script turns SWE-bench rows into tickets the Ticket workspace can process e
    created_at, repo, base_commit) - patch, test_patch, hints_text, FAIL_TO_PASS and PASS_TO_PASS are
    never written into a ticket;
 5. writes ``answer_key_swebench.md/json`` with the files the real fix changed;
-6. optionally adds one project per repository to integration_config.json (a .bak copy is kept).
+6. writes ``history_swebench.jsonl``: the other issues of the same repositories (same id filter),
+   public text only, as comparison history for duplicate detection. With ``--pick latest`` (default)
+   the new tickets are the most recent issues, so the history holds the earlier ones - the workspace
+   never compares a ticket with reports filed after it;
+7. optionally adds one project per repository to integration_config.json (a .bak copy is kept).
 """
 
 from __future__ import annotations
@@ -135,6 +139,12 @@ def main() -> None:
     parser.add_argument("--repos", default=",".join(DEFAULT_REPOS), help="要使用的 repository，逗號分隔（預設 psf/requests,pallets/flask，兩個都很小）")
     parser.add_argument("--limit-per-repo", type=int, default=0, help="每個 repository 最多幾張（0 = 全部）")
     parser.add_argument(
+        "--pick",
+        choices=("latest", "earliest"),
+        default="latest",
+        help="搭配 --limit-per-repo：新 Ticket 取每個 repository 最新（預設）或最早的幾題；其餘寫進 history_swebench.jsonl",
+    )
+    parser.add_argument(
         "--only-ids",
         type=Path,
         default=None,
@@ -156,14 +166,31 @@ def main() -> None:
     if not rows:
         raise SystemExit(f"{args.input} 裡沒有 {', '.join(wanted)} 的資料。")
     rows.sort(key=lambda row: (row["repo"], iso(row.get("created_at"))))
+    pool = rows
     if args.limit_per_repo > 0:
+        ordered = rows if args.pick == "earliest" else list(reversed(rows))
         kept: dict[str, int] = {}
         limited = []
-        for row in rows:
+        for row in ordered:
             if kept.get(row["repo"], 0) < args.limit_per_repo:
                 limited.append(row)
                 kept[row["repo"]] = kept.get(row["repo"], 0) + 1
-        rows = limited
+        rows = sorted(limited, key=lambda row: (row["repo"], iso(row.get("created_at"))))
+    chosen = {str(row["instance_id"]) for row in rows}
+    history = []
+    for row in pool:
+        if str(row["instance_id"]) in chosen:
+            continue
+        title, description = split_issue(row.get("problem_statement"))
+        history.append({
+            "ticket_id": row["instance_id"],
+            "project": row["repo"],
+            "title": title,
+            "description": description,
+            "created_at": iso(row.get("created_at")),
+            "product": row["repo"],
+            "source": "SWE-bench（歷史 issue）",
+        })
 
     clones, snapshots_root = args.work_dir / "clones", args.work_dir / "snapshots"
     tickets, answers = [], []
@@ -201,6 +228,7 @@ def main() -> None:
     out = args.output_dir
     out.mkdir(parents=True, exist_ok=True)
     (out / "new_tickets_swebench.jsonl").write_text("".join(json.dumps(t, ensure_ascii=False) + "\n" for t in tickets), encoding="utf-8")
+    (out / "history_swebench.jsonl").write_text("".join(json.dumps(h, ensure_ascii=False) + "\n" for h in history), encoding="utf-8")
     meta = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "source": str(args.input), "repos": wanted}
     (out / "answer_key_swebench.json").write_text(json.dumps({**meta, "answers": answers}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lines = [
@@ -217,7 +245,8 @@ def main() -> None:
         "## 解讀時要注意",
         "",
         "- 錯誤定位團隊在 SWE-bench 上調過方法，這批資料不是沒看過的測試集，結果只能當示範。",
-        "- 這些專案沒有重複標記和負責人歷史，重複偵測通常沒有候選，負責人會建議人工分派。",
+        "- `history_swebench.jsonl` 是同一個 repository 的其他 issue（只有標題、內文、時間），可以當重複偵測的比對歷史；SWE-bench 沒有重複標記，所以候選都應該判為「不是重複」。",
+        "- SWE-bench 沒有負責人資料，負責人推薦會建議人工分派。",
         "- PRI 優先級模型是用 Eclipse 訓練的，套在 GitHub issue 上屬於跨資料集推測。",
     ]
     (out / "answer_key_swebench.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -240,6 +269,7 @@ def main() -> None:
         print(f"已把 {', '.join(repo for repo in wanted if repo in projects)} 加進 {config_path}（原檔備份為 .bak）")
 
     print(f"新 Ticket：{out / 'new_tickets_swebench.jsonl'}（{len(tickets)} 張）")
+    print(f"比對歷史：{out / 'history_swebench.jsonl'}（{len(history)} 筆，匯入時勾選「這是歷史 Ticket」）")
     print(f"答案：{out / 'answer_key_swebench.md'}")
 
 
