@@ -56,7 +56,11 @@ class IntegratedPipeline:
         )
         self.localizer = localizer or ProjectLocalizer(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
+        # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
+        # localization) use different models, so the two phases may run at the same time on different
+        # tickets; each phase is still one-at-a-time. All record writes go through the store's lock.
         self._run_lock = threading.Lock()
+        self._after_lock = threading.Lock()
 
     # ------------------------------------------------------------------ import
     def import_raw(self, raws: list[dict[str, Any]], *, source: str, project: str = "") -> list[dict[str, Any]]:
@@ -88,7 +92,9 @@ class IntegratedPipeline:
             records.append(self.store.save(record))
         return records
 
-    def import_history(self, rows: list[dict[str, Any]]) -> int:
+    def import_history(self, rows: list[dict[str, Any]], *, project: str = "") -> int:
+        """Add rows to the comparison history. Rows without their own ``project`` get ``project``
+        so they are only compared with that project's tickets (an empty value keeps them shared)."""
         normalized = []
         for row in rows:
             ticket_id = raw_ticket_id(row)
@@ -97,6 +103,8 @@ class IntegratedPipeline:
             item = dict(row)
             item["ticket_id"] = ticket_id
             item.setdefault("title", raw_title(row))
+            if project and not str(item.get("project") or "").strip():
+                item["project"] = project
             normalized.append(item)
         return self.store.upsert_history(normalized)
 
@@ -250,7 +258,7 @@ class IntegratedPipeline:
 
     # ------------------------------------------------------ stage 3, 4 and 5
     def run_after_duplicate(self, key: str, *, priority_result: dict[str, Any] | None = None) -> dict[str, Any]:
-        with self._run_lock:
+        with self._after_lock:
             return self._run_after_duplicate(key, priority_result=priority_result)
 
     def _run_after_duplicate(self, key: str, *, priority_result: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -274,7 +282,7 @@ class IntegratedPipeline:
             stage = "localization"
             self._mark_running(key, stage)
             project = self.config.project(record.get("project"))
-            result, raw = self.localizer.localize(structured, project)
+            result, raw = self.localizer.localize(structured, project, project_name=str(record.get("project") or ""))
             if raw is not None:
                 self.store.write_artifact(key, "bug_location_raw.json", raw)
             assignee_output = (self.get(key)["stages"]["assignee"].get("output") or {})
@@ -304,7 +312,7 @@ class IntegratedPipeline:
             return self._fail(key, stage, exc)
 
     def rerun_localization(self, key: str, *, project: str | None = None) -> dict[str, Any]:
-        with self._run_lock:
+        with self._after_lock:
             record = self.get(key)
             if project is not None:
                 record = self.store.update(key, lambda rec: rec.update({"project": project}))
@@ -312,7 +320,9 @@ class IntegratedPipeline:
                 raise ValueError("Ticket 尚未完成 JSON 轉換。")
             try:
                 self._mark_running(key, "localization")
-                result, raw = self.localizer.localize(record["structured_ticket"], self.config.project(record.get("project")))
+                result, raw = self.localizer.localize(
+                    record["structured_ticket"], self.config.project(record.get("project")), project_name=str(record.get("project") or "")
+                )
                 if raw is not None:
                     self.store.write_artifact(key, "bug_location_raw.json", raw)
 
@@ -340,6 +350,40 @@ class IntegratedPipeline:
                 return row
         return None
 
+    # ------------------------------------------------------------ deleting
+    def delete_ticket(self, key: str) -> dict[str, Any]:
+        """Delete a ticket, its result files, and the history row the workspace added for it when it was
+        processed. History rows imported as historical tickets are left alone."""
+
+        record = self.store.get(key)
+        if record is None:
+            raise KeyError(key)
+        ticket_id = str(record.get("ticket_id") or key)
+        removed = self.store.remove_history(
+            lambda row: str(row.get("ticket_id")) == ticket_id and row.get("source") == "integrated_workspace"
+        )
+        self.store.delete(key)
+        return {"deleted": key, "history_rows_removed": removed}
+
+    def project_usage(self, project: str) -> dict[str, Any]:
+        """What deleting a project would remove (``project`` "" means tickets without a project)."""
+
+        tickets = [record for record in self.store.list() if str(record.get("project") or "") == project]
+        history = [row for row in self.store.history_rows() if project and str(row.get("project") or "") == project]
+        return {"project": project, "tickets": len(tickets), "ticket_keys": [record["key"] for record in tickets], "history_rows": len(history)}
+
+    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True) -> dict[str, Any]:
+        removed_tickets = []
+        if tickets:
+            for record in self.store.list():
+                if str(record.get("project") or "") == project:
+                    self.store.delete(record["key"])
+                    removed_tickets.append(record["key"])
+        removed_history = 0
+        if history and project:
+            removed_history = self.store.remove_history(lambda row: str(row.get("project") or "") == project)
+        return {"tickets_removed": removed_tickets, "history_rows_removed": removed_history}
+
     def mark_candidate(self, key: str, candidate_id: str, mark: str, *, note: str = "") -> dict[str, Any]:
         """Engineer's review note on one duplicate candidate: possible / not / cleared."""
 
@@ -358,6 +402,15 @@ class IntegratedPipeline:
             else:
                 marks.pop(candidate_id, None)
             self._event(rec, f"候選 {candidate_id}：{labels[mark]}" + (f"（{note.strip()}）" if note.strip() else ""))
+
+        return self.store.update(key, mutate)
+
+    def set_pinned(self, key: str, pinned: bool) -> dict[str, Any]:
+        """Pin a ticket to the top of the workspace home page (display only; does not touch any stage)."""
+
+        def mutate(rec: dict[str, Any]) -> None:
+            rec["pinned"] = bool(pinned)
+            rec["pinned_at"] = utc_now() if pinned else ""
 
         return self.store.update(key, mutate)
 
@@ -403,6 +456,23 @@ class IntegratedPipeline:
         return updated
 
     # --------------------------------------------------------------- batch/CLI
+    def predict_priority_batch(self, keys: list[str]) -> dict[str, dict[str, Any]]:
+        """One PRI call for every ticket that is ready to continue (build_features re-reads the whole
+        history once per call, so a batch costs about the same as a single ticket)."""
+
+        records = [self.get(key) for key in keys]
+        ready = [record for record in records if record["status"] == "ready_to_continue"]
+        if not ready:
+            return {}
+        tickets = [record["structured_ticket"] for record in ready]
+        candidates = [(record["stages"].get("duplicate", {}).get("output") or {}).get("top_k_candidates", []) for record in ready]
+        with self._after_lock:
+            results = self.priority_predictor.predict_many(tickets, candidates)
+        if len(ready) > 1:
+            for result in results:
+                result.setdefault("details", {})["batch_size"] = len(ready)
+        return {record["key"]: result for record, result in zip(ready, results)}
+
     def process_batch(
         self,
         keys: list[str],
@@ -429,7 +499,7 @@ class IntegratedPipeline:
             candidates = [
                 (record["stages"].get("duplicate", {}).get("output") or {}).get("top_k_candidates", []) for record in continuing
             ]
-            with self._run_lock:
+            with self._after_lock:
                 results = self.priority_predictor.predict_many(tickets, candidates)
             priority_results = {record["key"]: result for record, result in zip(continuing, results)}
 
@@ -447,6 +517,7 @@ def _history_row(structured: dict[str, Any], record: dict[str, Any] | None = Non
         key: structured.get(key)
         for key in (
             "ticket_id",
+            "project",
             "title",
             "description",
             "product",

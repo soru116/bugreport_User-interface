@@ -17,6 +17,7 @@ import mimetypes
 import os
 import sys
 import threading
+import time
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -40,14 +41,20 @@ MAX_BODY_BYTES = 20_000_000
 ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json"}
 
 
+def _coarse(seconds: float) -> int:
+    """ETAs in 30-second steps, so the page only re-renders when the estimate really moves."""
+
+    return int(max(30, round(seconds / 30) * 30))
+
+
 class WorkspaceApp:
     def __init__(self, config: IntegrationConfig) -> None:
         self.config = config
         self.pipeline = IntegratedPipeline(config)
-        self._jobs: dict[str, threading.Thread] = {}
-        self._jobs_lock = threading.Lock()
         self._index_jobs: dict[str, dict[str, Any]] = {}
         self._config_mtime = self._read_config_mtime()
+        self._start_worker()
+        self._resume_interrupted()
 
     # ------------------------------------------------------- config reload
     def _read_config_mtime(self) -> float | None:
@@ -63,59 +70,252 @@ class WorkspaceApp:
         mtime = self._read_config_mtime()
         if mtime is None or mtime == self._config_mtime:
             return
-        with self._jobs_lock:
-            if any(job.is_alive() for job in self._jobs.values()):
-                return
-            try:
-                config = load_integration_config(self.config.config_path)
-            except Exception as exc:  # keep the running config when the edited file is invalid
-                print(f"設定檔有錯誤，暫不套用：{exc}")
-                self._config_mtime = mtime
-                return
-            self.config = config
-            self.pipeline = IntegratedPipeline(config)
+        if not self.idle():
+            return
+        try:
+            config = load_integration_config(self.config.config_path)
+        except Exception as exc:  # keep the running config when the edited file is invalid
+            print(f"設定檔有錯誤，暫不套用：{exc}")
             self._config_mtime = mtime
-            print("偵測到設定檔變更，已重新載入。")
+            return
+        self.config = config
+        self.pipeline = IntegratedPipeline(config)
+        self._config_mtime = mtime
+        print("偵測到設定檔變更，已重新載入。")
 
     # ----------------------------------------------------------- background
-    def _submit(self, key: str, target, *args, **kwargs) -> bool:
-        with self._jobs_lock:
-            job = self._jobs.get(key)
-            if job is not None and job.is_alive():
+    # A FIFO queue served by two workers:
+    #   * the review worker runs conversion + duplicate detection, one ticket at a time, so engineers
+    #     can start the duplicate review while other tickets are still waiting;
+    #   * the after worker runs priority, assignee and localization. Every ticket that is ready at that
+    #     moment gets its priority from ONE PRI call, because build_features re-reads the whole history
+    #     on each call and a batch costs about the same as a single ticket.
+    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0}
+    BATCH_WAIT_SECONDS = 90.0  # how long a ready ticket may wait for others still in duplicate detection
+
+    def _start_worker(self) -> None:
+        self._queue: list[dict[str, Any]] = []
+        self._cv = threading.Condition()
+        self._avg = dict(self.DEFAULT_SECONDS)
+        threading.Thread(target=self._worker, args=("review",), name="review-worker", daemon=True).start()
+        threading.Thread(target=self._worker, args=("after",), name="after-worker", daemon=True).start()
+
+    def _submit(self, key: str, kind: str, **kwargs: Any) -> bool:
+        with self._cv:
+            if any(job["key"] == key for job in self._queue):
                 return False
-
-            def run() -> None:
-                try:
-                    target(*args, **kwargs)
-                except Exception:  # errors are recorded on the ticket by the pipeline
-                    traceback.print_exc()
-
-            thread = threading.Thread(target=run, name=f"ticket-{key}", daemon=True)
-            self._jobs[key] = thread
-            thread.start()
+            now = time.time()
+            self._queue.append({"key": key, "kind": kind, "phase": "waiting", "active": False, "started_at": 0.0, "enqueued_at": now, "ready_at": now, **kwargs})
+            self._cv.notify_all()
             return True
 
     def busy(self, key: str) -> bool:
-        with self._jobs_lock:
-            job = self._jobs.get(key)
-            return bool(job and job.is_alive())
+        with self._cv:
+            return any(job["key"] == key for job in self._queue)
 
-    def _run_full(self, key: str) -> None:
-        record = self.pipeline.run_until_review(key)
-        if record["status"] == "ready_to_continue":
-            self.pipeline.run_after_duplicate(key)
+    def idle(self) -> bool:
+        with self._cv:
+            return not self._queue
+
+    def _record(self, phase: str, seconds: float) -> None:
+        with self._cv:
+            self._avg[phase] = round(0.5 * self._avg[phase] + 0.5 * seconds, 2)
+
+    def _take(self, lane: str) -> tuple[str, list[dict[str, Any]]] | None:
+        """Next unit of work for a worker (called with the condition held)."""
+
+        waiting = [job for job in self._queue if not job["active"]]
+        if lane == "review":
+            jobs = [job for job in waiting if job["kind"] == "full"]
+            return ("review", jobs[:1]) if jobs else None
+        jobs = [job for job in waiting if job["kind"] in ("after", "localize")]
+        if not jobs:
+            return None
+        if jobs[0]["kind"] == "after":
+            ready = [job for job in jobs if job["kind"] == "after"]
+            reviewing = any(job["kind"] == "full" for job in self._queue)
+            if reviewing and time.time() - min(job["ready_at"] for job in ready) < self.BATCH_WAIT_SECONDS:
+                return None  # tickets of the same import are still in duplicate detection: batch them together
+            return "priority_batch", ready
+        return "localize", jobs[:1]
+
+    def _finish(self, job: dict[str, Any]) -> None:
+        with self._cv:
+            self._queue = [item for item in self._queue if item is not job]
+            self._cv.notify_all()
+
+    def _worker(self, lane: str) -> None:
+        while True:
+            with self._cv:
+                picked = self._take(lane)
+                while picked is None:
+                    self._cv.wait(timeout=5)  # re-check the batch window even without a notification
+                    picked = self._take(lane)
+                phase, batch = picked
+                now = time.time()
+                for job in batch:
+                    job.update(active=True, phase=phase, started_at=now, batch_size=len(batch))
+            pipeline = self.pipeline
+            try:
+                if phase == "review":
+                    job = batch[0]
+                    record = pipeline.run_until_review(job["key"])
+                    self._record("review", time.time() - job["started_at"])
+                    if record["status"] == "ready_to_continue":
+                        with self._cv:  # hand over to the after worker, keeping its place in the queue
+                            job.update(kind="after", active=False, phase="waiting", ready_at=time.time())
+                            self._cv.notify_all()
+                    else:
+                        self._finish(job)
+                elif phase == "priority_batch":
+                    try:
+                        results = pipeline.predict_priority_batch([job["key"] for job in batch])
+                    except Exception:  # fall back to one prediction per ticket
+                        traceback.print_exc()
+                        results = {}
+                    self._record("priority_batch", time.time() - batch[0]["started_at"])
+                    for job in batch:
+                        with self._cv:
+                            job.update(phase="after", started_at=time.time())
+                        try:
+                            if pipeline.get(job["key"])["status"] == "ready_to_continue":
+                                pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
+                        except Exception:
+                            traceback.print_exc()
+                        self._record("after", time.time() - job["started_at"])
+                        self._finish(job)
+                else:
+                    job = batch[0]
+                    pipeline.rerun_localization(job["key"], project=job.get("project"))
+                    self._record("localize", time.time() - job["started_at"])
+                    self._finish(job)
+            except Exception:  # errors are recorded on the ticket by the pipeline
+                traceback.print_exc()
+                for job in batch:
+                    self._finish(job)
+
+    def _resume_interrupted(self) -> None:
+        """Tickets left half-way when the server stopped go back into the queue."""
+
+        resumed = []
+        for record in self.pipeline.store.list():
+            key, status = record["key"], record.get("status")
+            decision = (record.get("decisions") or {}).get("duplicate") or {}
+            if status == "running" and decision.get("decision") == "not_duplicate":
+                def reset(rec: dict[str, Any]) -> None:
+                    rec["status"], rec["current_stage"] = "ready_to_continue", ""
+                    rec.setdefault("events", []).append({"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "message": "伺服器重新啟動，繼續處理優先級之後的步驟"})
+                self.pipeline.store.update(key, reset)
+                status = "ready_to_continue"
+            if status == "ready_to_continue":
+                self._submit(key, "after")
+                resumed.append(key)
+            elif status == "running":
+                self._submit(key, "full")
+                resumed.append(key)
+        if resumed:
+            print(f"繼續處理上次未完成的 Ticket：{', '.join(resumed)}")
+
+    def queue_info(self, key: str) -> dict[str, Any] | None:
+        """Where a ticket stands in its worker's queue and a rough ETA from recent run times."""
+
+        with self._cv:
+            now = time.time()
+            job = next((item for item in self._queue if item["key"] == key), None)
+            if job is None:
+                return None
+            avg = self._avg
+
+            def remaining(item: dict[str, Any]) -> float:
+                return max(5.0, avg.get(item["phase"], 10.0) - (now - item["started_at"]))
+
+            if job["active"]:
+                return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1), "eta_seconds": _coarse(remaining(job))}
+            if job["kind"] == "full":
+                running = [item for item in self._queue if item["active"] and item["phase"] == "review"]
+                waiting = [item for item in self._queue if item["kind"] == "full" and not item["active"]]
+                index = waiting.index(job)
+                eta = sum(remaining(item) for item in running) + (index + 1) * avg["review"]
+                return {"state": "waiting", "phase": "review", "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
+            running = [item for item in self._queue if item["active"] and item["phase"] in ("priority_batch", "after", "localize")]
+            waiting = [item for item in self._queue if item["kind"] in ("after", "localize") and not item["active"]]
+            index = waiting.index(job)
+            busy_for = max((remaining(item) for item in running), default=0.0)
+            if running and running[0]["phase"] == "priority_batch":
+                busy_for += len(running) * avg["after"]
+            if job["kind"] == "after":
+                batch = [item for item in waiting if item["kind"] == "after"]
+                reviews = [item for item in self._queue if item["kind"] == "full"]
+                if reviews and not running:  # the batch starts once these finish duplicate detection
+                    window = max(0.0, self.BATCH_WAIT_SECONDS - (now - min(item["ready_at"] for item in batch)))
+                    busy_for = min(window, len(reviews) * avg["review"])
+                eta = busy_for + avg["priority_batch"] + (batch.index(job) + 1) * avg["after"]
+                return {"state": "waiting", "phase": "priority_batch", "ahead": len(running), "batch_size": len(batch), "eta_seconds": _coarse(eta)}
+            eta = busy_for + (index + 1) * avg["localize"]
+            return {"state": "waiting", "phase": "localize", "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
+
+    def queue_summary(self) -> dict[str, Any]:
+        with self._cv:
+            running = [job for job in self._queue if job["active"]]
+            phases = sorted({job["phase"] for job in running})
+            return {
+                "running": [job["key"] for job in running],
+                "phase": phases[0] if len(phases) == 1 else ",".join(phases),
+                "priority_batch": len([job for job in running if job["phase"] in ("priority_batch", "after")]),
+                "waiting": len(self._queue) - len(running),
+                "average_seconds": dict(self._avg),
+            }
+
+    # ------------------------------------------------------------ deleting
+    NO_PROJECT = "__none__"
+
+    def project_usage(self, name: str) -> dict[str, Any]:
+        project = "" if name == self.NO_PROJECT else name
+        usage = self.pipeline.project_usage(project)
+        usage["busy"] = [key for key in usage.pop("ticket_keys") if self.busy(key)]
+        usage["configured"] = bool(project) and project in self.config.projects
+        usage["config_path"] = str(self.config.config_path or "")
+        return usage
+
+    def delete_project(self, name: str, *, tickets: bool, history: bool, config: bool) -> dict[str, Any]:
+        project = "" if name == self.NO_PROJECT else name
+        usage = self.project_usage(name)
+        if usage["busy"]:
+            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。")
+        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history)
+        result["config_removed"] = self.remove_project_from_config(project) if config and project else False
+        return result
+
+    def remove_project_from_config(self, project: str) -> bool:
+        """Drop one entry from integration_config.json (a .bak copy is written first). The repository
+        and any snapshots on disk are not touched."""
+
+        path = self.config.config_path
+        if not path or not Path(path).is_file():
+            raise ValueError("沒有使用設定檔啟動，無法從設定檔移除專案。")
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        projects = data.get("projects") or {}
+        if project not in projects:
+            return False
+        Path(str(path) + ".bak").write_text(Path(path).read_text(encoding="utf-8"), encoding="utf-8")
+        del projects[project]
+        if data.get("default_project") == project:
+            data["default_project"] = next(iter(projects), "")
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        self.maybe_reload_config()
+        return True
 
     def start(self, key: str) -> bool:
         self.maybe_reload_config()
-        return self._submit(key, self._run_full, key)
+        return self._submit(key, "full")
 
     def continue_after_duplicate(self, key: str) -> bool:
         self.maybe_reload_config()
-        return self._submit(key, self.pipeline.run_after_duplicate, key)
+        return self._submit(key, "after")
 
     def relocalize(self, key: str, project: str | None) -> bool:
         self.maybe_reload_config()
-        return self._submit(key, self.pipeline.rerun_localization, key, project=project)
+        return self._submit(key, "localize", project=project)
 
     def build_index(self, project_name: str) -> dict[str, Any]:
         project = self.config.project(project_name)
@@ -140,7 +340,28 @@ class WorkspaceApp:
     def ticket_summary(self, record: dict[str, Any]) -> dict[str, Any]:
         stages = record.get("stages", {})
         priority = (stages.get("priority", {}).get("output") or {}).get("predicted_priority")
+        structured = record.get("structured_ticket") or {}
+        raw = record.get("raw") or {}
+        decisions = record.get("decisions") or {}
+        assignee = (decisions.get("assignee") or {}).get("assignee") or (stages.get("assignee", {}).get("output") or {}).get("suggested_assignee")
+        description = structured.get("description") or raw.get("description") or raw.get("body") or ""
+
+        def known(*values: Any) -> str:
+            for value in values:
+                text = str(value or "").strip()
+                if text and text.lower() not in {"unknown", "none", "n/a", "--"}:
+                    return text
+            return ""
+
         return {
+            "pinned": bool(record.get("pinned")),
+            "pinned_at": record.get("pinned_at") or "",
+            "product": known(structured.get("product"), raw.get("product")),
+            "component": known(structured.get("component"), raw.get("component")),
+            "assignee": assignee or "",
+            "assignee_confirmed": bool(decisions.get("assignee")),
+            "duplicate_of": (decisions.get("duplicate") or {}).get("duplicate_of") or "",
+            "snippet": " ".join(known(description).split())[:160],
             "key": record["key"],
             "ticket_id": record.get("ticket_id"),
             "title": record.get("title"),
@@ -153,11 +374,13 @@ class WorkspaceApp:
             "created_at": record.get("created_at"),
             "updated_at": record.get("updated_at"),
             "busy": self.busy(record["key"]),
+            "queue": self.queue_info(record["key"]),
         }
 
     def ticket_detail(self, key: str) -> dict[str, Any]:
         record = self.pipeline.get(key)
         record["busy"] = self.busy(key)
+        record["queue"] = self.queue_info(key)
         return record
 
     def projects(self) -> list[dict[str, Any]]:
@@ -230,7 +453,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._file(target)
             if parts[1:] == ["tickets"]:
                 records = self.app.pipeline.store.list()
-                return self._json({"tickets": [self.app.ticket_summary(record) for record in records]})
+                return self._json({"tickets": [self.app.ticket_summary(record) for record in records], "queue": self.app.queue_summary()})
             if len(parts) == 3 and parts[1] == "tickets":
                 return self._json(self.app.ticket_detail(parts[2]))
             if len(parts) == 5 and parts[1] == "tickets" and parts[3] == "artifact":
@@ -254,7 +477,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.app.maybe_reload_config()
                 return self._json(readiness_report(self.app.config, store_history_path=self.app.pipeline.store.history_path))
             if parts[1:] == ["projects"]:
+                self.app.maybe_reload_config()  # new projects in the config show up as folders without a restart
                 return self._json({"projects": self.app.projects(), "default_project": self.app.config.default_project})
+            if len(parts) == 4 and parts[1] == "projects" and parts[3] == "usage":
+                return self._json(self.app.project_usage(parts[2]))
             if len(parts) == 3 and parts[1] == "history":
                 row = self.app.pipeline.find_history_ticket(parts[2])
                 if row is None:
@@ -282,15 +508,34 @@ class Handler(SimpleHTTPRequestHandler):
                 if not records:
                     return self._error("沒有讀到任何 Ticket，請確認檔案內容。")
                 if body.get("as_history"):
-                    total = app.pipeline.import_history(records)
+                    total = app.pipeline.import_history(records, project=str(body.get("project") or ""))
                     return self._json({"history_imported": len(records), "history_total": total})
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):
                     for record in created:
                         app.start(record["key"])
                 return self._json({"created": [record["key"] for record in created]})
+            if parts == ["api", "delete-tickets"]:
+                deleted, skipped = [], []
+                for key in [str(item) for item in body.get("keys") or []]:
+                    if app.busy(key):
+                        skipped.append(key)
+                        continue
+                    try:
+                        app.pipeline.delete_ticket(key)
+                        deleted.append(key)
+                    except KeyError:
+                        skipped.append(key)
+                return self._json({"deleted": deleted, "skipped": skipped})
+            if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "delete":
+                return self._json(app.delete_project(
+                    parts[2], tickets=bool(body.get("tickets", True)), history=bool(body.get("history", False)), config=bool(body.get("config", False))
+                ))
             if len(parts) == 4 and parts[:2] == ["api", "tickets"]:
                 key, action = parts[2], parts[3]
+                if action == "pin":  # display-only, allowed while the ticket is being processed
+                    record = app.pipeline.set_pinned(key, bool(body.get("pinned", True)))
+                    return self._json({"pinned": record["pinned"]})
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":
@@ -344,8 +589,10 @@ class Handler(SimpleHTTPRequestHandler):
         if len(parts) == 3 and parts[:2] == ["api", "tickets"]:
             if self.app.busy(parts[2]):
                 return self._error("這張 Ticket 正在處理中，請稍候。", 409)
-            self.app.pipeline.store.delete(parts[2])
-            return self._json({"deleted": parts[2]})
+            try:
+                return self._json(self.app.pipeline.delete_ticket(parts[2]))
+            except KeyError:
+                return self._error("找不到這張 Ticket。", 404)
         return self._error("Not found", 404)
 
 

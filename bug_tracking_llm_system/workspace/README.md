@@ -25,6 +25,17 @@
 - 重複偵測依 DUP README 的建議採「半自動」：預設 Top-k 候選一律交給工程師確認。若要自動判定，在設定檔填 `duplicate.auto_duplicate_threshold` 或 `review_threshold`（分數是 SBERT／TF-IDF 的原始相似度）。
 - 負責人確認不會擋住錯誤定位，這和主系統 orchestrator 的行為一致。確認結果會用主系統的 `build_assignee_feedback_record` 寫進 `data/workspace/feedback/assignee_feedback.jsonl`。
 - 處理完的 Ticket 會加入工作台歷史資料（`data/workspace/history/workspace_history.jsonl`），之後匯入的 Ticket 可以和它比對重複。
+- 重複偵測只比對同一個專案、而且建立時間比這張 Ticket 早的歷史資料（真實系統裡，歷史一定比新回報早）；略過了幾張會寫在重複偵測的說明裡。
+- SBERT 會把歷史資料的向量存在 `data/workspace/cache/sbert/`，每份歷史只需要編碼一次，之後每張 Ticket 只算自己。換了 SBERT 模型會自動另存一份，不會混用。
+
+### 處理順序與排隊
+
+伺服器用兩條工作線依序處理：
+
+1. 「轉換 JSON＋重複偵測」一次一張，所以一批 Ticket 匯入後很快就可以開始確認重複。
+2. 「優先級＋負責人＋錯誤定位」：準備好的 Ticket 會**一起**計算優先級（PRI 每次都要重算整份歷史的特徵，一次算 6 張和算 1 張的時間差不多）。同一批匯入的 Ticket 還在做重複偵測時，最多會等 90 秒再一起算。
+
+卡片和 Ticket 頁面會顯示「排隊中，前面還有幾張，預計約幾分鐘」，畫面左下角會顯示目前處理中和排隊的數量。預估時間是依最近實際花的時間計算。伺服器關掉時還沒處理完的 Ticket，下次啟動會自動接著處理。
 
 ## 安裝
 
@@ -63,7 +74,7 @@ cp integration_config.example.json integration_config.json
 把各自電腦上的模型與資料路徑填進去，相對路徑以 `bug_tracking_llm_system/` 為基準：
 
 - `duplicate.sbert_model_dir`：SBERT 微調模型資料夾
-- `historical_tickets_paths`：重複偵測用的歷史 Ticket（CSV／JSONL，欄位名稱同 DUP 的 `load_tickets`）
+- `historical_tickets_paths`：額外的重複偵測歷史檔（CSV／JSONL，欄位名稱同 DUP 的 `load_tickets`）。檔案裡沒有 `project` 的列會和**所有專案**比對，所以範例設定預設是空的；歷史資料建議改用工作台「匯入 Ticket → 這是歷史 Ticket」匯入並選好專案。
 - `priority.model_path`、`priority.reference_feature_dir`、`priority.history_csv`
 - `assignee.assignee_dataset_path`：負責人歷史資料
 - `projects.<名稱>.repo_path`：要做錯誤定位的 Repository；建議同時設定 `code_index_path`，在狀態頁預先建立索引
@@ -84,15 +95,117 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 1. 右上「模型與資料狀態」：檢查每一步會用到的程式和產物在這台電腦上找不找得到，也可以建立 Repository 的程式碼索引。
 2. 「匯入 Ticket」：
-   - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。
+   - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。下拉選單選這批歷史屬於哪個專案，它們就只會和那個專案的新 Ticket 比對；檔案裡已經寫好 `project` 的列照檔案。選「不指定」的歷史會和所有專案比對。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
    - 也可以手動填寫一張。
-3. 左側清單的「等你確認」會列出需要判斷是否重複或確認負責人的 Ticket。
-4. 點進一張 Ticket 後，上方的進度列會一直固定在畫面上，顯示五個步驟各自的狀態。每個步驟是一個分頁：點進度列上的步驟就能切換，也可以用鍵盤左右鍵。畫面會自動停在需要你處理的那一步；你自己點過分頁後，就不會再自動跳走。
-5. 每個步驟的分頁底部都會寫出使用的模組、程式路徑、耗時；用了備援時也會寫出原因。
+3. 首頁依專案分成資料夾。專案就是設定檔 `projects` 裡的 Repository，匯入 Ticket 時選的專案決定它放在哪個資料夾，也決定錯誤定位要在哪個程式碼庫裡找。匯入時沒選專案的 Ticket 放在「未指定專案」資料夾。如果檔案裡的每一筆已經帶 `project`（例如 `new_tickets_*.jsonl`），匯入視窗會改成列出檔案裡的專案，不再顯示專案選單。
+   - 資料夾上會顯示 Ticket 數、等你確認和處理中的數量；露出來的紙張顏色是最近幾張 Ticket 的狀態。
+   - 點開資料夾才看到一張張 Ticket 卡片：上方是「釘選的 Ticket」區，其餘放在下方。點卡片右上角的圖釘可以釘選；釘選狀態存在伺服器的 Ticket 紀錄裡，重開伺服器、重新執行流程都會保留。
+   - 卡片封面的顏色代表狀態：橘色是等你確認，紫色是處理中，綠色是已完成，紅色是失敗。左下五顆小圓點是五個步驟的進度，右下圓形貼紙是優先級。
+   - 資料夾裡的「匯入到這個專案」會預先選好這個專案。
+   - 最上方的搜尋欄可以找 Ticket 編號、標題、專案、產品、元件、負責人或優先級；輸入多個字詞時要全部符合。在首頁搜尋會找全部專案，在資料夾裡搜尋只找這個專案。按 `/` 可以直接開始輸入，按 Enter 會開啟第一張結果，按 Esc 清除。
+   - 搜尋欄下方的「等你確認」等標籤，會篩出需要判斷是否重複或確認負責人的 Ticket。
+   - 要新增專案資料夾，在設定檔的 `projects` 加一個 Repository 即可，不用重開伺服器。
+4. 點一張卡片會進入 Ticket 頁面，左上角的返回鍵回到它所在的專案資料夾，也可以用瀏覽器的上一頁；每個資料夾和每張 Ticket 都有自己的網址（`#/p/<專案>`、`#/t/<編號>`）。標題列上的「‹ 3 / 6 ›」可以直接切換到同一個專案的上一張或下一張 Ticket，鍵盤是 `[`、`]`；順序和你剛才在資料夾裡看到的一樣，從「等你確認」篩選點進來時，就只在那幾張之間切換。進入後，上方的進度列會一直固定在畫面上，顯示五個步驟各自的狀態。每個步驟是一個分頁：點進度列上的步驟就能切換，也可以用鍵盤左右鍵。畫面會自動停在需要你處理的那一步；你自己點過分頁後，就不會再自動跳走。
+5. 每個步驟的分頁底部都會寫出使用的模組、程式路徑、耗時；用了備援時也會寫出原因。優先級分頁的每個因子都可以把滑鼠移上去看簡短說明，點一下開啟詳細解釋。
 6. 右上「更多」裡可以下載完整結果 JSON、從頭重新執行或刪除 Ticket。
 
 範例資料是**示範用的虛構 Ticket**，內容描述 `bug-duplicate-detection` 原始碼中可能出現的錯誤，搭配設定檔中的 `duplicate-detection` 專案示範錯誤定位。它們不是評估資料，不能拿來算準確率。
+
+## 用組內的真實資料示範
+
+`scripts/build_real_dataset_demo.py` 會把子專案用過的真實 Bugzilla 資料，轉成工作台可以匯入的檔案。它只讀資料，不會改動原本的資料集：
+
+| 專案資料夾 | 來源 | 歷史資料 | 新 Ticket |
+|---|---|---|---|
+| Mozilla Firefox | `bug-duplicate-detection/data/mozilla_firefox_*.csv` | 約 1,760 筆，含重複標記與負責人 | 4 張真的是重複、2 張不是 |
+| Eclipse | `bug-priority-drone/data/raw/eclipse_bugzilla_raw_with_dupe.csv` | 隨機 1,500 筆（含正確答案） | PRI `natural_test` 中 P1–P5 各 1 張，加 1 張重複 |
+
+```bash
+python3 scripts/build_real_dataset_demo.py          # 自動尋找兩個子專案的 data 資料夾
+```
+
+輸出在 `data/real_datasets/`（不會上傳 GitHub）：
+
+1. 先用「匯入 Ticket」勾選「這是歷史 Ticket」匯入 `history.jsonl`。
+2. 再匯入 `new_tickets_firefox.jsonl`、`new_tickets_eclipse.jsonl`。每一筆都帶 `project`，會自動放進對應的專案資料夾。新 Ticket 已移除重複對象、優先級、負責人和處理結果。
+3. 處理完後對照 `answer_key.md`，裡面是被移除的真正答案。
+
+要注意：
+
+- 每張 Ticket 都要用 SBERT 比對約 1,500–1,800 筆歷史，再用 PRI 重算整份 Eclipse 歷史的特徵，一張大約需要 2–3 分鐘，Ticket 會一張一張依序處理。
+- 這兩個專案沒有 Repository，所以錯誤定位會顯示「略過」。
+- SBERT 是用 Firefox 重複資料訓練的，Firefox 的重複偵測結果會偏好看；PRI 只用 Eclipse 訓練，Firefox 的優先級是跨資料集推測。這是示範，不能拿來算準確率。
+- Eclipse 資料沒有負責人欄位，Eclipse Ticket 會建議人工分派。
+
+重複偵測和負責人推薦只會使用同一個專案（以及沒有標專案）的歷史資料，所以 Firefox 和 Eclipse 不會互相比對。優先級計算時，如果新 Ticket 本身就在 PRI 的歷史 CSV 裡，會先把那一筆排除，避免模型讀到自己的答案。
+
+### SWE-bench：錯誤定位也用真實資料
+
+錯誤定位是在 SWE-bench 上開發和評估的。SWE-bench 的每一題都是真實的 GitHub issue，而且記錄了 issue 當時程式碼的版本（`base_commit`），所以五個步驟都能用真實資料跑。
+
+如果錯誤定位組員的資料夾已經下載過完整的 SWE-bench（`fault-localization-feature-files/data/fault_localization/swebench_full/raw/test-00000-of-00001.parquet`），可以直接用它，並加上 `--only-ids .../swebench_full/protocol_v1/development_tickets.jsonl` 只取開發集，避開保留測試集：
+
+```bash
+python3 scripts/build_swebench_demo.py --input <swebench_full>/raw/test-00000-of-00001.parquet \
+  --only-ids <swebench_full>/protocol_v1/development_tickets.jsonl --limit-per-repo 6 --config integration_config.json
+```
+
+沒有的話：
+
+1. 用瀏覽器下載 SWE-bench Lite：<https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite/resolve/main/data/test-00000-of-00001.parquet>，放到 `data/real_datasets/`。
+2. 執行（需要 git 和網路；預設只取兩個小專案 `psf/requests`、`pallets/flask`，共 9 題）：
+
+   ```bash
+   pip install pyarrow
+   python3 scripts/build_swebench_demo.py --input data/real_datasets/test-00000-of-00001.parquet --config integration_config.json
+   ```
+
+   它會 clone 這兩個 repository，把每一題需要的版本匯出成 `data/swebench/snapshots/<repo>/<commit>/`，並把兩個專案加進設定檔（原檔備份為 `.bak`）。
+3. 匯入 `data/real_datasets/new_tickets_swebench.jsonl`。每張 Ticket 會在**自己那個版本**的程式碼裡做錯誤定位；第一次用到某個版本時會先建立程式碼索引，之後重用。
+4. 對照 `answer_key_swebench.md`：裡面是真正的修補改了哪些檔案。新 Ticket 只有 issue 本文，沒有 patch、測試或提示。
+
+同時會產生 `history_swebench.jsonl`：同一個 repository、同一份 id 清單裡**沒被選成新 Ticket 的其他 issue**（只有標題、內文、時間）。先用「這是歷史 Ticket」匯入它，重複偵測就有真實的比對對象。搭配 `--limit-per-repo` 時，預設 `--pick latest` 會把每個 repository 最新的幾題當新 Ticket、較早的當歷史，因為工作台不會拿比新 Ticket 晚的報告來比對。SWE-bench 沒有重複標記和負責人，所以候選都應該判為「不是重複」，負責人會建議人工分派。
+
+注意：錯誤定位團隊在 SWE-bench 上調過方法，這不是沒看過的測試資料；這些專案沒有重複標記和負責人歷史；PRI 是用 Eclipse 訓練的。這是示範，不是評估。
+
+## 錯誤定位用哪份程式碼
+
+錯誤定位一定要在程式碼裡找，所以每張 Ticket 用的是**它所屬專案的程式碼**（設定檔 `projects` 裡的 `repo_path`；SWE-bench 專案會用 Ticket 自己 `base_commit` 的版本）。
+
+| 情況 | 第 5 步會怎樣 | 你可以做什麼 |
+|---|---|---|
+| 專案有設定程式碼 | 自動定位 | 「重新定位」：用同一份程式碼再跑一次（例如程式碼更新後） |
+| 專案沒有設定程式碼（例如 Mozilla Firefox、Eclipse） | 略過，並寫出原因 | 在設定檔 `projects` 加入這個專案的 `repo_path`，再按「執行錯誤定位」 |
+| 匯入時選錯專案 | 用錯的程式碼定位，結果沒有參考價值 | 展開「改用其他專案的程式碼定位…」，選正確的專案並確認 |
+
+規則：
+
+1. 只有在 Ticket **真的屬於**那個專案時，才改用那個專案的程式碼。拿不相關的程式碼也會排出檔案，但那些結果沒有意義。
+2. 改用其他專案會把 Ticket **移到那個專案的資料夾**，畫面會先跳出確認。
+3. 新增專案：在 `integration_config.json` 的 `projects` 加上：
+
+   ```json
+   "my-project": { "repo_path": "C:/path/to/repo", "description": "說明文字" }
+   ```
+
+   存檔後重新整理頁面，首頁就會多一個資料夾，不用重開伺服器。大型專案建議同時設定 `code_index_path`，並在「模型與資料狀態」裡先建立索引。
+
+## 刪除 Ticket 或專案
+
+| 要刪什麼 | 怎麼做 |
+|---|---|
+| 一張 Ticket | 打開 Ticket →「更多」→「刪除」 |
+| 好幾張 Ticket | 在首頁或專案資料夾按「選取」→ 點要刪的卡片 → 下方「刪除」（同一條工具列的「重新執行」可以把選取的 Ticket 一起從頭再跑一次） |
+| 整個專案 | 打開專案資料夾 → 右上「刪除專案」→ 勾選要刪的內容 |
+
+規則：
+
+1. 刪除 Ticket 會一起刪掉它的處理結果。它在確認負責人時寫進比對歷史的那筆也會移除；匯入的歷史資料（例如 Firefox、Eclipse）不受影響。
+2. 刪除專案可以分開勾選：這個專案的 Ticket、這個專案的比對歷史、設定檔裡的專案。從設定檔移除前會先備份成 `integration_config.json.bak`。
+3. 程式碼、程式碼索引與 SWE-bench 版本快照**不會**被刪除。
+4. 正在處理或排隊中的 Ticket 不能刪，等它處理完再刪。
+5. 刪除後無法從介面復原。
 
 ## 命令列（批次）
 
@@ -122,7 +235,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，11 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，20 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。

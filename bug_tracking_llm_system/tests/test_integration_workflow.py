@@ -161,6 +161,61 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(any(step.startswith("stable rerank") for step in result["details"]["pipeline"]))
         self.assertEqual(result["output"]["top_k_candidates"][0]["ticket_id"], "H-1")
 
+    def test_sbert_history_embeddings_are_cached_and_match_dup_scores(self) -> None:
+        import numpy as np
+
+        calls = []
+
+        class CountingEncoder(_Encoder):
+            def encode(self, texts, **kwargs):
+                calls.append(len(texts))
+                return super().encode(texts, **kwargs)
+
+        fake = _FakeSbert()
+        fake.title_model, fake.content_model = CountingEncoder(), CountingEncoder()
+        detector = TeamDuplicateDetector(self.config, sbert_detector=fake)
+        query = {"ticket_id": "Q", "title": "Login crash token", "description": "auth token crash", "component": "authentication"}
+        first = detector.detect(query)
+        history_size = first["output"]["history_size"]
+        self.assertEqual(first["details"]["sbert_newly_encoded"], 2 * history_size)
+        calls.clear()
+        second = detector.detect({**query, "ticket_id": "Q2", "title": "Session expires early", "description": "session timeout too short"})
+        self.assertEqual(second["details"]["sbert_newly_encoded"], 0, "history is not encoded again")
+        self.assertEqual(sum(calls), 2, "only the new ticket's title and content are encoded")
+
+        # Same numbers as DUP's own scoring function.
+        from duplicate_ticket_detection import cli as dup_cli
+        from duplicate_ticket_detection.dataset import DEFAULT_CONTENT_COLUMNS, _row_to_ticket
+
+        rows, _ = detector.history_rows()
+        candidates = [_row_to_ticket({k: str(v) for k, v in row.items() if v is not None}, content_columns=DEFAULT_CONTENT_COLUMNS) for row in rows]
+        q = _row_to_ticket({k: str(v) for k, v in query.items()}, content_columns=DEFAULT_CONTENT_COLUMNS)
+        expected_title, expected_content = dup_cli._sbert_score_matrices(_FakeSbert(), [q], candidates)
+        got_title, got_content, _ = detector._sbert_scores(fake, q, candidates)
+        np.testing.assert_allclose(got_title, expected_title, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(got_content, expected_content, rtol=1e-5, atol=1e-6)
+
+        # A new detector (server restart) reads the cache from disk.
+        calls.clear()
+        reloaded = TeamDuplicateDetector(self.config, sbert_detector=fake)
+        self.assertEqual(reloaded.detect(query)["details"]["sbert_newly_encoded"], 0)
+
+    def test_duplicate_detection_ignores_reports_filed_later(self) -> None:
+        later = self.root / "later.jsonl"
+        text = {"title": "Login crash when token is missing", "description": "Missing token crashes login.", "component": "authentication"}
+        later.write_text(
+            json.dumps({"ticket_id": "EARLY", "created_at": "2002-01-01T00:00:00Z", **text}) + "\n"
+            + json.dumps({"ticket_id": "LATE", "created_at": "2005-01-01 00:00:00+00:00", **text}) + "\n",
+            encoding="utf-8",
+        )
+        result = TeamDuplicateDetector(self.config).detect(
+            {"ticket_id": "Q", "created_at": "2003-06-01T00:00:00Z", **text}, extra_history_paths=[later]
+        )
+        ids = [item["ticket_id"] for item in result["output"]["top_k_candidates"]]
+        self.assertIn("EARLY", ids)
+        self.assertNotIn("LATE", ids)
+        self.assertEqual(result["output"]["later_rows_skipped"], 1)
+
     def test_auto_duplicate_threshold_closes_ticket(self) -> None:
         self.config.duplicate.auto_duplicate_threshold = 0.5
         result = TeamDuplicateDetector(self.config).detect({"ticket_id": "Q", "title": "Login crash when token missing", "description": "Missing auth token causes AttributeError during login validation."})
@@ -219,6 +274,240 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertNotIn("H-1", record["review_marks"])
         with self.assertRaises(ValueError):
             pipeline.mark_candidate(record["key"], "H-1", "maybe")
+
+    def test_pinning_survives_a_rerun(self) -> None:
+        pipeline = IntegratedPipeline(self.config, extractor=ToJsonExtractor(self.config, llm_call=fake_code_llama))
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test")
+        record = pipeline.set_pinned(record["key"], True)
+        self.assertTrue(record["pinned"])
+        self.assertTrue(record["pinned_at"])
+        record = pipeline.run_until_review(record["key"])
+        self.assertTrue(record["pinned"], "re-running the pipeline must not drop the pin")
+        record = pipeline.set_pinned(record["key"], False)
+        self.assertFalse(record["pinned"])
+        self.assertEqual(record["pinned_at"], "")
+
+    def test_duplicate_and_assignee_history_stay_within_the_project(self) -> None:
+        config = config_from_mapping(
+            {
+                "workspace_root": str(WORKSPACE_ROOT),
+                "store_dir": str(self.root / "scoped_store"),
+                "priority": {"model_path": str(self.root / "missing.joblib")},
+                "projects": {"smoke": {"repo_path": str(SMOKE_REPO)}, "other": {"repo_path": str(SMOKE_REPO)}},
+                "default_project": "smoke",
+            }
+        )
+        pipeline = IntegratedPipeline(config, extractor=ToJsonExtractor(config, llm_call=fake_code_llama))
+        text = {"title": "Login page crashes when token is missing", "description": "Missing token crashes login.", "component": "authentication"}
+        pipeline.import_history(
+            [
+                {"ticket_id": "S-1", "project": "smoke", "assignee": "smoke-dev@example.com", **text},
+                {"ticket_id": "O-1", "project": "other", "assignee": "other-dev@example.com", **text},
+                {"ticket_id": "G-1", "assignee": "shared-dev@example.com", "title": "Session expires early", "description": "Session timeout", "component": "session"},
+            ]
+        )
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test", project="smoke")
+        record = pipeline.run_until_review(record["key"])
+        output = record["stages"]["duplicate"]["output"]
+        ids = [item["ticket_id"] for item in output["top_k_candidates"]]
+        self.assertIn("S-1", ids)
+        self.assertIn("G-1", ids, "history rows without a project are shared by every project")
+        self.assertNotIn("O-1", ids)
+        self.assertEqual(output["other_project_rows_skipped"], 1)
+        pipeline.decide_duplicate(record["key"], "not_duplicate")
+        record = pipeline.run_after_duplicate(record["key"])
+        assignee = record["stages"]["assignee"]
+        candidates = assignee["output"]["ranked_candidates"]
+        self.assertIn("smoke-dev@example.com", candidates)
+        self.assertNotIn("other-dev@example.com", candidates)
+        self.assertIn("smoke", assignee["details"]["history_source"])
+        self.assertTrue(any(row.get("ticket_id") == "T-1" and row.get("project") == "smoke" for row in pipeline.store.history_rows()))
+
+    def test_workspace_queue_batches_priority_and_reports_position(self) -> None:
+        import importlib.util
+        import threading
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        self.config.duplicate.review_threshold = 0.99  # every ticket continues without a human gate
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        gate = threading.Event()
+        calls = []
+        real = app.pipeline.priority_predictor.predict_many
+
+        def counting(tickets, candidates=None):
+            calls.append(len(tickets))
+            gate.wait(10)
+            return real(tickets, candidates)
+
+        app.pipeline.priority_predictor.predict_many = counting
+        raws = [{**self.raw_ticket(), "ticket_id": f"Q-{index}"} for index in range(3)]
+        keys = [record["key"] for record in app.pipeline.import_raw(raws, source="test")]
+        for key in keys:
+            self.assertTrue(app.start(key))
+        self.assertFalse(app.start(keys[0]), "a queued ticket is not queued twice")
+        deadline = _time.time() + 30
+        while not calls and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertEqual(calls, [3], "the three tickets share one PRI call")
+        info = app.queue_info(keys[2])
+        self.assertEqual(info["state"], "running")
+        self.assertEqual(info["phase"], "priority_batch")
+        self.assertEqual(info["batch_size"], 3)
+        gate.set()
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+        for key in keys:
+            record = app.pipeline.get(key)
+            self.assertEqual(record["status"], "processed")
+            self.assertEqual(record["stages"]["priority"]["status"], "fallback")
+        self.assertIsNone(app.queue_info(keys[0]))
+
+    def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
+        import shutil as _shutil
+
+        if _shutil.which("git") is None:
+            self.skipTest("git is not installed")
+        upstream = self.root / "upstream"
+        (upstream / "pkg").mkdir(parents=True)
+
+        def run_git(*args: str) -> str:
+            return subprocess.run(["git", *args], cwd=upstream, check=True, capture_output=True, text=True).stdout.strip()
+
+        run_git("init", "-q")
+        run_git("config", "user.email", "t@example.com")
+        run_git("config", "user.name", "t")
+        (upstream / "pkg" / "session.py").write_text("def refresh_cookie_jar(jar):\n    return jar.expire()  # cookie jar refresh\n", encoding="utf-8")
+        (upstream / "pkg" / "util.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "v1")
+        first = run_git("rev-parse", "HEAD")
+        (upstream / "pkg" / "session.py").unlink()
+        (upstream / "pkg" / "cookies.py").write_text("def refresh_cookie_jar(jar):\n    return jar.expire()  # cookie jar refresh moved\n", encoding="utf-8")
+        run_git("add", "-A")
+        run_git("commit", "-qm", "v2")
+        second = run_git("rev-parse", "HEAD")
+
+        issue = "Cookie jar refresh crashes\nrefresh_cookie_jar raises when the cookie jar expires."
+        rows = [
+            {"instance_id": f"demo__lib-{n}", "repo": "demo/lib", "base_commit": commit, "problem_statement": issue,
+             "created_at": f"2020-0{n}-01T00:00:00", "version": "1.0", "patch": f"diff --git a/{path} b/{path}\n", "test_patch": "secret",
+             "hints_text": "secret hint", "FAIL_TO_PASS": "[]", "PASS_TO_PASS": "[]"}
+            for n, commit, path in ((1, first, "pkg/session.py"), (2, second, "pkg/cookies.py"))
+        ]
+        rows_path = self.root / "rows.jsonl"
+        rows_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        config_path = self.root / "cfg.json"
+        config_path.write_text(json.dumps({"projects": {}}), encoding="utf-8")
+        done = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "build_swebench_demo.py"), "--input", str(rows_path), "--repos", "demo/lib",
+             "--work-dir", str(self.root / "swe"), "--output-dir", str(self.root / "out"), "--config", str(config_path),
+             "--repo-url", str(upstream)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        tickets = [json.loads(line) for line in (self.root / "out" / "new_tickets_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([t["base_commit"] for t in tickets], [first, second])
+        for ticket in tickets:
+            for secret in ("patch", "test_patch", "hints_text", "FAIL_TO_PASS", "PASS_TO_PASS"):
+                self.assertNotIn(secret, ticket)
+        answers = json.loads((self.root / "out" / "answer_key_swebench.json").read_text(encoding="utf-8"))["answers"]
+        self.assertEqual(answers[1]["fixed_files"], ["pkg/cookies.py"])
+        self.assertEqual((self.root / "out" / "history_swebench.jsonl").read_text(encoding="utf-8"), "")
+
+        # With a limit, the newest issue becomes the ticket and the earlier one the comparison history.
+        limited = subprocess.run(
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "build_swebench_demo.py"), "--input", str(rows_path), "--repos", "demo/lib",
+             "--limit-per-repo", "1", "--work-dir", str(self.root / "swe"), "--output-dir", str(self.root / "out2"), "--repo-url", str(upstream)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(limited.returncode, 0, limited.stderr)
+        newest = [json.loads(line) for line in (self.root / "out2" / "new_tickets_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        history = [json.loads(line) for line in (self.root / "out2" / "history_swebench.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(([t["ticket_id"] for t in newest], [h["ticket_id"] for h in history]), (["demo__lib-2"], ["demo__lib-1"]))
+        self.assertEqual(history[0]["project"], "demo/lib")
+        for secret in ("patch", "test_patch", "hints_text", "FAIL_TO_PASS", "PASS_TO_PASS", "base_commit"):
+            self.assertNotIn(secret, history[0])
+
+        project_entry = json.loads(config_path.read_text(encoding="utf-8"))["projects"]["demo/lib"]
+        config = config_from_mapping({"workspace_root": str(WORKSPACE_ROOT), "projects": {"demo/lib": {
+            "repo_path": str(config_path.parent / project_entry["repo_path"]),
+            "snapshots_dir": str(config_path.parent / project_entry["snapshots_dir"])}}})
+        from integration.localization import ProjectLocalizer
+
+        localizer = ProjectLocalizer(config)
+        for ticket, expected in zip(tickets, ("pkg/session.py", "pkg/cookies.py")):
+            result, _ = localizer.localize(ticket, config.project("demo/lib"))
+            self.assertEqual(result["status"], "done", result.get("error"))
+            self.assertEqual(result["output"]["ranked_symbols"][0]["file_path"], expected)
+        self.assertTrue((config_path.parent / project_entry["snapshots_dir"] / f"{first}.index.json").is_file())
+        missing, _ = localizer.localize({**tickets[0], "base_commit": "0" * 40}, config.project("demo/lib"))
+        self.assertEqual(missing["status"], "failed")
+
+    def test_localization_explains_a_project_without_repository(self) -> None:
+        from integration.localization import ProjectLocalizer
+
+        localizer = ProjectLocalizer(self.config)
+        result, raw = localizer.localize({"ticket_id": "E-1", "title": "x"}, None, project_name="Eclipse")
+        self.assertEqual(result["status"], "skipped")
+        self.assertIsNone(raw)
+        self.assertIn("「Eclipse」在設定檔裡沒有程式碼庫", result["warnings"][0])
+        self.assertEqual(result["details"]["skip_reason"], "project_without_repository")
+
+    def test_deleting_tickets_and_projects(self) -> None:
+        import importlib.util
+
+        config_path = self.root / "integration_config.json"
+        config_path.write_text(json.dumps({
+            "workspace_root": str(WORKSPACE_ROOT), "store_dir": str(self.root / "del_store"),
+            "priority": {"model_path": str(self.root / "missing.joblib")},
+            "projects": {"smoke": {"repo_path": str(SMOKE_REPO)}, "other": {"repo_path": str(SMOKE_REPO)}},
+            "default_project": "other",
+        }), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("workspace_server_del", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+        config = server.load_integration_config(config_path)
+        config.duplicate.review_threshold = 0.99
+        app = server.WorkspaceApp(config)
+        pipeline = app.pipeline
+        pipeline.extractor = ToJsonExtractor(config, llm_call=fake_code_llama)
+        pipeline.import_history([{"ticket_id": "IMPORTED-1", "project": "smoke", "title": "old", "description": "old report"}])
+        pipeline.import_history(
+            [{"ticket_id": "H-OWN", "project": "other", "title": "a"}, {"ticket_id": "H-NONE", "title": "b"}], project="smoke"
+        )
+        projects = {row["ticket_id"]: row.get("project") for row in pipeline.store.history_rows()}
+        self.assertEqual((projects["H-OWN"], projects["H-NONE"]), ("other", "smoke"), "only rows without a project take the chosen one")
+        [first, second] = pipeline.import_raw([{**self.raw_ticket(), "ticket_id": "D-1"}, {**self.raw_ticket(), "ticket_id": "D-2"}], source="test", project="smoke")
+        pipeline.process_batch([first["key"], second["key"]])
+        self.assertTrue(any(row["ticket_id"] == "D-1" for row in pipeline.store.history_rows()))
+        self.assertTrue(pipeline.store.artifact_path(first["key"], "localization_result.json").parent.is_dir())
+
+        result = pipeline.delete_ticket(first["key"])
+        self.assertEqual(result["history_rows_removed"], 1)
+        self.assertIsNone(pipeline.store.get(first["key"]))
+        self.assertFalse(pipeline.store.artifact_path(first["key"], "x").parent.exists())
+        ids = {row["ticket_id"] for row in pipeline.store.history_rows()}
+        self.assertNotIn("D-1", ids)
+        self.assertIn("IMPORTED-1", ids, "imported history is not touched by deleting a ticket")
+
+        usage = app.project_usage("smoke")
+        self.assertEqual((usage["tickets"], usage["configured"]), (1, True))
+        self.assertGreaterEqual(usage["history_rows"], 2)
+        outcome = app.delete_project("smoke", tickets=True, history=True, config=True)
+        self.assertEqual(outcome["tickets_removed"], [second["key"]])
+        self.assertTrue(outcome["config_removed"])
+        saved = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertNotIn("smoke", saved["projects"])
+        self.assertIn("other", saved["projects"])
+        self.assertTrue((self.root / "integration_config.json.bak").is_file())
+        self.assertEqual([row for row in pipeline.store.history_rows() if row.get("project") == "smoke"], [])
+        self.assertTrue(SMOKE_REPO.is_dir(), "the repository itself is never deleted")
 
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
@@ -301,9 +590,15 @@ class PriorityModelIntegrationTests(unittest.TestCase):
                 [
                     {"ticket_id": "N1", "title": "Workspace corrupted crash data loss", "description": "hang deadlock", "severity": "blocker", "product": "platform", "component": "debug"},
                     {"ticket_id": "N2", "title": "Typo in javadoc wording", "description": "spelling documentation", "severity": "trivial", "product": "platform", "component": "ui"},
+                    # A real report that is also in the history CSV: it must not see its own labelled copy.
+                    {"ticket_id": rows[0]["id"], "title": rows[0]["summary"], "description": rows[0]["description"], "severity": rows[0]["severity"],
+                     "product": "platform", "component": rows[0]["component"], "reporter": rows[0]["creator"], "created_at": rows[0]["creation_time"]},
                 ]
             )
-            self.assertEqual([item["status"] for item in results], ["done", "done"], results[0].get("fallback_reason"))
+            own = results[2]["output"]["factor_values"]
+            self.assertEqual(own["related_report"]["related_top1_priority"], 0, "the earliest report has no earlier history once its own copy is dropped")
+            self.assertEqual(own["author"]["author_past_count"], 0)
+            self.assertEqual([item["status"] for item in results], ["done", "done", "done"], results[0].get("fallback_reason"))
             self.assertEqual(results[0]["output"]["model"], "recall_balanced_cost_sensitive")
             self.assertEqual(results[0]["output"]["predicted_priority"], "P1")
             self.assertEqual(results[1]["output"]["predicted_priority"], "P5")

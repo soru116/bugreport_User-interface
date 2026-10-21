@@ -51,16 +51,34 @@ class ProjectLocalizer:
         self._lock = threading.Lock()
 
     def _localizer(self, project: ProjectSettings) -> BugLocalizer:
+        key = f"{project.name}|{project.repo_path}|{project.code_index_path or ''}"
         with self._lock:
-            localizer = self._localizers.get(project.name)
+            localizer = self._localizers.get(key)
             if localizer is None:
+                if len(self._localizers) >= 16:  # snapshots of versioned repos: keep memory bounded
+                    self._localizers.pop(next(iter(self._localizers)))
                 localizer = BugLocalizer(
                     code_index_path=project.code_index_path,
                     top_k=int(self.config.localization.top_k),
                     embedding_backend=self.config.localization.embedding_backend,
                 )
-                self._localizers[project.name] = localizer
+                self._localizers[key] = localizer
             return localizer
+
+    def snapshot_project(self, project: ProjectSettings, base_commit: str) -> ProjectSettings | str:
+        """The project as it was at ``base_commit`` (SWE-bench style), or an error message.
+
+        The snapshot is a plain source tree made by scripts/build_swebench_demo.py; its code index is
+        built once with the same Stage-3 builder and cached next to it."""
+
+        folder = Path(project.snapshots_dir) / base_commit  # type: ignore[arg-type]
+        if not folder.is_dir():
+            return f"找不到 {project.name} 在版本 {base_commit[:12]} 的程式碼快照（{folder}）。請先執行 scripts/build_swebench_demo.py 準備這個版本。"
+        index_path = Path(project.snapshots_dir) / f"{base_commit}.index.json"  # type: ignore[arg-type]
+        if not index_path.is_file():
+            index = build_code_index(folder, repository_name=project.name)
+            index.save(index_path)
+        return ProjectSettings(name=project.name, repo_path=folder, code_index_path=index_path, description=project.description)
 
     def index_status(self, project: ProjectSettings) -> dict[str, Any]:
         status: dict[str, Any] = {
@@ -93,7 +111,8 @@ class ProjectLocalizer:
             Path(project.code_index_path).parent.mkdir(parents=True, exist_ok=True)
             index.save(project.code_index_path)
         with self._lock:
-            self._localizers.pop(project.name, None)
+            for key in [key for key in self._localizers if key.startswith(f"{project.name}|")]:
+                self._localizers.pop(key, None)
         return {
             **self.index_status(project),
             "files": len(index.settings.get("file_fingerprints", {})),
@@ -101,20 +120,37 @@ class ProjectLocalizer:
             "duration_ms": int((time.perf_counter() - started) * 1000),
         }
 
-    def localize(self, structured_ticket: dict[str, Any], project: ProjectSettings | None) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    def localize(
+        self, structured_ticket: dict[str, Any], project: ProjectSettings | None, *, project_name: str = ""
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         started = time.perf_counter()
         if project is None:
+            reason = (
+                f"「{project_name}」在設定檔裡沒有程式碼庫（integration_config.json 的 projects 沒有這個專案的 repo_path），所以略過錯誤定位。"
+                if project_name
+                else "這張 Ticket 沒有指定專案，所以略過錯誤定位。"
+            )
             return (
                 stage_result(
                     stage="localization",
                     status="skipped",
                     module=self.MODULE_LABEL,
                     implementation=self.IMPLEMENTATION,
-                    warnings=["此 Ticket 沒有指定專案／Repository，無法執行錯誤定位。請在設定檔 projects 加入 repo_path。"],
+                    warnings=[reason],
+                    details={"skip_reason": "project_without_repository" if project_name else "no_project"},
                     started=started,
                 ),
                 None,
             )
+        base_commit = str(structured_ticket.get("base_commit") or "").strip()
+        if project.snapshots_dir and base_commit:
+            snapshot = self.snapshot_project(project, base_commit)
+            if isinstance(snapshot, str):
+                return (
+                    stage_result(stage="localization", status="failed", module=self.MODULE_LABEL, implementation=self.IMPLEMENTATION, error=snapshot, started=started),
+                    None,
+                )
+            project = snapshot
         if not Path(project.repo_path).is_dir() and not (project.code_index_path and Path(project.code_index_path).is_file()):
             return (
                 stage_result(
@@ -145,7 +181,7 @@ class ProjectLocalizer:
         output = {
             "project": project.name,
             "repository": raw.get("repo") or project.name,
-            "base_commit": raw.get("base_commit", ""),
+            "base_commit": str(structured_ticket.get("base_commit") or "") or raw.get("base_commit", ""),
             "status": user_facing.get("status"),
             "summary": user_facing.get("summary", {}),
             "confidence_level": raw.get("confidence_level"),
