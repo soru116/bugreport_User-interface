@@ -179,7 +179,11 @@ class TeamPriorityPredictor:
         analyze_module = import_module_from_path("pri_analyze_priority_errors", self.scripts_dir / "analyze_priority_errors.py")
 
         settings = self.config.priority
-        with tempfile.TemporaryDirectory(prefix="pri_integration_") as tmp:
+        # Work under the store instead of the system temp folder: build_features.py runs for minutes,
+        # and Windows temp cleaners (Storage Sense, antivirus) have removed the folder mid-run.
+        work_root = Path(self.config.store_dir) / "tmp"
+        work_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="pri_integration_", dir=work_root) as tmp:
             tmp_path = Path(tmp)
             target_csv = tmp_path / "targets.csv"
             history_csv = Path(self.paths["history_csv"])
