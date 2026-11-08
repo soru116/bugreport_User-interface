@@ -161,6 +161,8 @@ python scripts\build_patch_demo.py --clone-from "C:\Users\owner\Desktop\專題\�
 
 ## 用組內的真實資料示範
 
+> 已經產生好的一份放在 `bug_tracking_llm_system/demo_data/`（說明見裡面的 README），可以直接匯入，不用先跑下面的腳本。SWE-bench 與 astropy 的 Ticket 仍需要在本機準備程式碼（clone 與版本快照），錯誤定位和補丁生成才跑得起來。
+
 `scripts/build_real_dataset_demo.py` 會把子專案用過的真實 Bugzilla 資料，轉成工作台可以匯入的檔案。它只讀資料，不會改動原本的資料集：
 
 | 專案資料夾 | 來源 | 歷史資料 | 新 Ticket |
