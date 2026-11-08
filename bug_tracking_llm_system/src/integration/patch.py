@@ -292,7 +292,10 @@ class TeamPatchGenerator:
             ticket = self.build_ticket(record, location)
             if not ticket["base_commit"]:
                 ticket["base_commit"] = _git(source_repo, "rev-parse", "HEAD").decode().strip()
-            location.setdefault("base_commit", ticket["base_commit"])
+            if project.snapshots_dir and ticket["base_commit"]:
+                # Localized in the ticket's own version snapshot. Results saved before the localization
+                # fix carry the workspace repository's HEAD here instead (the snapshot has no .git).
+                location["base_commit"] = ticket["base_commit"]
             if not location.get("base_commit"):
                 location["base_commit"] = ticket["base_commit"]
             if not location.get("repo"):

@@ -143,6 +143,7 @@ class ProjectLocalizer:
                 None,
             )
         base_commit = str(structured_ticket.get("base_commit") or "").strip()
+        snapshot_used = False
         if project.snapshots_dir and base_commit:
             snapshot = self.snapshot_project(project, base_commit)
             if isinstance(snapshot, str):
@@ -151,6 +152,7 @@ class ProjectLocalizer:
                     None,
                 )
             project = snapshot
+            snapshot_used = True
         if not Path(project.repo_path).is_dir() and not (project.code_index_path and Path(project.code_index_path).is_file()):
             return (
                 stage_result(
@@ -167,6 +169,11 @@ class ProjectLocalizer:
         ticket = dict(structured_ticket)
         ticket.setdefault("repo", project.name)
         raw = self._localizer(project).localize(ticket, str(project.repo_path))
+        if project_snapshot_commit := (base_commit if snapshot_used else ""):
+            # A snapshot is a plain source tree without .git, so the localizer's own `git rev-parse`
+            # reports whatever repository happens to contain the folder.  The code it read is the
+            # ticket's commit.
+            raw["base_commit"] = project_snapshot_commit
         user_facing = format_user_facing_localization_result(
             raw,
             include_code_preview=bool(self.config.localization.include_code_preview),

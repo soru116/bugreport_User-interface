@@ -440,11 +440,40 @@ class IntegrationWorkflowTests(unittest.TestCase):
             "snapshots_dir": str(config_path.parent / project_entry["snapshots_dir"])}}})
         from integration.localization import ProjectLocalizer
 
+        # The snapshots sit inside another git repository (as data/swebench does inside the workspace
+        # repo on a team machine); the localization must still report the ticket's own commit.
+        for args in (["init", "-q"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "outer"]):
+            subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True)
         localizer = ProjectLocalizer(config)
+        raws = []
         for ticket, expected in zip(tickets, ("pkg/session.py", "pkg/cookies.py")):
-            result, _ = localizer.localize(ticket, config.project("demo/lib"))
+            result, raw = localizer.localize(ticket, config.project("demo/lib"))
             self.assertEqual(result["status"], "done", result.get("error"))
             self.assertEqual(result["output"]["ranked_symbols"][0]["file_path"], expected)
+            self.assertEqual(raw["base_commit"], ticket["base_commit"])
+            raws.append(raw)
+
+        # Patch generation on the same versioned project: a git checkout at the ticket's commit.
+        from integration.patch import TeamPatchGenerator
+
+        class FakeGemma:
+            max_new_tokens = 2048
+
+            def describe(self) -> dict:
+                return {"model": "fake-gemma"}
+
+            def rewrite(self, prompt: str, *, seed: int, max_new_tokens: int | None = None) -> dict:
+                body = "def refresh_cookie_jar(jar):\n    if jar is None:\n        return None\n    return jar.expire()  # cookie jar refresh moved\n"
+                return {"raw_response": body, "seed": seed, "stop_reason": "model_eos", "transport": "test"}
+
+        patcher = TeamPatchGenerator(config, backend_factory=FakeGemma)
+        stale = dict(raws[1], base_commit=subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root, capture_output=True, text=True).stdout.strip())
+        for location in (raws[1], stale):  # `stale`: a result saved before the localization fix
+            record = {"key": tickets[1]["ticket_id"], "ticket_id": tickets[1]["ticket_id"], "project": "demo/lib", "raw": tickets[1]}
+            out = patcher.generate(record, config.project("demo/lib"), location, output_dir=self.root / "patch_out" / str(len(location)) / str(id(location)))
+            self.assertEqual(out["status"], "done", out.get("error"))
+            self.assertEqual(out["output"]["patch_status"], "generated")
+            self.assertIn("pkg/cookies.py", out["output"]["patch"])
         self.assertTrue((config_path.parent / project_entry["snapshots_dir"] / f"{first}.index.json").is_file())
         missing, _ = localizer.localize({**tickets[0], "base_commit": "0" * 40}, config.project("demo/lib"))
         self.assertEqual(missing["status"], "failed")
