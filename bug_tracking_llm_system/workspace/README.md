@@ -1,6 +1,6 @@
 # Ticket 工作台（整合版）
 
-把組內**已經做好的五個功能**串成一條可以「匯入 Ticket → 逐步處理」的流程，並提供網頁介面和命令列兩種用法。
+把組內**已經做好的五個功能**串成一條可以「匯入 Ticket → 逐步處理」的流程，並提供網頁介面和命令列兩種用法。錯誤定位完成後，可以再按一下「產生補丁」，用補丁生成組官方修好 6/36 題的版本產生補丁（第 6 步，手動執行）。
 
 整合層不重寫任何演算法，每一步都直接 import／呼叫子專案原本的程式：
 
@@ -11,6 +11,7 @@
 | 3. 優先級 | `bug-priority-drone/scripts/build_features.py --mode transform`（DRONE／REP- 特徵）＋ `analyze_priority_errors.predict_model_or_bundle` | `recall_balanced_priority_model.joblib`、`features_bm25_p2_error_keywords_train/`（fitted encoders）、清洗後的歷史 CSV | 標示「備援」，改用主系統固定權重公式 |
 | 4. 分派負責人 | `bug_tracking_llm_system/src/modules/assignee_triager.py`（原封不動） | 負責人歷史 JSONL（預設找 paper_grade 的 bmo 資料） | 改用工作台匯入或確認過、含負責人的紀錄 |
 | 5. 錯誤定位 | `bug_tracking_llm_system/src/modules/bug_localizer.py` → `utils/fault_localization_stage3.py`（與 `fault_localization_feature_files/src/utils/fault_localization.py` 內容完全相同） | 要定位的 Repository（可預先建立 code index） | 沒有設定專案時略過 |
+| 6. 補丁生成（手動） | `patch/rewrite-gemma4-5cdb2be/src/fim_patch`（fixed-patch commit `5cdb2be`，原封不動）的 `RepairPipeline` → `FIMPatchGenerator`（對話式改寫） | 本機 Ollama 的 `gemma4:12b`；專案的 `repo_path` 必須是 git clone | 不會改用備援，直接顯示無法執行的原因 |
 
 「備援」會顯示在畫面、CLI 輸出和結果 JSON（`status: "fallback"` 與 `fallback_reason`），不會把備援結果當成訓練模型的結果。
 
@@ -111,6 +112,52 @@ python3 workspace/server.py --config integration_config.json --port 8780
 6. 右上「更多」裡可以下載完整結果 JSON、從頭重新執行或刪除 Ticket。
 
 範例資料是**示範用的虛構 Ticket**，內容描述 `bug-duplicate-detection` 原始碼中可能出現的錯誤，搭配設定檔中的 `duplicate-detection` 專案示範錯誤定位。它們不是評估資料，不能拿來算準確率。
+
+## 補丁生成（第 6 步，手動執行）
+
+錯誤定位完成後，Ticket 頁面的「補丁生成」分頁會出現「產生補丁」按鈕。補丁生成很花時間又佔用 GPU，所以不會自動執行。
+
+程式是補丁生成組 `fixed-patch` 分支 `codex/eval36-v7-timeout-flag-20261019`、commit `5cdb2be` 的快照，放在 repo 根目錄的 `patch/rewrite-gemma4-5cdb2be/`（說明見裡面的 `PROVENANCE_ZH.md`）。這一版在 36 題開發集產生 21 個補丁，**官方 SWE-bench 測試判定修好 6 題**。工作台用和那一輪完全相同的方法設定（`rewrite`、`first_supported_ast`、`task_last`、研究模式……，寫死在 `src/integration/patch.py` 的 `FROZEN_RUN_CONFIG`，測試會和那一輪的 `run_config.json` 比對），只有下面這些可以在設定檔 `patch` 區塊調整：
+
+```json
+"patch": {
+  "ollama_url": "http://localhost:11434",
+  "model": "gemma4:12b",
+  "candidates": 3,
+  "seed": 42,
+  "temperature": 0.2
+}
+```
+
+做法：
+
+1. 用工作台**這張 Ticket 自己的錯誤定位結果**（不是標準答案），從排名第一的函式開始，找第一個可以改寫的函式。
+2. 從專案的 git clone 建立 `base_commit` 那一版的 git 快照（存在 `data/workspace/patch_snapshots/`，原本的 clone 不會被修改）。
+3. 請 gemma4:12b 重寫整個函式 3 次（seed 42／43／44，同一個 prompt）。
+4. 每個候選都要通過語法、AST、函式簽名不變、`git apply` 等檢查；通過的候選中取改動最少的一個。
+
+畫面會顯示補丁 diff、3 個候選各自通過或被擋下的原因，以及：
+
+- **官方判定**：只有在產生的補丁和某個已經送過官方測試的補丁 **sha256 完全相同**時才會顯示（判定資料在 `patch/rewrite-gemma4-5cdb2be/official_verdicts.jsonl`）。工作台本身沒有 Docker，不會自己跑官方測試。
+- **36 題實驗中的紀錄**：如果這張 Ticket 是那 36 題之一，會列出 6/36 那一輪對它產生的補丁和官方判定，並標出和這次的結果相不相同。
+
+必須跟結果一起講的限制：
+
+- 「產生補丁」只代表通過靜態檢查與 `git apply`，**不等於修好**。
+- 錯誤定位信心不是「高」時，正式流程不會產生補丁；這裡照 6/36 實驗的研究模式照樣產生，並在畫面上標示需要人工審查。
+- 同樣的設定重跑，模型輸出不一定一樣；錯誤定位也是工作台重新算的，所以重新產生的補丁可能和實驗紀錄不同。
+- 36 題是開發集，被反覆用來調方法，不能當泛化證據。
+
+### 匯入修好的那 6 題
+
+```powershell
+python scripts\build_patch_demo.py --clone-from "C:\Users\owner\Desktop\專題\專題0908錯誤定位\fault-localization-feature-files\data\repositories\astropy__astropy" --config integration_config.json
+```
+
+- 從 `patch/rewrite-gemma4-5cdb2be/experiments/eval36_v7/tickets.jsonl` 取出官方判定修好的 6 題（`--all` 取全部 36 題，`--ids` 指定題號），Ticket 內容和那一輪一字不差。
+- `--clone-from` 從組員電腦上已經有的 astropy clone 複製一份到 `data/swebench/clones/astropy__astropy`（只讀取來源）；不給的話會從 GitHub 下載。
+- 每個 `base_commit` 匯出一份程式碼快照給錯誤定位用，並把 `astropy/astropy` 加進設定檔（原檔備份為 `.bak`）。
+- 產生 `data/real_datasets/patch_demo/new_tickets_patch_demo.jsonl`（匯入這個）與 `answer_key_patch_demo.md`（那一輪的補丁與官方判定，只用來核對）。
 
 ## 用組內的真實資料示範
 
@@ -235,12 +282,13 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 
 ## 已驗證與未驗證
 
-已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，20 項）：
+已驗證（測試：`python3 -m unittest tests.test_integration_workflow`，21 項）：
 
 - ToJson 的 prompt、JSON 解析與正規化程式能正確接上。測試中只把 Ollama 的 HTTP 呼叫換成假回應；Ollama 連不上時會正確顯示備援。
 - DUP 的 TF-IDF 路徑，以及 SBERT 路徑上的 metadata rerank 與 stable rerank。SBERT 路徑用假的 encoder 測試，沒有載入真的 SBERT 模型。
 - PRI：用 PRI 自己的 `clean_bug_reports.py` → `build_experiment_splits.py` → `build_features.py` → `train_recall_balanced_priority_model.py` 在小型合成資料上訓練模型，再透過整合層預測，P1 和 P5 都預測正確。
 - 完整流程：確認重複的關卡、主系統 AssigneeTriager 的候選、Stage-3 定位到正確檔案、負責人確認後寫回歷史資料。
+- 補丁生成：工作台的錯誤定位結果能交給補丁生成組的 `RepairPipeline`（通過它自己的定位驗證），在 base_commit 的 git 快照上產生可 `git apply` 的 diff；候選被擋下的原因、標準答案欄位不會進入 prompt、原本的 clone 保持乾淨、方法設定和 6/36 那一輪的 `run_config.json` 一致、官方判定以 sha256 對應到 6 題。測試只把 gemma4 的 HTTP 呼叫換成假回應。另外 `patch/rewrite-gemma4-5cdb2be` 自己的 154 項測試（`tests.test_fim`、`tests.test_repair_pipeline`）在複製後全部通過。
 
 **Not verified**（這台開發環境沒有組內的模型與資料）：
 
@@ -248,5 +296,6 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 - 組內訓練好的 SBERT 模型與 PRI 模型
 - 實際 Eclipse 歷史 CSV 的 `build_features.py` 執行時間；它會重算整份歷史的特徵，資料大時可以設定 `priority.history_max_rows` 只取最近的 N 筆，但這會縮小相關報告因子的比對範圍
 - paper_grade 的 bmo 負責人歷史資料
+- 真正的 `gemma4:12b` 在工作台裡產生的補丁，以及工作台錯誤定位和 36 題實驗凍結定位的差異（重跑結果可能和實驗紀錄不同）
 
 這幾項請在有產物的電腦上執行 `check`，並各跑一次範例。

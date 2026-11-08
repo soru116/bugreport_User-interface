@@ -280,7 +280,7 @@ mark { background: #ffe5a0; color: inherit; border-radius: 4px; padding: 0 1px; 
 /* The pipeline track. */
 .track {
   list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0;
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
   counter-reset: stage;
 }
 .track li { position: relative; padding: 0 8px 0 0; counter-increment: stage; }
@@ -744,3 +744,36 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .import-project-note p { margin: 0; }
 .import-project-note ul { margin: 4px 0; padding-left: 20px; }
 .import-project-note .note-warn { color: var(--failed); }
+
+/* ---------------------------------------------------------------- patch generation */
+.patch-method { margin: 0 0 12px; color: var(--ink-2, var(--ink)); font-size: 14px; line-height: 1.7; }
+.sub-head { margin: 18px 0 8px; font-size: 14.5px; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.diff { margin: 0; background: var(--code-bg); border-radius: var(--radius-s); overflow: auto; max-height: 460px; padding: 10px 0; font-family: var(--font-mono); font-size: 12.5px; }
+.diff span { display: block; padding: 0 14px; white-space: pre; line-height: 1.55; }
+.diff .d-add { background: var(--done-soft); color: var(--done); }
+.diff .d-del { background: var(--failed-soft); color: var(--failed); }
+.diff .d-hunk { color: var(--primary); }
+.diff .d-file { color: var(--ink-3, var(--skipped)); font-weight: 600; }
+.verdict { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: var(--radius-s); margin: 4px 0 12px; font-size: 14px; }
+.verdict b { font-size: 15px; }
+.verdict-ok { background: var(--done-soft); color: var(--done); }
+.verdict-ng { background: var(--failed-soft); color: var(--failed); }
+.verdict-none { background: var(--skipped-soft); color: var(--skipped); }
+.exp-box { margin-top: 22px; padding-top: 14px; border-top: 1px dashed var(--line-strong); }
+.exp-box .sub-head { margin-top: 0; }
+.cand-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.cand-table th, .cand-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cand-table th { color: var(--skipped); font-weight: 600; font-size: 12.5px; }
+.cand-table tr.is-selected td { background: var(--primary-soft); }
+.table-wrap { overflow-x: auto; }
+.tag-patch { background: var(--primary-soft); color: var(--primary); }
+.tag-patch.is-resolved { background: var(--done-soft); color: var(--done); }
+
+/* The patch step is optional: dashed connector and node until it has run. */
+.track li:has(+ li[data-optional])::after { background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 11px); }
+.track li[data-optional][data-s="pending"] .node, .track li[data-optional][data-s="ready"] .node { border-style: dashed; }
+.track li[data-optional][data-s="ready"] .node { border-color: var(--primary); color: var(--primary); }
+.track li[data-optional][data-s="generated"] .node, .track li[data-optional][data-s="resolved"] .node { background: var(--done); border-color: var(--done); color: #fff; }
+.track li[data-optional][data-s="generated"] .node::before, .track li[data-optional][data-s="resolved"] .node::before { content: "✓"; }
+.track li[data-optional][data-s="none"] .node { background: var(--fallback-soft); border-color: var(--fallback-mark); color: var(--fallback); }
+.track li[data-optional][data-s="none"] .node::before { content: "–"; }

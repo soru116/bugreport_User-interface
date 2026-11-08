@@ -100,6 +100,27 @@ class LocalizationSettings:
 
 
 @dataclass(slots=True)
+class PatchSettings:
+    """Patch generation (patch/rewrite-gemma4-5cdb2be, the version with 6/36 official fixes).
+
+    Everything that defines the method (rewrite mode, target policy, prompt layout, ...) is frozen in
+    integration/patch.py to match that run; only the model service and sampling knobs live here."""
+
+    enabled: bool = True
+    code_dir: Path | None = None  # default: <workspace_root>/patch/rewrite-gemma4-5cdb2be
+    ollama_url: str = "http://localhost:11434"
+    model: str = "gemma4:12b"
+    candidates: int = 3
+    seed: int = 42
+    temperature: float = 0.2
+    num_ctx: int = 16384
+    max_new_tokens: int = 2048
+    timeout_seconds: int = 600
+    research_mode: bool = True
+    verdicts_path: Path | None = None  # default: <code_dir>/official_verdicts.jsonl
+
+
+@dataclass(slots=True)
 class IntegrationConfig:
     workspace_root: Path = field(default_factory=default_workspace_root)
     store_dir: Path = field(default_factory=lambda: MAIN_PROJECT_ROOT / "data" / "workspace")
@@ -109,12 +130,19 @@ class IntegrationConfig:
     priority: PrioritySettings = field(default_factory=PrioritySettings)
     assignee: dict[str, Any] = field(default_factory=dict)
     localization: LocalizationSettings = field(default_factory=LocalizationSettings)
+    patch: PatchSettings = field(default_factory=PatchSettings)
     projects: dict[str, ProjectSettings] = field(default_factory=dict)
     default_project: str = ""
     config_path: Path | None = None
 
     def subproject(self, key: str) -> Path:
         return resolve_subproject(self.workspace_root, key)
+
+    def patch_code_dir(self) -> Path:
+        return self.patch.code_dir or self.workspace_root / "patch" / "rewrite-gemma4-5cdb2be"
+
+    def patch_verdicts_path(self) -> Path:
+        return self.patch.verdicts_path or self.patch_code_dir() / "official_verdicts.jsonl"
 
     def priority_paths(self) -> dict[str, Path | None]:
         """Resolve PRI artifact paths, defaulting to the PRI README's documented locations."""
@@ -170,6 +198,14 @@ class IntegrationConfig:
             "localization": {
                 "top_k": self.localization.top_k,
                 "embedding_backend": self.localization.embedding_backend,
+            },
+            "patch": {
+                "enabled": self.patch.enabled,
+                "code_dir": _p(self.patch_code_dir()),
+                "ollama_url": self.patch.ollama_url,
+                "model": self.patch.model,
+                "candidates": self.patch.candidates,
+                "research_mode": self.patch.research_mode,
             },
             "projects": {
                 name: {
@@ -263,6 +299,12 @@ def config_from_mapping(
     for key, value in localization.items():
         if hasattr(config.localization, key):
             setattr(config.localization, key, value)
+
+    patch = data.get("patch") or {}
+    for key, value in patch.items():
+        if not hasattr(config.patch, key):
+            continue
+        setattr(config.patch, key, as_path(value) if key in {"code_dir", "verdicts_path"} else value)
 
     projects = data.get("projects") or {}
     if isinstance(projects, list):

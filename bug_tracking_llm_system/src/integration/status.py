@@ -120,6 +120,17 @@ def readiness_report(config: IntegrationConfig, *, store_history_path: Path | No
         project_checks.append(_check("至少設定一個專案（projects.repo_path）", False, "沒有專案就無法做錯誤定位"))
     stages["localization"] = {"title": "錯誤定位（Stage-3 BugLocalizer）", "checks": project_checks}
 
+    code = config.patch_code_dir() / "src" / "fim_patch" / "generator.py"
+    patch_checks = [
+        _check("補丁生成程式（fixed-patch 5cdb2be）", code.is_file(), str(code.parent)),
+        _check("官方判定索引", config.patch_verdicts_path().is_file(), str(config.patch_verdicts_path()), required=False),
+    ]
+    if check_services and config.patch.enabled:
+        patch_checks.append(_ollama_status(config.patch.ollama_url, config.patch.model))
+    git_projects = [name for name, project in config.projects.items() if (Path(project.repo_path) / ".git").exists()]
+    patch_checks.append(_check("專案程式碼是 git repository", bool(git_projects), "、".join(git_projects) or "沒有任何專案的 repo_path 是 git checkout"))
+    stages["patch"] = {"title": f"補丁生成（對話式改寫 + {config.patch.model}，手動執行）", "checks": patch_checks}
+
     for item in stages.values():
         required = [check for check in item["checks"] if check["required"]]
         item["ready"] = all(check["ok"] for check in required)

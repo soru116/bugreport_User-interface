@@ -509,6 +509,88 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual([row for row in pipeline.store.history_rows() if row.get("project") == "smoke"], [])
         self.assertTrue(SMOKE_REPO.is_dir(), "the repository itself is never deleted")
 
+    def test_patch_generation_on_demand_with_the_vendored_rewrite_generator(self) -> None:
+        """Workspace localization -> vendored fim_patch (5cdb2be) -> diff.  Only the gemma4 HTTP call is
+        replaced; target selection, prompt, gates and git apply are the team's real code."""
+        from integration.patch import EXPERIMENT_DIR, FROZEN_RUN_CONFIG, TeamPatchGenerator
+
+        repo = self.root / "demo_repo"
+        (repo / "pkg").mkdir(parents=True)
+        (repo / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        (repo / "pkg" / "names.py").write_text(
+            'def clean(value):\n    """Strip a user name."""\n    return value.strip()\n\n\ndef greet(name):\n    return "hi " + clean(name)\n',
+            encoding="utf-8",
+        )
+        for args in (["init", "-q"], ["config", "core.autocrlf", "false"], ["add", "-A"],
+                     ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "base"]):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        self.config.projects["demo"] = type(self.config.projects["smoke"])(name="demo", repo_path=repo)
+
+        fixed = 'def clean(value):\n    """Strip a user name."""\n    if value is None:\n        return ""\n    return value.strip()\n'
+
+        class FakeGemma:
+            max_new_tokens = 2048
+
+            def __init__(self) -> None:
+                self.prompts: list[str] = []
+                self.outputs = iter([fixed, "NO_CHANGE", fixed])
+
+            def describe(self) -> dict:
+                return {"model": "fake-gemma"}
+
+            def rewrite(self, prompt: str, *, seed: int, max_new_tokens: int | None = None) -> dict:
+                self.prompts.append(prompt)
+                return {"raw_response": next(self.outputs), "seed": seed, "stop_reason": "model_eos", "transport": "test"}
+
+        fake = FakeGemma()
+        pipeline = IntegratedPipeline(self.config, patcher=TeamPatchGenerator(self.config, backend_factory=lambda: fake))
+        ticket = {"ticket_id": "PATCH-1", "title": "clean crashes on None", "project": "demo",
+                  "description": "names.clean raises AttributeError when value is None; clean should return an empty string.",
+                  "patch": "SECRET GOLD PATCH", "hints_text": "SECRET HINT"}
+        [record] = pipeline.import_raw([ticket], source="test")
+        key = record["key"]
+        with self.assertRaises(ValueError):  # no localization yet
+            pipeline.patch_precheck(key)
+        pipeline.store.update(key, lambda rec: rec.update(structured_ticket={"ticket_id": "PATCH-1", "title": ticket["title"], "description": ticket["description"]}))
+        record = pipeline.rerun_localization(key)
+        self.assertEqual(record["stages"]["localization"]["status"], "done")
+
+        record = pipeline.generate_patch(key)
+        stage = record["stages"]["patch"]
+        self.assertEqual(stage["status"], "done", stage.get("error"))
+        output = stage["output"]
+        self.assertEqual(output["patch_status"], "generated")
+        self.assertIn('+    if value is None:', output["patch"])
+        self.assertEqual([c["status"] for c in output["candidates"]], ["generated", "rejected", "rejected"])
+        self.assertEqual(output["candidates"][1]["reason"], "rewrite_no_change")
+        self.assertIsNone(output["official"])
+        self.assertTrue(any("不等於「修好」" in warning for warning in stage["warnings"]))
+        self.assertTrue(all("SECRET" not in prompt for prompt in fake.prompts), "ground truth must not reach the prompt")
+        self.assertIn("def clean(value):", fake.prompts[0])
+        self.assertEqual(record["status"], "processed")  # the status before the patch run is restored
+        self.assertTrue((Path(output["run_dir"]) / "selected.diff").is_file())
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
+
+        record = pipeline.rerun_localization(key)  # new localization -> the old patch no longer applies
+        self.assertNotIn("patch", record["stages"])
+
+        # The frozen method settings are exactly those of the 6/36 run, and its official verdicts resolve.
+        patcher = TeamPatchGenerator(self.config)
+        run_config = json.loads((patcher.code_dir / EXPERIMENT_DIR / "run_config.json").read_text(encoding="utf-8"))
+        for name, value in FROZEN_RUN_CONFIG.items():
+            self.assertEqual(run_config[name], value, name)
+        for name in ("model", "candidates", "seed", "temperature", "num_ctx", "max_new_tokens"):
+            self.assertEqual(run_config[name], getattr(self.config.patch, name), name)
+        self.assertTrue(run_config["research_mode"])
+        resolved = []
+        for line in (patcher.code_dir / EXPERIMENT_DIR / "predictions.jsonl").read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            record = patcher.experiment_record(row["instance_id"])
+            if record["official"] and record["official"]["official_resolved"]:
+                resolved.append(row["instance_id"].rsplit("-", 1)[1])
+        self.assertEqual(sorted(resolved), sorted(["6938", "7336", "7606", "7671", "13572", "14995"]))
+        self.assertEqual(patcher.experiment_record("astropy__astropy-12907"), {"experiment": "rewrite-gemma4-c3-20261106", "generated": False})
+
     def test_import_formats(self) -> None:
         csv_text = "ticket_id,title,steps_to_reproduce\nA-1,Broken,step one|step two\n"
         self.assertEqual(parse_import_payload(csv_text, filename="t.csv")[0]["steps_to_reproduce"], ["step one", "step two"])

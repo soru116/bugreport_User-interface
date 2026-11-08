@@ -6,7 +6,10 @@ const STAGES = [
   ["priority", "優先級判定"],
   ["assignee", "分派負責人"],
   ["localization", "錯誤定位"],
+  ["patch", "補丁生成"],
 ];
+/* Patch generation only runs when an engineer asks for it, so progress counts the first five steps. */
+const MAIN_STAGES = STAGES.filter(([key]) => key !== "patch");
 const STATUS_TEXT = {
   pending: "尚未執行",
   running: "執行中…",
@@ -218,6 +221,7 @@ const QUEUE_PHASE = {
   priority_batch: "優先級判定",
   after: "分派負責人與錯誤定位",
   localize: "錯誤定位",
+  patch: "產生補丁",
 };
 function queueText(q, { short = false } = {}) {
   if (!q) return "";
@@ -268,7 +272,7 @@ function tile(t, terms, showProject = false) {
   const [label] = t.queue && t.queue.state === "waiting" ? ["排隊中"] : TICKET_STATUS[t.busy ? "running" : t.status] || [t.status];
   const h = seed(t.ticket_id || t.key);
   const blobs = `--x1:${15 + (h % 55)}%;--y1:${10 + ((h >>> 6) % 45)}%;--r1:${38 + ((h >>> 12) % 30)}px;--x2:${45 + ((h >>> 17) % 50)}%;--y2:${45 + ((h >>> 22) % 45)}%;--r2:${22 + ((h >>> 27) % 22)}px`;
-  const pebbles = STAGES.map(([key, name]) => {
+  const pebbles = MAIN_STAGES.map(([key, name]) => {
     const s = t.current_stage === key && (t.busy || t.status === "running") ? "running" : t.stage_status[key];
     return `<i data-s="${esc(s)}" title="${esc(name)}：${esc(STATUS_TEXT[s] || s)}"></i>`;
   }).join("");
@@ -278,6 +282,8 @@ function tile(t, terms, showProject = false) {
     t.component ? `<span class="tag">${markTerms(t.component, terms)}</span>` : "",
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
+    t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="補丁和官方測試判定修好的補丁完全相同">官方修好</span>`
+      : t.patch && t.patch.patch_status === "generated" ? `<span class="tag tag-patch" title="已產生補丁，待人工審查">有補丁</span>` : "",
   ].join("");
   const picked = state.selecting && state.picked.has(t.key);
   return `<li class="tile ${state.selecting ? "is-selecting" : ""} ${picked ? "is-picked" : ""}" data-tone="${coverTone(t)}" data-key="${esc(t.key)}">
@@ -660,13 +666,13 @@ function renderDetail() {
   const [label, cls] = TICKET_STATUS[r.busy ? "running" : r.status] || [r.status, ""];
   const awaiting = r.status === "awaiting_duplicate_review";
   const tab = state.tab || "extraction";
-  const doneCount = STAGES.filter(([key]) => ["done", "fallback", "skipped"].includes(stageStatus(r, key))).length;
+  const doneCount = MAIN_STAGES.filter(([key]) => ["done", "fallback", "skipped"].includes(stageStatus(r, key))).length;
   const tabs = STAGES.map(([key, name]) => {
-    const s = stageStatus(r, key);
+    const s = key === "patch" ? patchTabState(r) : stageStatus(r, key);
     const gate = key === "duplicate" && awaiting ? ' data-gate="open"' : "";
     const selected = key === tab;
-    return `<li data-s="${s}"${gate}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
-      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(STATUS_TEXT[s] || s)}</span></button></li>`;
+    return `<li data-s="${s}"${gate}${key === "patch" ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
+      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(key === "patch" ? PATCH_TAB_TEXT[s] || STATUS_TEXT[s] || s : STATUS_TEXT[s] || s)}</span></button></li>`;
   }).join("");
   const logSelected = tab === "log";
   const projectOptions = state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === r.project ? "selected" : ""}>${esc(p.project)}</option>`).join("");
@@ -711,7 +717,7 @@ function renderDetail() {
         <div class="pin-meta">
           <button type="button" class="pin-btn pin-btn-inline ${r.pinned ? "is-on" : ""}" data-action="pin" aria-pressed="${Boolean(r.pinned)}" title="${r.pinned ? "取消釘選" : "釘選到首頁上方"}" aria-label="${r.pinned ? "取消釘選" : "釘選"}">${PIN_ICON}</button>
           <span class="chip ${cls}">${esc(label)}</span>
-          <span class="progress-count">${doneCount} / ${STAGES.length} 步完成</span>
+          <span class="progress-count">${doneCount} / ${MAIN_STAGES.length} 步完成</span>
           <details class="more">
             <summary class="btn btn-quiet btn-small">更多</summary>
             <div class="more-menu">
@@ -757,6 +763,7 @@ function stageFrame(r, key, name, n, inner) {
 }
 
 function renderStage(r, key, name, n, projectOptions) {
+  if (key === "patch") return renderPatchStage(r, n);
   const renderers = {
     extraction: (o, st) => renderExtraction(r, o, st),
     duplicate: (o) => renderDuplicate(r, o),
@@ -1127,6 +1134,121 @@ function renderLocalization(r, o, projectOptions) {
     ${r.busy ? "" : locControls(r, projectOptions)}`;
 }
 
+/* ------------------------------------------------------------------ patch */
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const PATCH_REASON = {
+  no_op: "沒有實際改動",
+  rewrite_no_change: "模型回傳原本的函式，沒有修改",
+  duplicate: "和前一個候選完全相同",
+  signature_changed: "改動了函式的參數（簽名），不允許",
+  rewrite_contract_violation: "輸出格式不符規定（例如多了 Markdown 標記）",
+  undefined_name: "用到不存在的名稱",
+  context_budget_exceeded: "函式太長，超過模型一次能讀的長度",
+  truncated_or_incomplete: "輸出被截斷，函式沒寫完",
+  no_executable_change: "只改了註解或 docstring",
+};
+
+function patchTabState(r) {
+  const s = stageStatus(r, "patch");
+  if (s !== "done") return s === "pending" && stageStatus(r, "localization") === "done" ? "ready" : s;
+  const o = (r.stages.patch || {}).output || {};
+  if (o.official && o.official.official_resolved === true) return "resolved";
+  return o.patch_status === "generated" ? "generated" : "none";
+}
+
+function patchReason(reason) {
+  if (!reason) return "";
+  const [code, ...rest] = String(reason).split(":");
+  const text = PATCH_REASON[code.trim()];
+  return text ? `${text}${rest.length ? `（${rest.join(":").trim()}）` : ""}` : reason;
+}
+
+function diffHtml(patch) {
+  const lines = String(patch || "").replace(/\n$/, "").split("\n").map((line) => {
+    const cls = line.startsWith("+++") || line.startsWith("---") ? "d-file" : line.startsWith("@@") ? "d-hunk" : line.startsWith("+") ? "d-add" : line.startsWith("-") ? "d-del" : "";
+    return `<span class="${cls}">${esc(line) || " "}</span>`;
+  }).join("");
+  return `<pre class="diff">${lines}</pre>`;
+}
+
+function officialBox(official, { mine = true } = {}) {
+  if (!official) {
+    return mine ? `<div class="verdict verdict-none"><b>沒有官方判定</b><span>這個補丁沒有送過官方 SWE-bench 測試，只通過了語法、AST 與 git apply 檢查。</span></div>` : "";
+  }
+  const ok = official.official_resolved === true;
+  return `<div class="verdict ${ok ? "verdict-ok" : "verdict-ng"}"><b>官方 SWE-bench 測試：${ok ? "修好了" : "沒有修好"}</b>
+    <span>${ok ? "FAIL_TO_PASS 全部通過，PASS_TO_PASS 沒有退步。" : "官方測試沒有全部通過。"}${mine ? "這個補丁和送測的補丁 sha256 完全相同，所以可以引用這個判定。" : ""}</span>
+    <span class="hint">判定紀錄 <code>${esc(official.run_id || "")}</code></span></div>`;
+}
+
+function experimentBox(exp, currentSha) {
+  if (!exp) return "";
+  const head = `<h4 class="sub-head">36 題實驗中的紀錄 <code>${esc(exp.experiment)}</code></h4>`;
+  if (!exp.generated) return `<div class="exp-box">${head}<p class="hint">這張 Ticket 是 36 題開發集的一題，那一輪沒有產生通過檢查的補丁。</p></div>`;
+  const same = currentSha && exp.patch_sha256 === currentSha;
+  const relation = currentSha ? (same ? "和這次產生的補丁<b>完全相同</b>。" : "和這次產生的補丁<b>不同</b>：同樣的設定重跑，模型輸出不一定一樣。") : "";
+  return `<div class="exp-box">${head}
+    <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
+    ${officialBox(exp.official, { mine: false })}
+    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${diffHtml(exp.patch)}</details></div>`;
+}
+
+function renderPatchStage(r, n) {
+  const stage = r.stages.patch || {};
+  const s = stageStatus(r, "patch");
+  const tabState = patchTabState(r);
+  const locDone = stageStatus(r, "localization") === "done";
+  const loc = (r.stages.localization || {}).output || {};
+  const chipCls = { resolved: "chip-done", generated: "chip-done", none: "chip-fallback", failed: "chip-failed", running: "chip-running" }[tabState] || "";
+  const level = { high: "高", medium: "中", low: "低" }[loc.confidence_level] || loc.confidence_level || "—";
+  const method = `<p class="patch-method">用錯誤定位排名最前、可以改寫的函式，請 <b>gemma4:12b</b> 重寫整個函式，產生 <b>3 個候選</b>；通過語法、AST 與 git apply 檢查的候選中，取改動最少的一個。設定和官方修好 6/36 題的那一輪相同（fixed-patch <code>5cdb2be</code>）。</p>`;
+  const button = (again) => `<button class="btn ${again ? "btn-quiet" : "btn-primary"} btn-small" data-action="patch" ${again ? 'data-again="1"' : ""} ${r.busy || !locDone ? "disabled" : ""}>${again ? "重新產生" : "產生補丁"}</button>`;
+  let content;
+  if (s === "running" || (r.queue && r.queue.phase === "patch")) {
+    content = `${method}<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生補丁，完成後會自動更新。"}</p>`;
+  } else if (s === "pending") {
+    const lowNote = locDone && loc.confidence_level !== "high"
+      ? `<p class="loc-note">這張 Ticket 的錯誤定位信心是「${esc(level)}」。正式流程只在高信心時才產生補丁；這裡照 6/36 實驗的研究模式也會產生，但結果一定要人工審查。</p>` : "";
+    content = locDone
+      ? `${method}${lowNote}<div class="loc-controls">${button(false)}<span class="hint">一張大約幾分鐘，需要這台電腦的 Ollama 已安裝 gemma4:12b。</span></div>`
+      : `${method}<p class="stage-pending">要先完成錯誤定位，才能產生補丁。</p>`;
+  } else if (s === "failed") {
+    content = `<p class="err">${esc(stage.error || "")}</p>${method}<div class="loc-controls">${button(false)}</div>`;
+  } else {
+    const o = stage.output || {};
+    const warnings = (stage.warnings || []).length ? `<ul class="warn-list">${stage.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
+    const target = o.bug_location || {};
+    const generated = (o.candidates || []).filter((c) => c.status === "generated").length;
+    const candRows = (o.candidates || []).map((c) => `<tr class="${c.candidate_id === o.selected_candidate_id ? "is-selected" : ""}">
+        <td>${esc(c.candidate_id)}</td><td class="mono">${esc(c.seed)}</td>
+        <td>${c.status === "generated" ? (c.candidate_id === o.selected_candidate_id ? "<b>選用</b>" : "通過檢查") : "被擋下"}</td>
+        <td>${esc(patchReason(c.reason)) || (c.modified_files || []).map(esc).join("、")}</td></tr>`).join("");
+    const summary = `<div class="loc-summary">
+        <span>結果 <span class="chip ${chipCls}">${esc(PATCH_TAB_TEXT[tabState] || tabState)}</span></span>
+        <span>改寫目標 <b class="mono">${esc(target.file || "—")}</b> <b>${esc(target.function || "")}</b>${o.target_rank ? `（定位第 ${esc(o.target_rank)} 名${o.target_fallback_used ? "，前面的候選不能改寫" : ""}）` : ""}</span>
+        <span>候選 ${generated} / ${(o.candidates || []).length} 個通過檢查</span>
+        <span>定位信心 <b>${esc(level)}</b></span>
+      </div>`;
+    const diff = o.patch_status === "generated"
+      ? `${officialBox(o.official)}<h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${diffHtml(o.patch)}`
+      : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
+    content = `${warnings}${summary}${diff}
+      <h4 class="sub-head">3 個候選</h4>
+      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>
+      <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
+  }
+  const exp = experimentBox(r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "");
+  const foot = stage.module && s !== "running" ? `<div class="stage-foot">
+      <span>使用模組 <b>${esc(stage.module)}</b></span>
+      <span>程式 <code>${esc(stage.implementation || "")}</code></span>
+      ${stage.duration_ms != null ? `<span>耗時 ${(stage.duration_ms / 1000).toFixed(1)} 秒</span>` : ""}
+      ${(stage.output || {}).model && stage.output.model.model ? `<span>模型 <code>${esc(stage.output.model.model)}</code></span>` : ""}
+    </div>` : "";
+  return `<section class="stage" id="stage-patch">
+    <div class="stage-head"><h3><span class="num">${n}</span>補丁生成</h3><span class="chip ${chipCls}">${esc(PATCH_TAB_TEXT[tabState] || STATUS_TEXT[tabState] || tabState)}</span></div>
+    <div class="stage-body">${content}${exp}</div>${foot}</section>`;
+}
+
 /* ---------------------------------------------------------------- actions */
 async function onDetailClick(event) {
   const opener = event.target.closest("[data-compare]");
@@ -1145,6 +1267,7 @@ async function onDetailClick(event) {
   try {
     btn.disabled = true;
     if (["rerun", "not-duplicate", "is-duplicate", "localize", "localize-other"].includes(btn.dataset.action)) state.tabPinned = false;
+    if (btn.dataset.action === "patch") state.tab = "patch";
     switch (btn.dataset.action) {
       case "rerun":
         await post(`${path}/run`);
@@ -1170,6 +1293,11 @@ async function onDetailClick(event) {
         toast(`負責人已確認為 ${who}`);
         break;
       }
+      case "patch":
+        if (btn.dataset.again && !confirm("重新產生會用同樣的設定再跑一次，結果可能和這次不同（模型輸出不是逐位元可重現）。目前的補丁會被取代。確定嗎？")) { btn.disabled = false; return; }
+        await post(`${path}/patch`);
+        toast("已開始產生補丁，完成後會自動更新");
+        break;
       case "localize":
         await post(`${path}/localize`, { project: btn.dataset.project });
         toast("已開始錯誤定位");
@@ -1357,7 +1485,8 @@ async function openStatus() {
   $("#configPath").textContent = report.config.config_path || "（未指定設定檔，使用預設值）";
   $("#statusBody").innerHTML = `<div class="status-grid">${STAGES.map(([key]) => {
     const s = report.stages[key];
-    return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${s.ready ? "可用訓練模型／資料" : "會使用備援或略過"}</span></h4><ul>
+    const chip = key === "patch" ? (s.ready ? "可以手動執行" : "目前無法使用") : (s.ready ? "可用訓練模型／資料" : "會使用備援或略過");
+    return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4><ul>
       ${s.checks.map((c) => `<li><span class="${c.ok ? "ok" : c.required ? "ng" : "opt"}">${c.ok ? "✓" : c.required ? "✗" : "○"}</span><span>${esc(c.label)}</span>${c.detail ? `<span class="d">${esc(c.detail)}</span>` : ""}</li>`).join("")}
     </ul></div>`;
   }).join("")}</div>`;

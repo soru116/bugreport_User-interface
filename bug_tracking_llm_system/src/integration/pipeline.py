@@ -7,6 +7,7 @@ manual-triage routing result does not pause the pipeline).
 
 from __future__ import annotations
 
+import json
 import threading
 import traceback
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from integration.config import IntegrationConfig
 from integration.duplicate import TeamDuplicateDetector
 from integration.extraction import ToJsonExtractor, raw_ticket_id, raw_title
 from integration.localization import ProjectLocalizer
+from integration.patch import TeamPatchGenerator
 from integration.priority import TeamPriorityPredictor
 from integration.store import TicketStore
 from modules.assignee_feedback import append_assignee_feedback, build_assignee_feedback_record
@@ -30,7 +32,10 @@ STAGE_LABELS = {
     "priority": "優先級判定",
     "assignee": "分派負責人",
     "localization": "錯誤定位",
+    "patch": "補丁生成",
 }
+# Patch generation runs only when an engineer asks for it, after localization; it is not part of the
+# automatic flow above and is cleared whenever localization changes.
 TERMINAL_STATUSES = {"duplicate", "processed", "failed"}
 
 
@@ -45,6 +50,7 @@ class IntegratedPipeline:
         priority_predictor: TeamPriorityPredictor | None = None,
         assignee_recommender: TeamAssigneeRecommender | None = None,
         localizer: ProjectLocalizer | None = None,
+        patcher: TeamPatchGenerator | None = None,
     ) -> None:
         self.config = config
         self.store = store or TicketStore(config.store_dir)
@@ -55,12 +61,14 @@ class IntegratedPipeline:
             config, extra_history_path=self.store.history_path
         )
         self.localizer = localizer or ProjectLocalizer(config)
+        self.patcher = patcher or TeamPatchGenerator(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
         # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
         # localization) use different models, so the two phases may run at the same time on different
         # tickets; each phase is still one-at-a-time. All record writes go through the store's lock.
         self._run_lock = threading.Lock()
         self._after_lock = threading.Lock()
+        self._patch_lock = threading.Lock()  # one model call at a time on the GPU
 
     # ------------------------------------------------------------------ import
     def import_raw(self, raws: list[dict[str, Any]], *, source: str, project: str = "") -> list[dict[str, Any]]:
@@ -121,7 +129,7 @@ class IntegratedPipeline:
             if extra:
                 extra(record)
 
-        if stage in {"duplicate", "priority", "localization"} and result.get("output"):
+        if stage in {"duplicate", "priority", "localization", "patch"} and result.get("output"):
             self.store.write_artifact(key, f"{stage}_result.json", result)
         return self.store.update(key, mutate)
 
@@ -329,6 +337,8 @@ class IntegratedPipeline:
                 def finish(rec: dict[str, Any]) -> None:
                     rec["status"] = "processed" if rec["status"] == "running" else rec["status"]
                     rec["current_stage"] = ""
+                    if rec["stages"].pop("patch", None):
+                        self._event(rec, "錯誤定位結果變了，先前產生的補丁已清除")
                     rec["attention"] = [item for item in rec.get("attention", []) if "定位" not in item]
                     if result["status"] in {"skipped", "failed"}:
                         rec["attention"].append("未完成錯誤定位")
@@ -338,6 +348,49 @@ class IntegratedPipeline:
                 return self._set_stage(key, "localization", result, extra=finish)
             except Exception as exc:  # pragma: no cover
                 return self._fail(key, "localization", exc)
+
+    # ------------------------------------------------------ patch (on demand)
+    def patch_precheck(self, key: str) -> dict[str, Any]:
+        """Raise ValueError with a readable reason when the patch step cannot start."""
+
+        record = self.get(key)
+        localization = record["stages"].get("localization") or {}
+        if localization.get("status") != "done":
+            raise ValueError("要先完成錯誤定位，才能產生補丁。")
+        if not self.store.artifact_path(key, "bug_location_raw.json").is_file():
+            raise ValueError("找不到這張 Ticket 的錯誤定位原始結果，請按「重新定位」後再試。")
+        if self.config.project(record.get("project")) is None:
+            raise ValueError("這張 Ticket 沒有對應的專案程式碼。")
+        return record
+
+    def generate_patch(self, key: str) -> dict[str, Any]:
+        with self._patch_lock:
+            record = self.patch_precheck(key)
+            previous = {"status": record["status"], "current_stage": record.get("current_stage", "")}
+
+            def running(rec: dict[str, Any]) -> None:
+                rec["status"], rec["current_stage"] = "running", "patch"
+                rec["stages"]["patch"] = {"stage": "patch", "status": "running", "started_at": utc_now()}
+
+            self.store.update(key, running)
+            try:
+                raw = json.loads(self.store.artifact_path(key, "bug_location_raw.json").read_text(encoding="utf-8"))
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                output_dir = self.store.artifact_path(key, "patch_runs") / stamp
+                result = self.patcher.generate(record, self.config.project(record.get("project")), raw, output_dir=output_dir)
+            except Exception as exc:  # pragma: no cover - defensive; the patcher reports its own failures
+                result = stage_result(stage="patch", status="failed", module="補丁生成", implementation="", error=f"{type(exc).__name__}: {exc}",
+                                      details={"traceback": traceback.format_exc()[-3000:]})
+
+            def finish(rec: dict[str, Any]) -> None:
+                rec["status"], rec["current_stage"] = previous["status"], previous["current_stage"]
+                attention = [item for item in rec.get("attention", []) if "補丁" not in item]
+                output = result.get("output") or {}
+                if result["status"] == "done" and output.get("patch_status") == "generated":
+                    attention.append("補丁待人工審查")
+                rec["attention"] = attention
+
+            return self._set_stage(key, "patch", result, extra=finish)
 
     # ------------------------------------------------- duplicate review aids
     def find_history_ticket(self, ticket_id: str) -> dict[str, Any] | None:

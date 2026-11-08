@@ -49,6 +49,19 @@
     "include_code_preview": true
   },
 
+  "patch": {
+    "_說明": "補丁生成（手動執行）。程式在 repo 根目錄的 patch/rewrite-gemma4-5cdb2be（官方修好 6/36 題的版本）；方法設定固定，這裡只調模型服務與取樣。需要 ollama pull gemma4:12b。",
+    "enabled": true,
+    "ollama_url": "http://localhost:11434",
+    "model": "gemma4:12b",
+    "candidates": 3,
+    "seed": 42,
+    "temperature": 0.2,
+    "num_ctx": 16384,
+    "max_new_tokens": 2048,
+    "timeout_seconds": 600
+  },
+
   "projects": {
     "duplicate-detection": {
       "repo_path": "../bug-duplicate-detection",

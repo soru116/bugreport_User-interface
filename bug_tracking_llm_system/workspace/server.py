@@ -38,7 +38,7 @@ from integration.status import readiness_report  # noqa: E402
 
 
 MAX_BODY_BYTES = 20_000_000
-ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json"}
+ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json", "patch_result.json"}
 
 
 def _coarse(seconds: float) -> int:
@@ -90,7 +90,8 @@ class WorkspaceApp:
     #   * the after worker runs priority, assignee and localization. Every ticket that is ready at that
     #     moment gets its priority from ONE PRI call, because build_features re-reads the whole history
     #     on each call and a batch costs about the same as a single ticket.
-    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0}
+    #   * the patch worker runs patch generation (gemma4:12b on the GPU), only when an engineer asks.
+    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0, "patch": 240.0}
     BATCH_WAIT_SECONDS = 90.0  # how long a ready ticket may wait for others still in duplicate detection
 
     def _start_worker(self) -> None:
@@ -99,6 +100,7 @@ class WorkspaceApp:
         self._avg = dict(self.DEFAULT_SECONDS)
         threading.Thread(target=self._worker, args=("review",), name="review-worker", daemon=True).start()
         threading.Thread(target=self._worker, args=("after",), name="after-worker", daemon=True).start()
+        threading.Thread(target=self._worker, args=("patch",), name="patch-worker", daemon=True).start()
 
     def _submit(self, key: str, kind: str, **kwargs: Any) -> bool:
         with self._cv:
@@ -128,6 +130,9 @@ class WorkspaceApp:
         if lane == "review":
             jobs = [job for job in waiting if job["kind"] == "full"]
             return ("review", jobs[:1]) if jobs else None
+        if lane == "patch":
+            jobs = [job for job in waiting if job["kind"] == "patch"]
+            return ("patch", jobs[:1]) if jobs else None
         jobs = [job for job in waiting if job["kind"] in ("after", "localize")]
         if not jobs:
             return None
@@ -184,6 +189,11 @@ class WorkspaceApp:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
+                elif phase == "patch":
+                    job = batch[0]
+                    pipeline.generate_patch(job["key"])
+                    self._record("patch", time.time() - job["started_at"])
+                    self._finish(job)
                 else:
                     job = batch[0]
                     pipeline.rerun_localization(job["key"], project=job.get("project"))
@@ -201,6 +211,13 @@ class WorkspaceApp:
         for record in self.pipeline.store.list():
             key, status = record["key"], record.get("status")
             decision = (record.get("decisions") or {}).get("duplicate") or {}
+            if status == "running" and record.get("current_stage") == "patch":
+                def stop_patch(rec: dict[str, Any]) -> None:  # the earlier steps were already finished
+                    rec["status"], rec["current_stage"] = "processed", ""
+                    rec["stages"]["patch"] = {"stage": "patch", "status": "failed", "module": "補丁生成",
+                                              "error": "伺服器在產生補丁時停止，請重新按「產生補丁」。"}
+                self.pipeline.store.update(key, stop_patch)
+                continue
             if status == "running" and decision.get("decision") == "not_duplicate":
                 def reset(rec: dict[str, Any]) -> None:
                     rec["status"], rec["current_stage"] = "ready_to_continue", ""
@@ -231,6 +248,12 @@ class WorkspaceApp:
 
             if job["active"]:
                 return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1), "eta_seconds": _coarse(remaining(job))}
+            if job["kind"] == "patch":
+                running = [item for item in self._queue if item["active"] and item["phase"] == "patch"]
+                waiting = [item for item in self._queue if item["kind"] == "patch" and not item["active"]]
+                index = waiting.index(job)
+                eta = sum(remaining(item) for item in running) + (index + 1) * avg["patch"]
+                return {"state": "waiting", "phase": "patch", "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
             if job["kind"] == "full":
                 running = [item for item in self._queue if item["active"] and item["phase"] == "review"]
                 waiting = [item for item in self._queue if item["kind"] == "full" and not item["active"]]
@@ -317,6 +340,11 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return self._submit(key, "localize", project=project)
 
+    def generate_patch(self, key: str) -> bool:
+        self.maybe_reload_config()
+        self.pipeline.patch_precheck(key)  # readable error right away instead of a failed job
+        return self._submit(key, "patch")
+
     def build_index(self, project_name: str) -> dict[str, Any]:
         project = self.config.project(project_name)
         if project is None:
@@ -371,6 +399,11 @@ class WorkspaceApp:
             "attention": record.get("attention", []),
             "priority": priority,
             "stage_status": {name: stages.get(name, {}).get("status", "pending") for name in STAGES},
+            "patch": {
+                "status": stages.get("patch", {}).get("status", ""),
+                "patch_status": (stages.get("patch", {}).get("output") or {}).get("patch_status", ""),
+                "official_resolved": ((stages.get("patch", {}).get("output") or {}).get("official") or {}).get("official_resolved"),
+            },
             "created_at": record.get("created_at"),
             "updated_at": record.get("updated_at"),
             "busy": self.busy(record["key"]),
@@ -381,6 +414,10 @@ class WorkspaceApp:
         record = self.pipeline.get(key)
         record["busy"] = self.busy(key)
         record["queue"] = self.queue_info(key)
+        try:  # what the 6/36 patch run produced for this ticket, if it is one of the 36
+            record["patch_experiment"] = self.pipeline.patcher.experiment_record(str(record.get("ticket_id") or ""))
+        except Exception:
+            record["patch_experiment"] = None
         return record
 
     def projects(self) -> list[dict[str, Any]]:
@@ -568,6 +605,9 @@ class Handler(SimpleHTTPRequestHandler):
                         note=str(body.get("note") or ""),
                     )
                     return self._json({"decisions": record["decisions"]})
+                if action == "patch":
+                    app.generate_patch(key)
+                    return self._json({"started": True})
                 if action == "localize":
                     project = body.get("project")
                     app.relocalize(key, str(project) if project else None)
@@ -621,10 +661,13 @@ def main() -> None:
         raise SystemExit(1)
     print(f"設定檔：{config.config_path or '（未指定，使用預設值）'}")
     report = readiness_report(config, store_history_path=Handler.app.pipeline.store.history_path, check_services=False)
-    for name in STAGES:
+    for name in (*STAGES, "patch"):
         stage = report["stages"][name]
         missing = [check["label"] for check in stage["checks"] if check["required"] and not check["ok"]]
-        state = "使用訓練模型／資料" if stage["ready"] else "會使用備援：缺 " + "、".join(missing)
+        if name == "patch":
+            state = f"可手動執行（{config.patch.model}）" if stage["ready"] else "無法使用：缺 " + "、".join(missing)
+        else:
+            state = "使用訓練模型／資料" if stage["ready"] else "會使用備援：缺 " + "、".join(missing)
         print(f"  {STAGE_LABELS[name]}：{state}")
     print(f"Ticket 工作台：http://{args.host}:{args.port}  （資料存放於 {config.store_dir}）")
     print("按 Ctrl + C 停止伺服器。")
