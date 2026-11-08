@@ -777,3 +777,8 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .track li[data-optional][data-s="generated"] .node::before, .track li[data-optional][data-s="resolved"] .node::before { content: "✓"; }
 .track li[data-optional][data-s="none"] .node { background: var(--fallback-soft); border-color: var(--fallback-mark); color: var(--fallback); }
 .track li[data-optional][data-s="none"] .node::before { content: "–"; }
+
+.patch-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; }
+.patch-head .sub-head { margin: 0; }
+.patch-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+details.raw > .patch-tools { margin: 8px 0; }

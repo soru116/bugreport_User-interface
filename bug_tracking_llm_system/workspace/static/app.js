@@ -660,6 +660,7 @@ function selectTab(tab, { pinned = true } = {}) {
 }
 
 function renderDetail() {
+  PATCH_TEXTS.clear();
   const body = $("#detailBody");
   const r = state.detail;
   if (!state.selected || !r) { body.innerHTML = ""; return; }
@@ -1163,6 +1164,51 @@ function patchReason(reason) {
   return text ? `${text}${rest.length ? `（${rest.join(":").trim()}）` : ""}` : reason;
 }
 
+/* Patch texts shown on the page, so the copy/download buttons get the exact bytes (not the HTML). */
+const PATCH_TEXTS = new Map();
+
+function patchTools(patch, filename) {
+  const id = `p${PATCH_TEXTS.size + 1}`;
+  PATCH_TEXTS.set(id, { patch: String(patch || ""), filename });
+  return `<div class="patch-tools">
+      <button type="button" class="btn btn-quiet btn-small" data-copy-patch="${id}">複製補丁</button>
+      <button type="button" class="btn btn-quiet btn-small" data-download-patch="${id}">下載 .diff</button>
+    </div>`;
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+
+function downloadText(text, filename) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/x-diff;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function diffFileName(r, suffix = "") {
+  return `${String(r.ticket_id || r.key).replace(/[^\w.-]+/g, "_")}${suffix}.diff`;
+}
+
 function diffHtml(patch) {
   const lines = String(patch || "").replace(/\n$/, "").split("\n").map((line) => {
     const cls = line.startsWith("+++") || line.startsWith("---") ? "d-file" : line.startsWith("@@") ? "d-hunk" : line.startsWith("+") ? "d-add" : line.startsWith("-") ? "d-del" : "";
@@ -1181,7 +1227,7 @@ function officialBox(official, { mine = true } = {}) {
     <span class="hint">判定紀錄 <code>${esc(official.run_id || "")}</code></span></div>`;
 }
 
-function experimentBox(exp, currentSha) {
+function experimentBox(exp, currentSha, filename) {
   if (!exp) return "";
   const head = `<h4 class="sub-head">36 題實驗中的紀錄 <code>${esc(exp.experiment)}</code></h4>`;
   if (!exp.generated) return `<div class="exp-box">${head}<p class="hint">這張 Ticket 是 36 題開發集的一題，那一輪沒有產生通過檢查的補丁。</p></div>`;
@@ -1190,7 +1236,7 @@ function experimentBox(exp, currentSha) {
   return `<div class="exp-box">${head}
     <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
     ${officialBox(exp.official, { mine: false })}
-    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${diffHtml(exp.patch)}</details></div>`;
+    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename)}${diffHtml(exp.patch)}</details></div>`;
 }
 
 function renderPatchStage(r, n) {
@@ -1230,14 +1276,16 @@ function renderPatchStage(r, n) {
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${diffHtml(o.patch)}`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r))}</div>${diffHtml(o.patch)}`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
+    const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
+      .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`))}${diffHtml(c.patch)}</details>`).join("");
     content = `${warnings}${summary}${diff}
-      <h4 class="sub-head">3 個候選</h4>
-      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>
+      <h4 class="sub-head">${(o.candidates || []).length} 個候選</h4>
+      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
       <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
   }
-  const exp = experimentBox(r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "");
+  const exp = experimentBox(r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
   const foot = stage.module && s !== "running" ? `<div class="stage-foot">
       <span>使用模組 <b>${esc(stage.module)}</b></span>
       <span>程式 <code>${esc(stage.implementation || "")}</code></span>
@@ -1259,6 +1307,18 @@ async function onDetailClick(event) {
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
+  const copyBtn = event.target.closest("[data-copy-patch]");
+  if (copyBtn) {
+    const item = PATCH_TEXTS.get(copyBtn.dataset.copyPatch);
+    if (item) toast(await copyText(item.patch) ? "已複製補丁" : "複製失敗，請改用「下載 .diff」");
+    return;
+  }
+  const downloadBtn = event.target.closest("[data-download-patch]");
+  if (downloadBtn) {
+    const item = PATCH_TEXTS.get(downloadBtn.dataset.downloadPatch);
+    if (item) { downloadText(item.patch, item.filename); toast(`已下載 ${item.filename}`); }
+    return;
+  }
   const btn = event.target.closest("[data-action]");
   if (!btn || !state.detail) return;
   const key = state.detail.key;
