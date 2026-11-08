@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-14213-20261025-004445",
+  "instance_id": "astropy__astropy-14213",
+  "patch_sha256": "792e8feafad36bd4d6672b0010a119b4d5d78fc1cefb58af11abf5fe153b1361",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: DeprecationWarning: `sometrue` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `any` instead.\nWarning-as-error: DeprecationWarning: `alltrue` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `all` instead.\nWarning-as-error: DeprecationWarning: `product` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `prod` instead.\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_sometrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_alltrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_product\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_cumproduct\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncLike::test_round_\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestHistogramFunctions::test_histogram_range[range0]\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestHistogramFunctions::test_histogram_range[range1]\nTraceback context:\nastropy/units/tests/test_quantity_non_ufuncs.py:633:\nastropy/units/tests/test_quantity_non_ufuncs.py:637:\nastropy/units/tests/test_quantity_non_ufuncs.py:645:\nastropy/units/tests/test_quantity_non_ufuncs.py:653:\nastropy/units/tests/test_quantity_non_ufuncs.py:662:\nastropy/units/tests/test_quantity_non_ufuncs.py:76: in check\nastropy/units/tests/test_quantity_non_ufuncs.py:1405:\nastropy/units/tests/test_quantity_non_ufuncs.py:1314: in check\nastropy/units/quantity.py:1849: in __array_function__\nastropy/units/quantity.py:699: in __array_ufunc__\nastropy/units/quantity.py:644: in __array_ufunc__\nastropy/units/quantity_helper/converters.py:207: UnitConversionError\nastropy/units/tests/test_quantity_non_ufuncs.py:1440: AssertionError\nastropy/units/quantity.py:1648: AttributeError\nastropy/units/quantity.py:976:\nastropy/units/core.py:1129: UnitConversionError\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestHistogramFunctions::test_histogram_range[range0]\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestHistogramFunctions::test_histogram_range[range1]\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestHistogramFunctions::test_histogram_bin_edges_range[range0]\nFAIL_TO_PASS failed test: astropy",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-14213-20261025-004445",
+      "instance_id": "astropy__astropy-14213",
+      "patch_sha256": "792e8feafad36bd4d6672b0010a119b4d5d78fc1cefb58af11abf5fe153b1361",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 435753,
+        "captured_bytes": 435753,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 435753
+          }
+        ],
+        "original_sha256": "b49c2f1da8529af192a81954af2c3cc34f32e6e342f61df60faa27b33b1b3048",
+        "captured_sha256": "b49c2f1da8529af192a81954af2c3cc34f32e6e342f61df60faa27b33b1b3048",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 30909,
+        "captured_bytes": 30909,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 30909
+          }
+        ],
+        "original_sha256": "c77aaf3aad7484d0c58fb5aec484eb606db0a39578ed23d9d5768537b9cb1630",
+        "captured_sha256": "c77aaf3aad7484d0c58fb5aec484eb606db0a39578ed23d9d5768537b9cb1630",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

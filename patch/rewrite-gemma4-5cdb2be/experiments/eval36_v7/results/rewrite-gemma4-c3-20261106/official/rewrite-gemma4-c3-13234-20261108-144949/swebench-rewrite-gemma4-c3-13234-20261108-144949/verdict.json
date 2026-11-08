@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-13234-20261108-144949",
+  "instance_id": "astropy__astropy-13234",
+  "patch_sha256": "8fceb84b01efd2af69ab098fc46bc45376d518614552f0d62508b89d54352542",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "KeyError: 'a'\nTypeError: concatenate() got an unexpected keyword argument 'dtype'\nAssertionError: assert <class 'astropy.time.core.Time'> is <class 'astropy.table.column.Column'>\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_structured_input\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_ascii_read_class\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_qtable_to_table\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_as_one[Table]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_as_one[QTable]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col0]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col1]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col2]\nTraceback context:\nastropy/io/ascii/tests/test_ecsv.py:219:\nastropy/table/table.py:1879: in __getitem__\nastropy/table/table.py:246: KeyError\nastropy/io/ascii/tests/test_ecsv.py:306:\nastropy/table/connect.py:129: in __call__\nastropy/io/registry/core.py:369: in write\nastropy/io/ascii/connect.py:26: in io_write\nastropy/io/ascii/ui.py:861: in write\nastropy/io/ascii/core.py:1500: in write\nastropy/io/ascii/ecsv.py:486: in update_table_data\nastropy/table/serialize.py:264: in represent_mixins_as_columns\nastropy/table/serialize.py:115: in _represent_mixin_as_column\nastropy/coordinates/sky_coordinate.py:93: in _represent_as_dict\nastropy/utils/data_info.py:389: in _represent_as_dict\nastropy/utils/data_info.py:172: in _get_obj_attrs_map\nastropy/coordinates/sky_coordinate.py:849: in __getattr__\nastropy/coordinates/baseframe.py:1630: in __getattr__\nastropy/coordinates/baseframe.py:1074: in represent_as\nastropy/coordinates/representation.py:2005: in represent_as\nastropy/coordinates/representation.py:877: in represent_as\nastropy/coordinates/representation.py:827: in _re_represent_differentials\nastropy/coordinates/representation.py:3217: in represent_as\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col24]\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col25]\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-QTable-name_col24]\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_col",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-13234-20261108-144949",
+      "instance_id": "astropy__astropy-13234",
+      "patch_sha256": "8fceb84b01efd2af69ab098fc46bc45376d518614552f0d62508b89d54352542",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 663775,
+        "captured_bytes": 663775,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 663775
+          }
+        ],
+        "original_sha256": "297c7d71a96c5e0ca9017502296fa8b49e5adc9ad4ea10355bca7d9eb99306ed",
+        "captured_sha256": "297c7d71a96c5e0ca9017502296fa8b49e5adc9ad4ea10355bca7d9eb99306ed",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 33794,
+        "captured_bytes": 33794,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 33794
+          }
+        ],
+        "original_sha256": "3da60489f83907789118eb11ed1377be8b63b81a1bef19f71603383b7e2f3210",
+        "captured_sha256": "3da60489f83907789118eb11ed1377be8b63b81a1bef19f71603383b7e2f3210",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

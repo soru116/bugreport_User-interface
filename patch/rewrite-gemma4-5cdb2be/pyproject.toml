@@ -1,0 +1,49 @@
+[project]
+name = "bug-tracking-llm-system"
+version = "0.1.0"
+description = "Integrated bug tracking and repair pipeline following bug_tracking_llm_system_code_flow_plan.md."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+patch-pipeline = "fim_patch.cli:main"
+
+[project.optional-dependencies]
+ml = [
+  "joblib>=1.3",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "pyarrow>=14",
+  "scikit-learn>=1.3",
+  "requests>=2.31",
+]
+fault-localization = [
+  "sentence-transformers>=2.7",
+]
+datasets = [
+  "pandas>=2.0",
+  "pyarrow>=14",
+]
+test-research = [
+  "pandas>=2.0,<3.0",
+  "tokenizers>=0.22.2,<0.23",
+  "PyYAML>=6.0,<7",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# "pytest -q" from the repository root walks every directory, runs/ included.
+# runs/ is gitignored scratch -- a copy of a test file left there is collected
+# as a second, unimportable module and aborts the whole suite at collection.
+testpaths = ["tests"]
+norecursedirs = ["runs", "_codex_branch", "_my_backup_*", "__MACOSX", ".git"]

@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-7746-20261108-145823",
+  "instance_id": "astropy__astropy-7746",
+  "patch_sha256": "1b56edaf81fc61d66023f7ae471ba98e2a2652e2529d9d9a3faf0b593a79f8cc",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.\nFAIL_TO_PASS failed test: astropy/wcs/tests/test_wcs.py::test_zero_size_input",
+  "feedback_source": "structured_report",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-7746-20261108-145823",
+      "instance_id": "astropy__astropy-7746",
+      "patch_sha256": "1b56edaf81fc61d66023f7ae471ba98e2a2652e2529d9d9a3faf0b593a79f8cc",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 446671,
+        "captured_bytes": 446671,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 446671
+          }
+        ],
+        "original_sha256": "75e082124edb806c2b4f57e4ca81878da3767b06f3b689a34b2e6bb305792256",
+        "captured_sha256": "75e082124edb806c2b4f57e4ca81878da3767b06f3b689a34b2e6bb305792256",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 7132,
+        "captured_bytes": 7132,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 7132
+          }
+        ],
+        "original_sha256": "ce14a8c5bd616ead1801f2d4e590b66f3dd50a38a8fe8eecd995d3a390043317",
+        "captured_sha256": "ce14a8c5bd616ead1801f2d4e590b66f3dd50a38a8fe8eecd995d3a390043317",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

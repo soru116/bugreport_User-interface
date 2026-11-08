@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-13477-20261108-145123",
+  "instance_id": "astropy__astropy-13477",
+  "patch_sha256": "f2d22bc76565d43a65e4f8932d8c01e36a628b9b1b67ae9c04dc843e34fe859d",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: astropy.utils.iers.iers.IERSStaleWarning: leap-second file is expired.\nWarning-as-error: astropy.utils.exceptions.AstropyWarning: leap-second auto-update failed due to the following exception: IERSStaleWarning('leap-second file is expired.')\nAssertion evidence: assert <ICRS Coordinate: (ra, dec) in deg\\n    (0., 0.)> == <SkyCoord (ICRS): (ra, dec) in deg\\n    (0., 0.)>\nFAILED astropy/coordinates/tests/test_frames.py::test_no_data_nonscalar_frames\nFAILED astropy/coordinates/tests/test_frames.py::test_frame_coord_comparison\nTraceback context:\nastropy/time/core.py:3071:\nastropy/utils/iers/iers.py:1074: IERSStaleWarning\nastropy/coordinates/tests/test_frames.py:227:\nastropy/time/core.py:2392: in __add__\nastropy/time/core.py:667: in _set_scale\nastropy/time/core.py:3042: in _check_leapsec\nastropy/time/core.py:3075: AstropyWarning\nastropy/coordinates/tests/test_frames.py:1518: AssertionError\n/tmp/pip-build-env-wp5cetde/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nFAIL_TO_PASS failed test: astropy/coordinates/tests/test_frames.py::test_frame_coord_comparison",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-13477-20261108-145123",
+      "instance_id": "astropy__astropy-13477",
+      "patch_sha256": "f2d22bc76565d43a65e4f8932d8c01e36a628b9b1b67ae9c04dc843e34fe859d",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 312697,
+        "captured_bytes": 312697,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 312697
+          }
+        ],
+        "original_sha256": "0acd56682cca59f72e4f5f6a9ff32f6aef46c1f1d9ee3731f03bc212f4bdf290",
+        "captured_sha256": "0acd56682cca59f72e4f5f6a9ff32f6aef46c1f1d9ee3731f03bc212f4bdf290",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 8644,
+        "captured_bytes": 8644,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 8644
+          }
+        ],
+        "original_sha256": "16744706bdc030ab7b79128b973558096378a46576f6528019b0a20dfbd4c9b0",
+        "captured_sha256": "16744706bdc030ab7b79128b973558096378a46576f6528019b0a20dfbd4c9b0",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

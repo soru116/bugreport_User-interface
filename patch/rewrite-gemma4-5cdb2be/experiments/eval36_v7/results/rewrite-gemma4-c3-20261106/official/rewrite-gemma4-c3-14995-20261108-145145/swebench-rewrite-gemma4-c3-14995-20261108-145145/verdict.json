@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-14995-20261108-145145",
+  "instance_id": "astropy__astropy-14995",
+  "patch_sha256": "f015aee8c76c7fd29dae02eca629e47ffe3f050a86a26e916a66d858b32d9214",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "plausible",
+  "official_resolved": true,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.",
+  "feedback_source": "unknown",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-14995-20261108-145145",
+      "instance_id": "astropy__astropy-14995",
+      "patch_sha256": "f015aee8c76c7fd29dae02eca629e47ffe3f050a86a26e916a66d858b32d9214",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 616599,
+        "captured_bytes": 616599,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 616599
+          }
+        ],
+        "original_sha256": "040e51024483ebd2077b6e3abdf10ad65a51e2ee67c5bf28f591026dcea95fe1",
+        "captured_sha256": "040e51024483ebd2077b6e3abdf10ad65a51e2ee67c5bf28f591026dcea95fe1",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 26358,
+        "captured_bytes": 26358,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 26358
+          }
+        ],
+        "original_sha256": "51a1773d99f1daf752fae3b8fcd538db96ad4f5dd4e9e051f413347d8600c8ca",
+        "captured_sha256": "51a1773d99f1daf752fae3b8fcd538db96ad4f5dd4e9e051f413347d8600c8ca",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

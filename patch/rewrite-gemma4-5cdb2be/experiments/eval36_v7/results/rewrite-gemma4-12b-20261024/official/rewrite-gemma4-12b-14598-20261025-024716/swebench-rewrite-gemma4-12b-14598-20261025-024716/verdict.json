@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-14598-20261025-024716",
+  "instance_id": "astropy__astropy-14598",
+  "patch_sha256": "e9c1b954dde259c0299b2baa6608dd335cfb4b411bf9ddccb292d81f35e18dcf",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Assertion evidence: assert \"xxxxxxxxxxxx...xxxxxxxxxxxx'\" == \"xxxxxxxxxxxx...xxxxxxxxxxx''\"\nFAILED astropy/io/fits/tests/test_header.py::TestHeaderFunctions::test_long_string_value_with_quotes\nTraceback context:\nastropy/io/fits/tests/test_header.py:589: AssertionError\n/tmp/pip-build-env-9v_kvur1/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_header.py::TestHeaderFunctions::test_long_string_value_with_quotes",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-14598-20261025-024716",
+      "instance_id": "astropy__astropy-14598",
+      "patch_sha256": "e9c1b954dde259c0299b2baa6608dd335cfb4b411bf9ddccb292d81f35e18dcf",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 187607,
+        "captured_bytes": 187607,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 187607
+          }
+        ],
+        "original_sha256": "41c411a8f3aab5b0c34e31470fa67788293e762b0a82e256dc24abe43762acec",
+        "captured_sha256": "41c411a8f3aab5b0c34e31470fa67788293e762b0a82e256dc24abe43762acec",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 19825,
+        "captured_bytes": 19825,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 19825
+          }
+        ],
+        "original_sha256": "037d097561c3813dba147c6bcbe4dab2dbbea25f6e48089c3587bbe321dcebfc",
+        "captured_sha256": "037d097561c3813dba147c6bcbe4dab2dbbea25f6e48089c3587bbe321dcebfc",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

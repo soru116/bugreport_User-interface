@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-7336-20261108-145823",
+  "instance_id": "astropy__astropy-7336",
+  "patch_sha256": "7efc3ee48a15a10038129c4c8af84355af6d54c2729b308a857d7699b7550262",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "plausible",
+  "official_resolved": true,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.",
+  "feedback_source": "unknown",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-7336-20261108-145823",
+      "instance_id": "astropy__astropy-7336",
+      "patch_sha256": "7efc3ee48a15a10038129c4c8af84355af6d54c2729b308a857d7699b7550262",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 81786,
+        "captured_bytes": 81786,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 81786
+          }
+        ],
+        "original_sha256": "e2d937b450a551d9b4a51b07252280815ff4f2f0bb376b088ddc7f3ff33a302b",
+        "captured_sha256": "e2d937b450a551d9b4a51b07252280815ff4f2f0bb376b088ddc7f3ff33a302b",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 39889,
+        "captured_bytes": 39889,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 39889
+          }
+        ],
+        "original_sha256": "329447ac18c6b4c1c68057bda3666150928da98a509d41ce8f3b000005ce1e0c",
+        "captured_sha256": "329447ac18c6b4c1c68057bda3666150928da98a509d41ce8f3b000005ce1e0c",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

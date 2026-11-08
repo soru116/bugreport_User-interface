@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-14539-20261025-024716",
+  "instance_id": "astropy__astropy-14539",
+  "patch_sha256": "f7539c89e15057993f5e745130f1204f0715f5e7ec75ce7865fac8a80c62953a",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()\nValueError: The truth value of an array with more than one element is ambig...\nFAILED astropy/io/fits/tests/test_diff.py::TestDiff::test_identical_tables\nFAILED astropy/io/fits/tests/test_diff.py::TestDiff::test_different_table_data\nTraceback context:\nastropy/io/fits/tests/test_diff.py:416:\nastropy/io/fits/diff.py:1351: in __init__\nastropy/io/fits/diff.py:87: in __init__\nastropy/io/fits/diff.py:1472: ValueError\nastropy/io/fits/tests/test_diff.py:574:\n/tmp/pip-build-env-vp_bjy7o/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_diff.py::TestDiff::test_identical_tables\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_diff.py::TestDiff::test_different_table_data",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-14539-20261025-024716",
+      "instance_id": "astropy__astropy-14539",
+      "patch_sha256": "f7539c89e15057993f5e745130f1204f0715f5e7ec75ce7865fac8a80c62953a",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 184705,
+        "captured_bytes": 184705,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 184705
+          }
+        ],
+        "original_sha256": "300562e8db17af7fbe7a741de25eea32141f5e834003c3b6ff6bb8bc5833d754",
+        "captured_sha256": "300562e8db17af7fbe7a741de25eea32141f5e834003c3b6ff6bb8bc5833d754",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 8389,
+        "captured_bytes": 8389,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 8389
+          }
+        ],
+        "original_sha256": "c5d6312df8b0cd8bf36f2f6bd3848f58fb8fccb2a8448a53d3676d5b47c1af30",
+        "captured_sha256": "c5d6312df8b0cd8bf36f2f6bd3848f58fb8fccb2a8448a53d3676d5b47c1af30",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

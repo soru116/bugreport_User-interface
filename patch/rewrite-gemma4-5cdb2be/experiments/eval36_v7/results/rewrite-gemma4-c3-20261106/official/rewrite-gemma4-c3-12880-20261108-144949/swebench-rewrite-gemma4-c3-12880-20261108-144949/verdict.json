@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-12880-20261108-144949",
+  "instance_id": "astropy__astropy-12880",
+  "patch_sha256": "80fc81e95a4dac7e02ff863fb202cbad0b2f5f34861ff4d131f34f4b2c6a6e77",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "TypeError: concatenate() got an unexpected keyword argument 'dtype'\nValueError: datatype 'complex' of column 'a' is not in allowed values ('bool', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'float16', 'float32', 'float64', 'float128', 'string')\nValueError: datatype 'object' of column 'a' is not in allowed values ('bool', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'float16', 'float32', 'float64', 'float128', 'string')\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_ascii_read_class\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_qtable_to_table\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_as_one[Table]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_as_one[QTable]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-Table-name_col7]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[1-QTable-name_col7]\nFAILED astropy/io/ascii/tests/test_ecsv.py::test_ecsv_mixins_per_column[2-Table-name_col7]\nTraceback context:\nastropy/io/ascii/tests/test_ecsv.py:280:\nastropy/table/connect.py:129: in __call__\nastropy/io/registry/core.py:354: in write\nastropy/io/ascii/connect.py:26: in io_write\nastropy/io/ascii/ui.py:840: in write\nastropy/io/ascii/core.py:1482: in write\nastropy/io/ascii/ecsv.py:462: in update_table_data\nastropy/table/serialize.py:240: in represent_mixins_as_columns\nastropy/table/serialize.py:95: in _represent_mixin_as_column\nastropy/coordinates/sky_coordinate.py:93: in _represent_as_dict\nastropy/utils/data_info.py:378: in _represent_as_dict\nastropy/utils/data_info.py:161: in _get_obj_attrs_map\nastropy/coordinates/sky_coordinate.py:849: in __getattr__\nastropy/coordinates/baseframe.py:1630: in __getattr__\nastropy/coordinates/baseframe.py:1074: in represent_as\nastropy/coordinates/representation.py:2006: in represent_as\nastropy/coordinates/representation.py:877: in represent_as\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_read_complex_v09\nFAIL_TO_PASS failed test: astropy/io/ascii/tests/test_ecsv.py::test_read_bad_datatype_v09",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-12880-20261108-144949",
+      "instance_id": "astropy__astropy-12880",
+      "patch_sha256": "80fc81e95a4dac7e02ff863fb202cbad0b2f5f34861ff4d131f34f4b2c6a6e77",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 404030,
+        "captured_bytes": 404030,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 404030
+          }
+        ],
+        "original_sha256": "c598c903f3d2fbf4d5b6ffeed7910020594a34e4fb595dfafb5703741e257d5d",
+        "captured_sha256": "c598c903f3d2fbf4d5b6ffeed7910020594a34e4fb595dfafb5703741e257d5d",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 22971,
+        "captured_bytes": 22971,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 22971
+          }
+        ],
+        "original_sha256": "4765e7821adc97714aa771ea19ae537f4131377ec0e271a2f94592a1542e7658",
+        "captured_sha256": "4765e7821adc97714aa771ea19ae537f4131377ec0e271a2f94592a1542e7658",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

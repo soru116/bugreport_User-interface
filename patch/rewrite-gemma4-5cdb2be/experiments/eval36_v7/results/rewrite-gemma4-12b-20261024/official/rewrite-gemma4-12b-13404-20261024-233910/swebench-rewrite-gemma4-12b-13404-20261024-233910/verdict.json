@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-13404-20261024-233910",
+  "instance_id": "astropy__astropy-13404",
+  "patch_sha256": "efc5d3a90eaf6302dcfd4d8be85ee32faff5fb25709acdf32e6b82c553e07af2",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_array_str\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_scalar_str\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_array_repr\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_scalar_repr\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedQuantityRepr::test_array_str\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedQuantityRepr::test_scalar_str\nFAILED astropy/utils/masked/tests/test_masked.py::TestMaskedQuantityRepr::test_array_repr\nTraceback context:\nastropy/utils/masked/tests/test_masked.py:1251:\nastropy/utils/masked/core.py:1124: in __str__\nastropy/utils/masked/core.py:830: in __array_function__\nastropy/utils/masked/function_helpers.py:964: in array_str\nastropy/utils/masked/function_helpers.py:958: in array2string\nastropy/utils/masked/function_helpers.py:932: in _array2string\nastropy/utils/masked/function_helpers.py:891: in __call__\nastropy/utils/masked/function_helpers.py:894: ValueError\nastropy/utils/masked/tests/test_masked.py:1259:\nastropy/utils/masked/tests/test_masked.py:1267:\nastropy/utils/masked/core.py:1127: in __repr__\nastropy/utils/masked/core.py:807: in __array_function__\nastropy/utils/masked/tests/test_masked.py:1272:\n/tmp/pip-build-env-1eqhu_p1/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-1eqhu_p1/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/numpy/core/arrayprint.py:889: in _formatArray\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/numpy/core/arrayprint.py:845: in recurser\nFAIL_TO_PASS failed test: astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_array_str\nFAIL_TO_PASS failed test: astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_scalar_str\nFAIL_TO_PASS failed test: astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_array_repr\nFAIL_TO_PASS failed test: astropy/utils/masked/tests/test_masked.py::TestMaskedArrayRepr::test_scalar_repr\nFAIL_TO_PASS failed test: astropy/utils/m",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-13404-20261024-233910",
+      "instance_id": "astropy__astropy-13404",
+      "patch_sha256": "efc5d3a90eaf6302dcfd4d8be85ee32faff5fb25709acdf32e6b82c553e07af2",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 381667,
+        "captured_bytes": 381667,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 381667
+          }
+        ],
+        "original_sha256": "6dd9803e50519960afe1be430daebee03d107b1b13cc1c5c198fdf87c529eed1",
+        "captured_sha256": "6dd9803e50519960afe1be430daebee03d107b1b13cc1c5c198fdf87c529eed1",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 58768,
+        "captured_bytes": 58768,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 58768
+          }
+        ],
+        "original_sha256": "41211d5b72c3c7ee9091de2b8ea8b71bc6f055073441e65cb07c523d43efcd03",
+        "captured_sha256": "41211d5b72c3c7ee9091de2b8ea8b71bc6f055073441e65cb07c523d43efcd03",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

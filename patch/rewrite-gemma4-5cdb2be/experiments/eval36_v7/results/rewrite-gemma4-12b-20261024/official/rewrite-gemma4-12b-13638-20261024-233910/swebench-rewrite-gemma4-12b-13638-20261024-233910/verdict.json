@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-13638-20261024-233910",
+  "instance_id": "astropy__astropy-13638",
+  "patch_sha256": "3149dbc6d8983359473b9b7b9e2c0b82e857582402c77239f9514678a691b95f",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: pytest.PytestRemovedIn8Warning: Support for nose tests is deprecated and will be removed in a future release.\nnumpy.core._exceptions._UFuncOutputCastingError: Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'\nAssertion evidence: assert <Quantity [(6.68458712e-09, 0.00014439), (1.33691742e-08, 0.00028877),\\n           (2.00537614e-08, 0.00043316)] (AU, AU / d)> is not <Quantity [(6.68458712e-09, 0.00014439), (1.33691742e-08, 0.00028877),\\n           (2.00537614e-08, 0.00043316)] (AU, AU / d)>\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_creation\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_view\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_operation_precedence_and_fallback\nFAILED astropy/units/tests/test_quantity.py::test_regression_12964\nFAILED astropy/units/tests/test_structured.py::TestStructuredQuantity::test_inplace_conversion\nTraceback context:\nastropy/units/tests/test_quantity.py:721:\nastropy/units/quantity.py:1108: UFuncTypeError\nastropy/units/tests/test_structured.py:529: AssertionError\n/tmp/pip-build-env-xtav6rbb/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-xtav6rbb/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:341:\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:262: in <lambda>\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_hooks.py:493: in __call__\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_manager.py:115: in _hookexec\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:157: in pytest_runtest_setup\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity.py::test_regression_12964\nFAIL_TO_PASS failed test: astropy/units/tests/test_structured.py::TestStructuredQuantity::test_inplace_conversion",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-13638-20261024-233910",
+      "instance_id": "astropy__astropy-13638",
+      "patch_sha256": "3149dbc6d8983359473b9b7b9e2c0b82e857582402c77239f9514678a691b95f",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 342359,
+        "captured_bytes": 342359,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 342359
+          }
+        ],
+        "original_sha256": "f1c8e97bd0176cf4dc2a777293a643b3da8e5e2162fff3a08c59bdc65c8a0a0f",
+        "captured_sha256": "f1c8e97bd0176cf4dc2a777293a643b3da8e5e2162fff3a08c59bdc65c8a0a0f",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 18967,
+        "captured_bytes": 18967,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 18967
+          }
+        ],
+        "original_sha256": "1f067d5986ca0ab06887a56e973f3f4bcb8b1d1ef96652fa866e9d83b75c9b5f",
+        "captured_sha256": "1f067d5986ca0ab06887a56e973f3f4bcb8b1d1ef96652fa866e9d83b75c9b5f",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

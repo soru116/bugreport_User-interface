@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-14163-20261025-004445",
+  "instance_id": "astropy__astropy-14163",
+  "patch_sha256": "6d7533fd10e68e26a6aa6d8ad603500fbc558ad844d492a9a277ab2853798307",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "TypeError: no implementation found for 'numpy.full_like' on types that implement __array_function__: [<class 'astropy.units.quantity.Quantity'>]\nTypeError: the Quantity implementation cannot handle <built-in function putmask> with the given arguments.\nTypeError: no implementation found for 'numpy.insert' on types that implement __array_function__: [<class 'astropy.units.quantity.Quantity'>]\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestCopyAndCreation::test_full_like\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestSettingParts::test_putmask\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestConcatenate::test_insert\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_sometrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_alltrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_product\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_cumproduct\nTraceback context:\nastropy/units/tests/test_quantity_non_ufuncs.py:322: TypeError\nastropy/units/tests/test_quantity_non_ufuncs.py:392:\nastropy/units/quantity.py:1847: in __array_function__\nastropy/units/quantity.py:1893: TypeError\nastropy/units/tests/test_quantity_non_ufuncs.py:559: TypeError\nastropy/units/tests/test_quantity_non_ufuncs.py:633:\nastropy/units/tests/test_quantity_non_ufuncs.py:637:\nastropy/units/tests/test_quantity_non_ufuncs.py:645:\nastropy/units/tests/test_quantity_non_ufuncs.py:653:\nastropy/units/tests/test_quantity_non_ufuncs.py:662:\nastropy/units/tests/test_quantity_non_ufuncs.py:76: in check\nastropy/units/tests/test_quantity_non_ufuncs.py:915: TypeError\nastropy/units/tests/test_quantity_non_ufuncs.py:947: TypeError\nastropy/units/tests/test_quantity_non_ufuncs.py:993:\nastropy/units/quantity.py:1835: in __array_function__\nastropy/units/tests/test_quantity_non_ufuncs.py:997:\nastropy/units/tests/test_quantity_non_ufuncs.py:1387: TypeError\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestReductionLikeFunctions::test_array_equiv_incompatible_units\nPASS_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestCopyAndCreation::test_full_like\nPASS_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestSettingParts::test_putmask\nPASS_TO_PASS failed test: astropy/units/tests/test_q",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-14163-20261025-004445",
+      "instance_id": "astropy__astropy-14163",
+      "patch_sha256": "6d7533fd10e68e26a6aa6d8ad603500fbc558ad844d492a9a277ab2853798307",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 385808,
+        "captured_bytes": 385808,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 385808
+          }
+        ],
+        "original_sha256": "86ca28688c3d0047c94a2a24b6840b1d43c649d4e5b444711ccfe9fbd96cc185",
+        "captured_sha256": "86ca28688c3d0047c94a2a24b6840b1d43c649d4e5b444711ccfe9fbd96cc185",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 28537,
+        "captured_bytes": 28537,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 28537
+          }
+        ],
+        "original_sha256": "88ca3fb15519ae3f4a9f62cf9a297270761f4663e6aa1b37c58027986b3cbebc",
+        "captured_sha256": "88ca3fb15519ae3f4a9f62cf9a297270761f4663e6aa1b37c58027986b3cbebc",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

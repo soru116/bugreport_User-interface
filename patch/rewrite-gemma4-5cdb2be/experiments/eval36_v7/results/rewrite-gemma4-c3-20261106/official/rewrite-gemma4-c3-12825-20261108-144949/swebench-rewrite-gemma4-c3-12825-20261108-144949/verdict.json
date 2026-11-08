@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-12825-20261108-144949",
+  "instance_id": "astropy__astropy-12825",
+  "patch_sha256": "3a995da9df251de2f6d8922a732b51061680d18d4e4f6a46a386b4a8c1d868e8",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "AssertionError: assert [' a   b   c ...  5 5.0', ...] == [' a   b   c ...  6 6.0', ...]\nAssertionError: assert [' a   b   c ... -- 5.0', ...] == [' a   b   c ...  6 6.0', ...]\nAssertionError: assert [' a   c    d...2.0  6.0 0.0'] == [' a   c    d....0  6.0  6.0']\nFAILED astropy/table/tests/test_groups.py::test_table_group_by[True]\nFAILED astropy/table/tests/test_groups.py::test_group_by_masked[True]\nFAILED astropy/table/tests/test_groups.py::test_table_aggregate[False]\nFAILED astropy/table/tests/test_groups.py::test_table_aggregate[True]\nFAILED astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col0]\nFAILED astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col1]\nFAILED astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col2]\nTraceback context:\nastropy/table/tests/test_groups.py:50: AssertionError\nastropy/table/tests/test_groups.py:321: AssertionError\nastropy/table/tests/test_groups.py:422: AssertionError\nastropy/table/tests/test_groups.py:656: Failed\n/tmp/pip-build-env-nnnk6dx_/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-nnnk6dx_/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nFAIL_TO_PASS failed test: astropy/table/tests/test_groups.py::test_table_aggregate[False]\nFAIL_TO_PASS failed test: astropy/table/tests/test_groups.py::test_table_aggregate[True]\nFAIL_TO_PASS failed test: astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col0]\nFAIL_TO_PASS failed test: astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col1]\nFAIL_TO_PASS failed test: astropy/table/tests/test_groups.py::test_group_mixins_unsupported[col2]",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-12825-20261108-144949",
+      "instance_id": "astropy__astropy-12825",
+      "patch_sha256": "3a995da9df251de2f6d8922a732b51061680d18d4e4f6a46a386b4a8c1d868e8",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 316979,
+        "captured_bytes": 316979,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 316979
+          }
+        ],
+        "original_sha256": "20ce73fc660886c37a1529b6ab9968fb6f9a5849c6c2a6eccb9bdbbe1f6eb20f",
+        "captured_sha256": "20ce73fc660886c37a1529b6ab9968fb6f9a5849c6c2a6eccb9bdbbe1f6eb20f",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 7872,
+        "captured_bytes": 7872,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 7872
+          }
+        ],
+        "original_sha256": "6417a815852264b58e74c5b4f18dcf8253a8d1ac951118009e7c89c1a1a2da0f",
+        "captured_sha256": "6417a815852264b58e74c5b4f18dcf8253a8d1ac951118009e7c89c1a1a2da0f",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

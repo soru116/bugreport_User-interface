@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-13668-20261025-004445",
+  "instance_id": "astropy__astropy-13668",
+  "patch_sha256": "26edc7434d5982869958fd9be6d9950856ea0ee8a38a2c2a06dc8f2dadf4ed6b",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: pytest.PytestRemovedIn8Warning: Support for nose tests is deprecated and will be removed in a future release.\nValueError: HDUList is required to retrieve -TAB coordinates and/or indices.\nWarning-as-error: pytest.PytestRemovedIn8Warning: Support for nose tests is deprecated and wi...\nERROR astropy/wcs/tests/test_wcs.py::TestMaps::test_consistency\nERROR astropy/wcs/tests/test_wcs.py::TestMaps::test_maps\nERROR astropy/wcs/tests/test_wcs.py::TestSpectra::test_consistency\nERROR astropy/wcs/tests/test_wcs.py::TestSpectra::test_spectra\nERROR astropy/wcs/tests/test_wcs.py::TestWcsWithTime::test_keywods2wcsprm\nERROR astropy/wcs/tests/test_wcs.py::TestWcsWithTime::test_transforms\nFAILED astropy/wcs/tests/test_wcs.py::test_validate_wcs_tab\nTraceback context:\nastropy/wcs/tests/test_wcs.py:476:\nastropy/wcs/wcs.py:3531: in validate\nastropy/wcs/wcs.py:466: ValueError\n/tmp/pip-build-env-18wi84co/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-18wi84co/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:341:\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:262: in <lambda>\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_hooks.py:493: in __call__\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_manager.py:115: in _hookexec\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:157: in pytest_runtest_setup\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:497: in setup\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:494: in setup\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/python.py:1791: in setup\nFAIL_TO_PASS failed test: astropy/wcs/tests/test_wcs.py::test_validate_wcs_tab",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-13668-20261025-004445",
+      "instance_id": "astropy__astropy-13668",
+      "patch_sha256": "26edc7434d5982869958fd9be6d9950856ea0ee8a38a2c2a06dc8f2dadf4ed6b",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 349766,
+        "captured_bytes": 349766,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 349766
+          }
+        ],
+        "original_sha256": "bf31ba1756c515c7449784e0d0b17640d674946f1b132f8a71341c6ebecbb891",
+        "captured_sha256": "bf31ba1756c515c7449784e0d0b17640d674946f1b132f8a71341c6ebecbb891",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 8388,
+        "captured_bytes": 8388,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 8388
+          }
+        ],
+        "original_sha256": "3c8f0f8747fc739ffed4cabd59c3a03eba69b70306774411c52dbbd0cc98578a",
+        "captured_sha256": "3c8f0f8747fc739ffed4cabd59c3a03eba69b70306774411c52dbbd0cc98578a",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

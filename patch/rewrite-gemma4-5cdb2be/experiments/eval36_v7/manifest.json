@@ -1,0 +1,51 @@
+{
+  "name": "Current development evaluation cohort: 36 Astropy cases",
+  "ticket_count": 36,
+  "purpose": "Fixed current development cohort; not an untouched holdout",
+  "generation_code_commit": "0defb3633d6ff7200cbfbe0c2dcbb2b488f2e0c5",
+  "localization_source": "external-fl-36-20260929",
+  "comparison_baseline": "external-patch-36-20260929",
+  "historical_baseline_generated": 3,
+  "earlier_baseline_generated": 1,
+  "model": "qwen2.5-coder:14b-base",
+  "model_digest": "8221e52a9c29aef9cfa2419ef73618c2a98ba3ab927effab55957390ed5039a9",
+  "settings": {
+    "temperature": 0.2,
+    "seed": 42,
+    "candidates": 1,
+    "num_ctx": 16384,
+    "max_new_tokens": 4096,
+    "prompt_layout": "task_last"
+  },
+  "excluded_input_fields": [
+    "FAIL_TO_PASS",
+    "PASS_TO_PASS",
+    "evaluation_ready_fields",
+    "fail_to_pass",
+    "gold_patch",
+    "hints_text",
+    "local_repo_path",
+    "pass_to_pass",
+    "patch",
+    "reference_patch",
+    "repo_path",
+    "repository_path",
+    "test_patch"
+  ],
+  "official_resolved": null,
+  "comparison_limit": "Historical comparison changes more than instruction position. Same-commit legacy is also not byte-identical to the historical prompt.",
+  "files": {
+    "tickets.jsonl": {
+      "sha256": "bcd20bd0c0365ca7ec6a71676719e7c014dc81b1ef9f637a839b5b60e24899ba",
+      "bytes": 209227
+    },
+    "localizations.jsonl": {
+      "sha256": "754f9f2de8917e3aef475bd763cb5658f0f3673f8f2773b4bbe4a6c9541a3db6",
+      "bytes": 6238439
+    },
+    "ticket_ids.txt": {
+      "sha256": "c7e4ec0c71acc22b8a046d9e0f8f3de4bc68a7643cab800b61707dd13f537193",
+      "bytes": 819
+    }
+  }
+}

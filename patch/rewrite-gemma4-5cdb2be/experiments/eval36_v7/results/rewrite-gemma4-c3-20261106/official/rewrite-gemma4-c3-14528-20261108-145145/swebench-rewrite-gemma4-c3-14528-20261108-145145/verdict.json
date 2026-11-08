@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-14528-20261108-145145",
+  "instance_id": "astropy__astropy-14528",
+  "patch_sha256": "6af23012be8e5e96311a0a4dcb3afea355721bfc16b7e234a31e435a781316a4",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Failed: DID NOT RAISE <class 'TypeError'>\nFAILED astropy/io/fits/tests/test_image.py::TestImageFunctions::test_hdu_creation_with_scalar\nTraceback context:\nastropy/io/fits/tests/test_image.py:1131: Failed\nSKIPPED [1] astropy/io/fits/tests/test_image.py:1335: need --run-slow option to run\n/tmp/pip-build-env-aokwr5i2/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nSKIPPED [1] ../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pytest_remotedata/plugin.py:85: need --remote-data option to run\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_image.py::TestImageFunctions::test_hdu_creation_with_scalar",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-14528-20261108-145145",
+      "instance_id": "astropy__astropy-14528",
+      "patch_sha256": "6af23012be8e5e96311a0a4dcb3afea355721bfc16b7e234a31e435a781316a4",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 189821,
+        "captured_bytes": 189821,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 189821
+          }
+        ],
+        "original_sha256": "d7a2ac9385942f66fb68899f62ecdb28a465a556cba5b590b008cb5da1ea74ae",
+        "captured_sha256": "d7a2ac9385942f66fb68899f62ecdb28a465a556cba5b590b008cb5da1ea74ae",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 21421,
+        "captured_bytes": 21421,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 21421
+          }
+        ],
+        "original_sha256": "c02976f04aa39d56a9d0a7447a60cb9358c7cb4ce8326eea1935d3e72ca2dc61",
+        "captured_sha256": "c02976f04aa39d56a9d0a7447a60cb9358c7cb4ce8326eea1935d3e72ca2dc61",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}
