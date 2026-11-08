@@ -6,17 +6,24 @@
   <title>Ticket 工作台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9h24M4 16h16M4 23h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="22" r="4" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
-      <div>
-        <h1>Ticket 工作台</h1>
-        <p>匯入錯誤回報，依序完成轉換、重複確認、優先級、分派與錯誤定位</p>
-      </div>
+    <a class="brand" href="#/" aria-label="回到所有 Ticket">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M8 11h16M8 16h11M8 21h7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="23" cy="21" r="3.5" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">Ticket 工作台</span>
+        <span class="brand-sub">轉換、重複確認、優先級、分派、錯誤定位</span>
+      </span>
+    </a>
+    <div class="search" role="search">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <input id="search" type="search" autocomplete="off" spellcheck="false" placeholder="搜尋 Ticket 編號、標題、元件或負責人" aria-label="搜尋 Ticket">
+      <kbd class="search-key" aria-hidden="true">/</kbd>
     </div>
     <div class="topbar-actions">
       <button class="btn btn-quiet" id="statusButton" type="button">模型與資料狀態</button>
@@ -25,28 +32,50 @@
   </header>
 
   <main class="layout">
-    <aside class="inbox" aria-label="Ticket 清單">
-      <div class="inbox-head">
-        <div class="filters" role="tablist" aria-label="篩選">
-          <button class="filter is-active" data-filter="all" role="tab" aria-selected="true">全部 <span data-count="all">0</span></button>
-          <button class="filter" data-filter="review" role="tab" aria-selected="false">等你確認 <span data-count="review">0</span></button>
-          <button class="filter" data-filter="running" role="tab" aria-selected="false">處理中 <span data-count="running">0</span></button>
-          <button class="filter" data-filter="done" role="tab" aria-selected="false">已完成 <span data-count="done">0</span></button>
+    <section class="home" id="homeView" aria-label="所有 Ticket">
+      <div class="home-inner">
+        <header class="home-head" id="homeHead"></header>
+
+        <section class="folder-section" id="folderSection" aria-label="專案資料夾">
+          <ol class="folders" id="folderGrid"></ol>
+        </section>
+
+        <div class="home-bar">
+          <div class="filters" role="tablist" aria-label="篩選">
+            <button class="filter is-active" data-filter="all" role="tab" aria-selected="true">全部 <span data-count="all">0</span></button>
+            <button class="filter" data-filter="review" role="tab" aria-selected="false">等你確認 <span data-count="review">0</span></button>
+            <button class="filter" data-filter="running" role="tab" aria-selected="false">處理中 <span data-count="running">0</span></button>
+            <button class="filter" data-filter="done" role="tab" aria-selected="false">已完成 <span data-count="done">0</span></button>
+          </div>
+          <div class="home-bar-right">
+            <p class="search-summary" id="searchSummary" aria-live="polite"></p>
+            <button type="button" class="btn btn-quiet btn-small" id="selectModeButton" data-select-mode>選取</button>
+          </div>
+        </div>
+
+        <section class="shelf shelf-pinned" aria-labelledby="pinnedTitle">
+          <h2 class="shelf-title" id="pinnedTitle">
+            <svg class="pin-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4z" fill="currentColor"/><path d="M12 13v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            釘選的 Ticket <span class="shelf-count" id="pinnedCount"></span>
+          </h2>
+          <ol class="tiles" id="pinnedTiles"></ol>
+        </section>
+
+        <section class="shelf" aria-labelledby="otherTitle">
+          <h2 class="shelf-title" id="otherTitle">其他 Ticket <span class="shelf-count" id="otherCount"></span></h2>
+          <ol class="tiles" id="otherTiles"></ol>
+        </section>
+
+        <div class="home-empty" id="inboxEmpty" hidden>
+          <h2>還沒有 Ticket</h2>
+          <p>匯入一個 JSON、JSONL 或 CSV 檔就會開始處理。想先試試看，可以匯入 <code>workspace/examples/new_tickets.jsonl</code>。</p>
+          <button class="btn btn-primary" type="button" data-open-import>匯入第一批 Ticket</button>
         </div>
       </div>
-      <ol class="ticket-list" id="ticketList"></ol>
-      <div class="inbox-empty" id="inboxEmpty" hidden>
-        <p>還沒有 Ticket。</p>
-        <button class="btn btn-primary" type="button" data-open-import>匯入第一批 Ticket</button>
-      </div>
-    </aside>
+    </section>
 
-    <section class="detail" id="detail" aria-live="polite">
-      <div class="detail-empty" id="detailEmpty">
-        <h2>選一張 Ticket 開始</h2>
-        <p>左側清單會標出需要你確認的 Ticket。每個步驟都會註明是哪一個子專案的程式產生結果；模型或資料沒載入時，會明確標示為「備援」。</p>
-      </div>
-      <div id="detailBody" hidden></div>
+    <section class="detail" id="detail" aria-live="polite" hidden>
+      <div id="detailBody"></div>
     </section>
   </main>
 
@@ -90,9 +119,10 @@
         <p class="hint">只填你知道的欄位；其餘欄位由 ToJson 的 Code Llama 抽取。</p>
       </div>
 
-      <label class="field project-field">錯誤定位要用的專案（Repository）
+      <label class="field project-field"><span id="importProjectLabel">錯誤定位要用的專案（Repository）</span>
         <select id="importProject"></select>
       </label>
+      <div class="import-project-note" id="importProjectNote" hidden></div>
       <p class="form-error" id="importError" role="alert"></p>
       <footer class="sheet-foot">
         <button class="btn btn-quiet" value="cancel">取消</button>
@@ -145,6 +175,39 @@
     </div>
   </dialog>
 
+  <dialog class="sheet sheet-help" id="factorDialog" aria-labelledby="factorTitle">
+    <div class="sheet-inner">
+      <header class="sheet-head">
+        <h2 id="factorTitle">優先級判定因子說明</h2>
+        <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
+      </header>
+      <div id="factorBody"></div>
+    </div>
+  </dialog>
+
+  <div class="pick-bar" id="pickBar" role="toolbar" aria-label="選取的 Ticket" hidden>
+    <span>已選取 <b id="pickCount">0</b> 張</span>
+    <button type="button" class="btn btn-quiet btn-small" data-pick-all>全選</button>
+    <button type="button" class="btn btn-quiet btn-small" data-pick-rerun>重新執行</button>
+    <button type="button" class="btn btn-danger btn-small" data-pick-delete>刪除</button>
+    <button type="button" class="btn btn-quiet btn-small" data-pick-cancel>取消</button>
+  </div>
+
+  <dialog class="sheet sheet-narrow" id="deleteProjectDialog" aria-labelledby="deleteProjectTitle">
+    <div class="sheet-inner">
+      <header class="sheet-head">
+        <h2 id="deleteProjectTitle">刪除專案</h2>
+        <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
+      </header>
+      <div id="deleteProjectBody"></div>
+      <footer class="sheet-foot">
+        <form method="dialog"><button class="btn btn-quiet">取消</button></form>
+        <button type="button" class="btn btn-danger" id="deleteProjectConfirm">刪除</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <div class="queue-pill" id="queuePill" role="status" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
   <script src="app.js"></script>
 </body>

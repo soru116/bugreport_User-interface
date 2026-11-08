@@ -41,3 +41,8 @@ bug_tracking_llm_system/reports/fault_localization/
 # Integrated ticket workspace: runtime data and machine-specific config
 bug_tracking_llm_system/data/workspace/
 bug_tracking_llm_system/integration_config.json
+
+# Real-dataset demo files built locally by the scripts (a copy of the current set is versioned in
+# bug_tracking_llm_system/demo_data/ so teammates can import it directly).
+bug_tracking_llm_system/data/real_datasets/
+bug_tracking_llm_system/data/swebench/

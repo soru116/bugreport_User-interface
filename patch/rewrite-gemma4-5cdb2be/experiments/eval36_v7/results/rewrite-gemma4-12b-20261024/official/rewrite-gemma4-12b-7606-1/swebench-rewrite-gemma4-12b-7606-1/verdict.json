@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-7606-1",
+  "instance_id": "astropy__astropy-7606",
+  "patch_sha256": "5bf2266a37d99ea87c0c4764fc798b9c51023d3eb477cf52c89cbe3f889f3d9a",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "plausible",
+  "official_resolved": true,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.",
+  "feedback_source": "unknown",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-7606-1",
+      "instance_id": "astropy__astropy-7606",
+      "patch_sha256": "5bf2266a37d99ea87c0c4764fc798b9c51023d3eb477cf52c89cbe3f889f3d9a",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 70047,
+        "captured_bytes": 70047,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 70047
+          }
+        ],
+        "original_sha256": "107832c557b6e7a4966b9b1a6138a3936f1649572c7e06405027c26e8eace2ce",
+        "captured_sha256": "107832c557b6e7a4966b9b1a6138a3936f1649572c7e06405027c26e8eace2ce",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 18652,
+        "captured_bytes": 18652,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 18652
+          }
+        ],
+        "original_sha256": "6562366adeb72f9ac3661cc232dcd8cea1d21fbbf2a3131dd22c4daab03936a1",
+        "captured_sha256": "6562366adeb72f9ac3661cc232dcd8cea1d21fbbf2a3131dd22c4daab03936a1",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

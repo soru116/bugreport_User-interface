@@ -1,0 +1,78 @@
+{
+  "total_tickets": 36,
+  "skipped": 0,
+  "errored": 0,
+  "attempted": 36,
+  "research_mode": true,
+  "confidence_level_counts": {
+    "high": 3,
+    "low": 5,
+    "medium": 28
+  },
+  "production_gate_eligible": 3,
+  "rank1_symbol_kind_counts": {
+    "class": 9,
+    "function": 6,
+    "method": 18,
+    "module": 3
+  },
+  "rank1_line_span_median": 59,
+  "patch_status_counts": {
+    "generated": 17,
+    "no_valid_candidate": 19
+  },
+  "generation_mode_counts": {
+    "rewrite": 36
+  },
+  "targets_attempted_total": 0,
+  "targets_generated_total": 0,
+  "target_rejection_buckets": {
+    "coordinates_disagree": 1,
+    "unsupported_symbol": 18
+  },
+  "candidate_stop_reasons": {
+    "model_eos": 34
+  },
+  "candidate_bodies_trimmed": 0,
+  "candidate_overran_past_stop": 0,
+  "candidate_rejection_reasons": {
+    "context_budget_exceeded": 1,
+    "no_executable_change": 4,
+    "no_op": 4,
+    "rewrite_contract_violation": 4,
+    "rewrite_no_change": 3,
+    "signature_changed": 1,
+    "truncated_or_incomplete": 1,
+    "undefined_name": 1
+  },
+  "rewrite_no_change": 3,
+  "rewrite_contract_violation": 4,
+  "signature_changed": 1,
+  "target_rank_counts": {
+    "1": 23,
+    "2": 8,
+    "3": 4,
+    "4": 1
+  },
+  "generation_accounting_version": "static-candidate-accounting-v1",
+  "generated": 17,
+  "accepted": 17,
+  "static_candidates_total": 17,
+  "logic_accounting_version": "python-ast-candidate-v1",
+  "logical_static_candidates_total": 17,
+  "operation_contract_diagnostic_counts": {},
+  "operation_contract_previews_ready": 0,
+  "contract_review_stop_counts": {},
+  "logic_unclassified_candidates_total": 0,
+  "applied": 17,
+  "generated_rate": 0.4722,
+  "generated_at_rank_1": 13,
+  "generated_via_fallback": 4,
+  "validation_plausible": 0,
+  "body_lines_median": 42,
+  "body_lines_max": 247,
+  "official_resolved": null,
+  "official_evaluated": 0,
+  "repair_rounds_total": 36,
+  "note": "generated_rate counts patches that passed the static and apply gates. It is NOT a repair rate. validation_plausible counts configured validator passes. A repair rate requires official_resolved from the official SWE-bench Docker harness, which this script runs only when local --repair-official or --repair-cloud-repo is enabled. accepted retains the historical final-selection count; generated includes test-rejected static candidates."
+}

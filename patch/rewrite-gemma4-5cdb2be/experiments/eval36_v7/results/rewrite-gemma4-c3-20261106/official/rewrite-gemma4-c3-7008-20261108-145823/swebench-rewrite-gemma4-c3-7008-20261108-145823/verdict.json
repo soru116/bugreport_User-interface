@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-7008-20261108-145823",
+  "instance_id": "astropy__astropy-7008",
+  "patch_sha256": "ea86e39dabdf59fc04cb9bdb2b8794dbf3591dfd449d8996e101ead2dc9214f5",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "TypeError: NoneType takes no arguments\nTraceback context:\nFile \"<string>\", line 1, in <module>\nFile \"/testbed/setup.py\", line 42, in <module>\nFile \"/testbed/astropy_helpers/astropy_helpers/setup_helpers.py\", line 424, in get_package_info\nFile \"astropy/wcs/setup_package.py\", line 239, in get_extensions\nFile \"astropy/wcs/setup_package.py\", line 116, in generate_c_docstrings\nFile \"/testbed/astropy/wcs/__init__.py\", line 29, in <module>\nFile \"/testbed/astropy/wcs/wcs.py\", line 47, in <module>\nFile \"/testbed/astropy/io/fits/__init__.py\", line 70, in <module>\nFile \"/testbed/astropy/io/fits/convenience.py\", line 72, in <module>\nFile \"/testbed/astropy/units/__init__.py\", line 15, in <module>\nFile \"/testbed/astropy/units/decorators.py\", line 11, in <module>\nFile \"/testbed/astropy/units/physical.py\", line 14, in <module>\nFile \"/testbed/astropy/units/si.py\", line 9, in <module>\nFile \"/testbed/astropy/constants/__init__.py\", line 26, in <module>\nFile \"/testbed/astropy/constants/constant.py\", line 218, in <module>",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-7008-20261108-145823",
+      "instance_id": "astropy__astropy-7008",
+      "patch_sha256": "ea86e39dabdf59fc04cb9bdb2b8794dbf3591dfd449d8996e101ead2dc9214f5",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 48149,
+        "captured_bytes": 48149,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 48149
+          }
+        ],
+        "original_sha256": "a2aec200f18bb42c11f7351dcf6784ef153d02403eed339c3c08c863f1c07999",
+        "captured_sha256": "a2aec200f18bb42c11f7351dcf6784ef153d02403eed339c3c08c863f1c07999",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 6171,
+        "captured_bytes": 6171,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 6171
+          }
+        ],
+        "original_sha256": "09916df0226836547ffc0e1a195594cae3877c1cbe86ad6e3f50118db7a32bd9",
+        "captured_sha256": "09916df0226836547ffc0e1a195594cae3877c1cbe86ad6e3f50118db7a32bd9",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

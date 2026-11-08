@@ -1,0 +1,146 @@
+{
+  "generated_at": "2026-10-18T17:32:24+00:00",
+  "seed": 20261019,
+  "sources": {
+    "firefox": "/sessions/rcw-01datrzmznpt1mh9ed8yc7nq/mnt/bug_llm_project/bug-duplicate-detection/bug-duplicate-detection/data",
+    "eclipse": "/sessions/rcw-01datrzmznpt1mh9ed8yc7nq/mnt/bug_llm_project/bug-priority-drone(1)/bug-priority-drone/data"
+  },
+  "notes": [
+    "新 Ticket 已移除 duplicate_of、priority、assignee、status、resolution；這些答案只在這份檔案裡。",
+    "專案沒有對應的 Repository，所以錯誤定位會顯示「略過」，這是預期的結果。",
+    "SBERT 重複偵測模型是用 mozilla_firefox_duplicates.csv 訓練的，Firefox 的重複 Ticket 都在訓練資料裡，所以重複偵測結果會偏好看，不能當成準確率。",
+    "PRI 優先級模型只用 Eclipse 資料訓練；Firefox Ticket 的優先級是跨資料集的推測，而且 Firefox 原始資料大多沒有填優先級，無法核對。",
+    "Firefox 的負責人有一半以上是 bugzilla@blakeross.com，負責人推薦會明顯偏向他，這是資料本身的分布。",
+    "Eclipse 新 Ticket 來自 PRI 的 natural_test，PRI 模型訓練時沒看過；工作台計算優先級時會把同一張報告從歷史資料中排除。",
+    "Eclipse 的重複偵測歷史只取 1500 筆（含正確答案），比完整的 1 萬筆容易；SBERT 是用 Firefox 訓練的，用在 Eclipse 屬於跨資料集。",
+    "Eclipse 資料沒有負責人欄位，所以 Eclipse Ticket 的負責人推薦沒有可用的歷史，會建議人工分派。"
+  ],
+  "answers": [
+    {
+      "ticket_id": "FF-178016",
+      "project": "Mozilla Firefox",
+      "title": "\"Decrease Text Size\" wraps around.",
+      "duplicate_of": "FF-53995",
+      "duplicate_of_title": "using \"text zoom\" to scale fonts very small makes them come back normal",
+      "priority": "",
+      "assignee": "bugzilla@blakeross.com",
+      "resolution": "DUPLICATE"
+    },
+    {
+      "ticket_id": "FF-170844",
+      "project": "Mozilla Firefox",
+      "title": "scroll bar button arrows magically move",
+      "duplicate_of": "FF-170545",
+      "duplicate_of_title": "Scrolling in any window enlarges the scollbar with Classic Theme",
+      "priority": "",
+      "assignee": "hyatt@mozilla.org",
+      "resolution": "DUPLICATE"
+    },
+    {
+      "ticket_id": "FF-178284",
+      "project": "Mozilla Firefox",
+      "title": "\"Hide the tab when only one tab is open\" don't work",
+      "duplicate_of": "FF-177506",
+      "duplicate_of_title": "turning off \"hide tab bar ...\" has no effect until new tab/window is opened.",
+      "priority": "",
+      "assignee": "bugzilla@blakeross.com",
+      "resolution": "DUPLICATE"
+    },
+    {
+      "ticket_id": "FF-175164",
+      "project": "Mozilla Firefox",
+      "title": "Some sidebar bookmarks have the wrong icon (Oct 17 nightly build)",
+      "duplicate_of": "FF-174265",
+      "duplicate_of_title": "Wrong favicons in bookmarks",
+      "priority": "",
+      "assignee": "p_ch@verizon.net",
+      "resolution": "DUPLICATE"
+    },
+    {
+      "ticket_id": "FF-184741",
+      "project": "Mozilla Firefox",
+      "title": "F3 doesn't work in View Page Source",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "priority": "",
+      "assignee": "p_ch@verizon.net",
+      "resolution": "FIXED"
+    },
+    {
+      "ticket_id": "FF-175893",
+      "project": "Mozilla Firefox",
+      "title": "Make XUL <tab>'s focusable",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "priority": "P2",
+      "assignee": "aaronlev@gmail.com",
+      "resolution": "FIXED"
+    },
+    {
+      "ticket_id": "25244",
+      "project": "Eclipse",
+      "title": "JDIThread#getTopStackFrame() performance",
+      "duplicate_of": "16036",
+      "duplicate_of_title": "UI not responsive when stack is deep",
+      "duplicate_in_history": true,
+      "priority": "P4",
+      "assignee": "",
+      "resolution": "DUPLICATE"
+    },
+    {
+      "ticket_id": "11903",
+      "project": "Eclipse",
+      "title": "'add javadoc comment' adds non-java doc comments",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "duplicate_in_history": false,
+      "priority": "P1",
+      "assignee": "",
+      "resolution": "FIXED"
+    },
+    {
+      "ticket_id": "16247",
+      "project": "Eclipse",
+      "title": "\"Externalize Strings\" dialog is huge",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "duplicate_in_history": false,
+      "priority": "P2",
+      "assignee": "",
+      "resolution": "WORKSFORME"
+    },
+    {
+      "ticket_id": "2905",
+      "project": "Eclipse",
+      "title": "Hover-help in wizards for long messages (1GKKS6N)",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "duplicate_in_history": false,
+      "priority": "P3",
+      "assignee": "",
+      "resolution": "FIXED"
+    },
+    {
+      "ticket_id": "42563",
+      "project": "Eclipse",
+      "title": "[JFace] There is no way to set the DirectoryDialog's message in DirectoryFieldEditor",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "duplicate_in_history": false,
+      "priority": "P4",
+      "assignee": "",
+      "resolution": "WONTFIX"
+    },
+    {
+      "ticket_id": "86233",
+      "project": "Eclipse",
+      "title": "[KeyBindings] registry: Accelerator key cannot be translated",
+      "duplicate_of": "",
+      "duplicate_of_title": "",
+      "duplicate_in_history": false,
+      "priority": "P5",
+      "assignee": "",
+      "resolution": "WONTFIX"
+    }
+  ]
+}

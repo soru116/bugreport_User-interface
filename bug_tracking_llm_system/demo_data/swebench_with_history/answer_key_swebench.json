@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-10-19T07:35:11+00:00",
+  "source": "專題0908錯誤定位/fault-localization-feature-files/data/fault_localization/swebench_full/test.parquet（只用 protocol_v1/development_tickets.jsonl 的題目）",
+  "repos": [
+    "psf/requests",
+    "pallets/flask"
+  ],
+  "answers": [
+    {
+      "ticket_id": "psf__requests-3362",
+      "project": "psf/requests",
+      "title": "Uncertain about content/text vs iter_content(decode_unicode=True/False)",
+      "fixed_files": [
+        "requests/utils.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/3362"
+    },
+    {
+      "ticket_id": "psf__requests-3718",
+      "project": "psf/requests",
+      "title": "AttributeError: 'NoneType' object has no attribute 'read'",
+      "fixed_files": [
+        "requests/models.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/3718"
+    },
+    {
+      "ticket_id": "psf__requests-3738",
+      "project": "psf/requests",
+      "title": "Requests v2.12.2 does not add parameters to URLs with schemes it does not understand.",
+      "fixed_files": [
+        "requests/models.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/3738"
+    },
+    {
+      "ticket_id": "psf__requests-4106",
+      "project": "psf/requests",
+      "title": "AttributeError: module 'requests.packages' has no attribute 'urllib3'",
+      "fixed_files": [
+        "requests/packages.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/4106"
+    },
+    {
+      "ticket_id": "psf__requests-4356",
+      "project": "psf/requests",
+      "title": "Misleading exception with invalid protocol in proxy variable",
+      "fixed_files": [
+        "requests/adapters.py",
+        "requests/exceptions.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/4356"
+    },
+    {
+      "ticket_id": "psf__requests-4718",
+      "project": "psf/requests",
+      "title": "Should Authorization header be cleared in https -> http redirect?",
+      "fixed_files": [
+        "requests/sessions.py"
+      ],
+      "fix_pull_request": "https://github.com/psf/requests/pull/4718"
+    },
+    {
+      "ticket_id": "pallets__flask-4169",
+      "project": "pallets/flask",
+      "title": "Exceptions are sometimes replaced with \"TypeError: exceptions must derive from BaseException\"",
+      "fixed_files": [
+        "src/flask/cli.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/4169"
+    },
+    {
+      "ticket_id": "pallets__flask-4544",
+      "project": "pallets/flask",
+      "title": "`flask run` rejects `--key foo.pem --cert foo.cert`",
+      "fixed_files": [
+        "src/flask/cli.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/4544"
+    },
+    {
+      "ticket_id": "pallets__flask-4642",
+      "project": "pallets/flask",
+      "title": "FlaskGroup does not work when nested in a click.group",
+      "fixed_files": [
+        "src/flask/app.py",
+        "src/flask/cli.py",
+        "src/flask/debughelpers.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/4642"
+    },
+    {
+      "ticket_id": "pallets__flask-4992",
+      "project": "pallets/flask",
+      "title": "Add a file mode parameter to flask.Config.from_file()",
+      "fixed_files": [
+        "src/flask/config.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/4992"
+    },
+    {
+      "ticket_id": "pallets__flask-5014",
+      "project": "pallets/flask",
+      "title": "Require a non-empty name for Blueprints",
+      "fixed_files": [
+        "src/flask/blueprints.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/5014"
+    },
+    {
+      "ticket_id": "pallets__flask-5063",
+      "project": "pallets/flask",
+      "title": "Flask routes to return domain/sub-domains information",
+      "fixed_files": [
+        "src/flask/cli.py"
+      ],
+      "fix_pull_request": "https://github.com/pallets/flask/pull/5063"
+    }
+  ]
+}

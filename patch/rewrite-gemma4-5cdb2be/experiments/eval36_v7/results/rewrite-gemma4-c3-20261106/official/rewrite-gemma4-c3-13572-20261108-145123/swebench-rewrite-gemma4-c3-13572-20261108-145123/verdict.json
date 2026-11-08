@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-13572-20261108-145123",
+  "instance_id": "astropy__astropy-13572",
+  "patch_sha256": "c213b48ab368c0df8d227c8776f32d34a2d66269921152e329c4ae1bbbfa759f",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "plausible",
+  "official_resolved": true,
+  "feedback": "Warning-as-error: astropy.utils.iers.iers.IERSStaleWarning: leap-second file is expired.\nWarning-as-error: astropy.utils.exceptions.AstropyWarning: leap-second auto-update failed due to the following exception: IERSStaleWarning('leap-second file is expired.')\nFAILED astropy/coordinates/tests/test_sky_coord.py::test_repr_altaz\nTraceback context:\nastropy/time/core.py:2893:\nastropy/utils/iers/iers.py:1074: IERSStaleWarning\nastropy/coordinates/tests/test_sky_coord.py:710:\nastropy/coordinates/sky_coordinate.py:675: in transform_to\nastropy/coordinates/transformations.py:1478: in __call__\nastropy/coordinates/transformations.py:1079: in __call__\nastropy/coordinates/builtin_frames/icrs_observed_transforms.py:29: in icrs_to_observed\nastropy/coordinates/erfa_astrom.py:49: in apco\nastropy/coordinates/builtin_frames/utils.py:117: in get_jd12\nastropy/time/core.py:1380: in __getattr__\nastropy/time/core.py:601: in _set_scale\nastropy/time/core.py:2864: in _check_leapsec\nastropy/time/core.py:2897: AstropyWarning\nSKIPPED [1] astropy/coordinates/tests/test_sky_coord.py:1237: condition: not HAS_SCIPY\nSKIPPED [1] astropy/coordinates/tests/test_sky_coord.py:1879: Requires scipy.\n/tmp/pip-build-env-a9jbi15q/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-a9jbi15q/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nSKIPPED [1] ../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pytest_remotedata/plugin.py:85: need --remote-data option to run",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-13572-20261108-145123",
+      "instance_id": "astropy__astropy-13572",
+      "patch_sha256": "c213b48ab368c0df8d227c8776f32d34a2d66269921152e329c4ae1bbbfa759f",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 364149,
+        "captured_bytes": 364149,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 364149
+          }
+        ],
+        "original_sha256": "c3404ee3a7a7f967928dfab34929744c612977e3edec1d176e8ba2c63916b4d0",
+        "captured_sha256": "c3404ee3a7a7f967928dfab34929744c612977e3edec1d176e8ba2c63916b4d0",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 55613,
+        "captured_bytes": 55613,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 55613
+          }
+        ],
+        "original_sha256": "e2732bd60c42ce2989c1d6b2f59a3ba7cafa7341a8ccfa3b87a32f79a6a7f818",
+        "captured_sha256": "e2732bd60c42ce2989c1d6b2f59a3ba7cafa7341a8ccfa3b87a32f79a6a7f818",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

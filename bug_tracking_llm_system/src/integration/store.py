@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,10 +87,15 @@ class TicketStore:
         return sorted(records, key=lambda item: item.get("created_at", ""), reverse=True)
 
     def delete(self, key: str) -> None:
+        """Remove the ticket record and its result files (artifacts)."""
+
         with self._lock:
             path = self._path(key)
             if path.exists():
                 path.unlink()
+            artifacts = self.artifacts_dir / safe_ticket_key(key)
+            if artifacts.is_dir():
+                shutil.rmtree(artifacts, ignore_errors=True)
 
     # --------------------------------------------------------------- artifacts
     def write_artifact(self, key: str, name: str, payload: Any) -> str:
@@ -113,6 +119,19 @@ class TicketStore:
                 except json.JSONDecodeError:
                     continue
         return rows
+
+    def remove_history(self, predicate: Callable[[dict[str, Any]], bool]) -> int:
+        """Drop workspace-history rows matching ``predicate``; returns how many were removed."""
+
+        with self._lock:
+            rows = self.history_rows()
+            kept = [row for row in rows if not predicate(row)]
+            removed = len(rows) - len(kept)
+            if removed:
+                tmp = self.history_path.with_suffix(".tmp")
+                tmp.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in kept), encoding="utf-8")
+                os.replace(tmp, self.history_path)
+            return removed
 
     def upsert_history(self, rows: list[dict[str, Any]]) -> int:
         with self._lock:

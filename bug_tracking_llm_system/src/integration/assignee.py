@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -30,6 +33,7 @@ class TeamAssigneeRecommender:
         self.extra_history_path = Path(extra_history_path) if extra_history_path else None
         self.uses_workspace_history = False
         self.triager = AssigneeTriager(config=self.pipeline_config)
+        self._project_triagers: dict[str, tuple[Path, AssigneeTriager]] = {}
 
     def _ensure_history_source(self) -> None:
         """Use the workspace's imported history only when no configured history file exists."""
@@ -43,11 +47,55 @@ class TeamAssigneeRecommender:
                 self.triager = AssigneeTriager(config=self.pipeline_config)
             self.uses_workspace_history = True
 
+    def _project_history(self, project: str) -> tuple[Path, AssigneeTriager] | None:
+        """Workspace history limited to one project (plus rows without a project), so a ticket is
+        only routed to people who handled that project's tickets. The filtered copy is rebuilt when
+        the workspace history changes; AssigneeTriager itself is unchanged."""
+
+        source = self.extra_history_path
+        if not project or source is None or not source.exists():
+            return None
+        target = source.parent / "by_project" / (re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._") or "project")
+        target = target.with_suffix(".jsonl")
+        if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
+            rows, tagged = [], False
+            with source.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    row_project = str(row.get("project") or "").strip()
+                    tagged = tagged or bool(row_project)
+                    if not row_project or row_project == project:
+                        rows.append(line)
+            if not tagged:
+                return None  # nothing in the history is labelled with a project: keep the shared history
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_name(f".{target.name}.tmp")
+            tmp.write_text("".join(row + "\n" for row in rows), encoding="utf-8")
+            os.replace(tmp, target)
+        cached = self._project_triagers.get(project)
+        if cached is None or cached[0] != target:
+            overrides = {key: value for key, value in self.config.assignee.items() if key in ASSIGNEE_CONFIG_KEYS}
+            config = PipelineConfig(**overrides)
+            config.assignee_dataset_path = target
+            cached = (target, AssigneeTriager(config=config))
+            self._project_triagers[project] = cached
+        return cached
+
     def recommend(self, structured_ticket: dict[str, Any], priority_output: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         self._ensure_history_source()
-        result = self.triager.assign(structured_ticket, priority_output)
-        history_path = self.pipeline_config.assignee_dataset_path
+        triager, history_path = self.triager, self.pipeline_config.assignee_dataset_path
+        project = str(structured_ticket.get("project") or "").strip()
+        scoped = self._project_history(project) if self.uses_workspace_history else None
+        if scoped is not None:
+            history_path, triager = scoped
+        result = triager.assign(structured_ticket, priority_output)
         history_rows = int((result.get("profile_stats") or {}).get("history_rows", 0))
         warnings = []
         status = "done"
@@ -69,7 +117,8 @@ class TeamAssigneeRecommender:
             details={
                 "history_path": str(history_path or ""),
                 "history_rows": history_rows,
-                "history_source": "工作台匯入的歷史資料" if self.uses_workspace_history else "設定檔指定的歷史資料",
+                "history_source": (f"工作台匯入的歷史資料（只用「{project}」及未標專案的紀錄）" if scoped is not None
+                                   else "工作台匯入的歷史資料" if self.uses_workspace_history else "設定檔指定的歷史資料"),
             },
             started=started,
         )

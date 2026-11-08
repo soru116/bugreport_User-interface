@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-13638-20261108-145123",
+  "instance_id": "astropy__astropy-13638",
+  "patch_sha256": "601d9f6ada498f6503da409e2b9ac8a40fb4841dce87fa9a0b3350370c51f2eb",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: pytest.PytestRemovedIn8Warning: Support for nose tests is deprecated and will be removed in a future release.\nAttributeError: 'float' object has no attribute 'dtype'\nAssertion evidence: assert <Quantity [(6.68458712e-09, 0.00014439), (1.33691742e-08, 0.00028877),\\n           (2.00537614e-08, 0.00043316)] (AU, AU / d)> is not <Quantity [(6.68458712e-09, 0.00014439), (1.33691742e-08, 0.00028877),\\n           (2.00537614e-08, 0.00043316)] (AU, AU / d)>\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_creation\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_view\nERROR astropy/units/tests/test_quantity.py::TestSpecificTypeQuantity::test_operation_precedence_and_fallback\nFAILED astropy/units/tests/test_quantity.py::test_regression_12964\nFAILED astropy/units/tests/test_structured.py::TestStructuredQuantity::test_inplace_conversion\nTraceback context:\nastropy/units/tests/test_quantity.py:721:\nastropy/units/quantity.py:1109: AttributeError\nastropy/units/tests/test_structured.py:529: AssertionError\n/tmp/pip-build-env-dyim4jgy/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-dyim4jgy/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:341:\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:262: in <lambda>\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_hooks.py:493: in __call__\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pluggy/_manager.py:115: in _hookexec\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:157: in pytest_runtest_setup\n/opt/miniconda3/envs/testbed/lib/python3.9/site-packages/_pytest/runner.py:497: in setup\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity.py::test_regression_12964\nFAIL_TO_PASS failed test: astropy/units/tests/test_structured.py::TestStructuredQuantity::test_inplace_conversion",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-13638-20261108-145123",
+      "instance_id": "astropy__astropy-13638",
+      "patch_sha256": "601d9f6ada498f6503da409e2b9ac8a40fb4841dce87fa9a0b3350370c51f2eb",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 342829,
+        "captured_bytes": 342829,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 342829
+          }
+        ],
+        "original_sha256": "4f5954f37e1750d2a5d27a61118ea99fc9b000a3e435b4e9ebc47edf4363a936",
+        "captured_sha256": "4f5954f37e1750d2a5d27a61118ea99fc9b000a3e435b4e9ebc47edf4363a936",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 19016,
+        "captured_bytes": 19016,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 19016
+          }
+        ],
+        "original_sha256": "d9b373f53d18ee855083956823b2dd25591f54d0cd70e43f0139811f5911a351",
+        "captured_sha256": "d9b373f53d18ee855083956823b2dd25591f54d0cd70e43f0139811f5911a351",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-14253-20261025-004445",
+  "instance_id": "astropy__astropy-14253",
+  "patch_sha256": "0a285ab8411003800ddeba8d7fce1bb0d1df4b71e22848bba3fc25f38876cf71",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Assertion evidence: assert 'info' not in {'_unit': Unit(\"m / s\"), 'info': <astropy.units.quantity.QuantityInfo object at 0x7fbaec110040>}\nAssertion evidence: assert 'info' not in {'_unit': Unit(\"m / s\"), 'info': <astropy.units.quantity.QuantityInfo object at 0x7fbaec110270>}\nAssertion evidence: assert 'info' not in {'_unit': Unit(\"m\"), 'info': <astropy.units.quantity.QuantityInfo object at 0x7fbaec110180>}\nFAILED astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_unary_op\nFAILED astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_binary_op\nFAILED astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_unit_change\nFAILED astropy/units/tests/test_quantity_info.py::TestStructuredQuantity::test_keying\nTraceback context:\nastropy/units/tests/test_quantity_info.py:83:\nastropy/units/tests/test_quantity_info.py:22: AssertionError\nastropy/units/tests/test_quantity_info.py:87:\nastropy/units/tests/test_quantity_info.py:91:\nastropy/units/tests/test_quantity_info.py:112:\n/tmp/pip-build-env-gyecnejx/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_unary_op\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_binary_op\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_info.py::TestQuantityInfo::test_unit_change\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_info.py::TestStructuredQuantity::test_keying",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-14253-20261025-004445",
+      "instance_id": "astropy__astropy-14253",
+      "patch_sha256": "0a285ab8411003800ddeba8d7fce1bb0d1df4b71e22848bba3fc25f38876cf71",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 324553,
+        "captured_bytes": 324553,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 324553
+          }
+        ],
+        "original_sha256": "821aa95188213d9e4bc0eca2555603f5e745778c64840493ffd9aaa24d8f3105",
+        "captured_sha256": "821aa95188213d9e4bc0eca2555603f5e745778c64840493ffd9aaa24d8f3105",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 17939,
+        "captured_bytes": 17939,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 17939
+          }
+        ],
+        "original_sha256": "20b347a60a33051d2ef553a2d64ab55dc63baf9628287a965a56ce9a89eb02fb",
+        "captured_sha256": "20b347a60a33051d2ef553a2d64ab55dc63baf9628287a965a56ce9a89eb02fb",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

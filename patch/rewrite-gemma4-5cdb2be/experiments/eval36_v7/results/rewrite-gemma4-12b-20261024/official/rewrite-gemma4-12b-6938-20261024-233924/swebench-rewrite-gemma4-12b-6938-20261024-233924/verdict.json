@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-6938-20261024-233924",
+  "instance_id": "astropy__astropy-6938",
+  "patch_sha256": "0d95a39b9d470eed721a99f2078f1345f8cb646d1efc4574427d51afa4b1eec6",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data\nFAIL_TO_PASS failed test: astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table",
+  "feedback_source": "structured_report",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-6938-20261024-233924",
+      "instance_id": "astropy__astropy-6938",
+      "patch_sha256": "0d95a39b9d470eed721a99f2078f1345f8cb646d1efc4574427d51afa4b1eec6",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 435913,
+        "captured_bytes": 435913,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 435913
+          }
+        ],
+        "original_sha256": "6276daf88932a8a2f268c13b8bc8bab826816b139e79950415b9257b49e2cfe2",
+        "captured_sha256": "6276daf88932a8a2f268c13b8bc8bab826816b139e79950415b9257b49e2cfe2",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 5095,
+        "captured_bytes": 5095,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 5095
+          }
+        ],
+        "original_sha256": "82bd276006b1e3026bfc0f814531a0080cb670722ab780fad915a749d5270bf2",
+        "captured_sha256": "82bd276006b1e3026bfc0f814531a0080cb670722ab780fad915a749d5270bf2",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

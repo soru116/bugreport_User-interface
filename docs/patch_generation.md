@@ -9,6 +9,7 @@
 | [MAIN PatchGenerator](../bug_tracking_llm_system/bug_tracking_llm_system/src/modules/patch_generator.py) | supplied diff 或 configured LLM 產 unified diff；Stage-3 context、confidence gate；default `patch_generation_enabled=False` | Partially implemented（相對目標 native FIM pipeline）；handoff 已接合 |
 | [FIM CLI](../patch/fim_patch/__main__.py) | `python -m fim_patch`，選 `--localization` 或 `--system-src`，native PSM；output 是 `.json` | Implemented，獨立第一版；非 MAIN default |
 | [REPAIR CLI](../patch/integrated-fixed-patch/src/fim_patch/cli.py) | fresh FL + `RepairPipeline` + FIM + evaluation；output 是新目錄；不接受上述兩個歷史 localization flags | Implemented，repair 子流程統一入口；非完整 ticket orchestration |
+| [工作台第 6 步](../bug_tracking_llm_system/src/integration/patch.py) | 工作台自己的 Stage-3 定位 → [`patch/rewrite-gemma4-5cdb2be`](../patch/rewrite-gemma4-5cdb2be/PROVENANCE_ZH.md)（fixed-patch `5cdb2be`，官方 6/36 那一版）的 `RepairPipeline` + 對話式改寫（gemma4:12b，3 候選）；方法設定凍結為該 run 的 `run_config.json`；官方判定只以 patch sha256 對應 | Implemented，網頁手動按鈕；假模型測試通過，真實 gemma4 在工作台內 Not verified |
 
 FIM／REPAIR 都叫 `fim_patch`，必須用正確 cwd 與 import path。新的統一 repair 任務優先定位 REPAIR；維護 FIM 第一版才使用外層 `patch/` 文件，不能混用 CLI 參數與 exit code。
 

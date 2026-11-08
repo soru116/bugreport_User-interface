@@ -10,8 +10,11 @@ DUP TF-IDF detector is used and the stage is reported as a fallback.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,96 @@ HISTORY_DISPLAY_KEYS = (
     "created_at",
     "creation_time",
 )
+
+
+def parse_time(value: Any) -> datetime | None:
+    """Ticket timestamps come as ISO strings with or without a zone ('2002-10-17T04:02:09Z',
+    '2001-10-11 02:52:28+00:00', '2026-10-18T15:58:42+00:00'); naive times are taken as UTC."""
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def row_time(row: dict[str, Any]) -> datetime | None:
+    return parse_time(row.get("created_at") or row.get("creation_time"))
+
+
+class EmbeddingCache:
+    """SBERT embeddings of history texts, keyed by model and text hash, kept in memory and on disk.
+
+    History rows rarely change, so each text is encoded once; later tickets only encode their own
+    title and content. The vectors are exactly what ``model.encode(..., normalize_embeddings=True)``
+    returns, so the scores equal DUP's ``_sbert_score_matrices``."""
+
+    def __init__(self, directory: Path | None) -> None:
+        self.directory = Path(directory) if directory else None
+        self._vectors: dict[str, dict[str, Any]] = {}
+        self._dirty: set[str] = set()
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def key(text: str) -> str:
+        return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+    def _path(self, namespace: str) -> Path | None:
+        return self.directory / f"{namespace}.npz" if self.directory else None
+
+    def _load(self, namespace: str) -> dict[str, Any]:
+        if namespace in self._vectors:
+            return self._vectors[namespace]
+        table: dict[str, Any] = {}
+        path = self._path(namespace)
+        if path is not None and path.is_file():
+            import numpy as np
+
+            try:
+                with np.load(path, allow_pickle=False) as data:
+                    table = dict(zip(data["keys"].tolist(), data["vectors"]))
+            except Exception:  # unreadable cache: rebuild it
+                table = {}
+        self._vectors[namespace] = table
+        return table
+
+    def encode(self, namespace: str, model: Any, texts: list[str], batch_size: int) -> tuple[Any, int]:
+        """Return normalised embeddings for ``texts`` and how many had to be computed."""
+
+        import numpy as np
+
+        with self._lock:
+            table = self._load(namespace)
+            keys = [self.key(text) for text in texts]
+            missing = list(dict.fromkeys(k for k in keys if k not in table))
+            if missing:
+                by_key = dict(zip(keys, texts))
+                vectors = model.encode([by_key[k] for k in missing], batch_size=batch_size, normalize_embeddings=True, show_progress_bar=len(missing) > 64)
+                for k, vector in zip(missing, np.asarray(vectors)):
+                    table[k] = np.asarray(vector, dtype=np.float32)
+                self._dirty.add(namespace)
+            matrix = np.vstack([table[k] for k in keys]) if keys else np.zeros((0, 0), dtype=np.float32)
+            return matrix, len(missing)
+
+    def save(self) -> None:
+        if self.directory is None:
+            return
+        import numpy as np
+
+        with self._lock:
+            for namespace in list(self._dirty):
+                table = self._vectors.get(namespace) or {}
+                if not table:
+                    continue
+                self.directory.mkdir(parents=True, exist_ok=True)
+                path = self._path(namespace)
+                tmp = path.with_name(f".{path.stem}.tmp.npz")
+                np.savez(tmp, keys=np.array(list(table.keys())), vectors=np.vstack(list(table.values())))
+                tmp.replace(path)
+            self._dirty.clear()
 
 
 def _stringify(value: Any) -> str:
@@ -95,6 +188,7 @@ class TeamDuplicateDetector:
         self.source_root = self.root / "src"
         self._sbert_detector = sbert_detector
         self._sbert_error = ""
+        self.embedding_cache = EmbeddingCache(Path(config.store_dir) / "cache" / "sbert" if getattr(config, "store_dir", None) else None)
 
     @property
     def implementation(self) -> str:
@@ -116,6 +210,19 @@ class TeamDuplicateDetector:
                 rows.extend(loaded)
                 sources.append(f"{path}（{len(loaded)} 筆）")
         return rows, sources
+
+    def _sbert_scores(self, detector: Any, query: Any, candidates: list[Any]) -> tuple[Any, Any, int]:
+        """Same matrices as DUP's ``cli._sbert_score_matrices``, with history embeddings cached."""
+
+        detector._check_fitted()
+        batch = detector.config.batch_size
+        model_key = hashlib.sha1(str(self.config.duplicate.sbert_model_dir or id(detector)).encode("utf-8")).hexdigest()[:12]
+        title_q, _ = self.embedding_cache.encode(f"{model_key}_title", detector.title_model, [query.title], batch)
+        content_q, _ = self.embedding_cache.encode(f"{model_key}_content", detector.content_model, [query.content], batch)
+        title_c, new_titles = self.embedding_cache.encode(f"{model_key}_title", detector.title_model, [c.title for c in candidates], batch)
+        content_c, new_contents = self.embedding_cache.encode(f"{model_key}_content", detector.content_model, [c.content for c in candidates], batch)
+        self.embedding_cache.save()
+        return title_q @ title_c.T, content_q @ content_c.T, new_titles + new_contents
 
     def sbert_detector(self):
         if self._sbert_detector is not None:
@@ -165,10 +272,25 @@ class TeamDuplicateDetector:
         history, sources = self.history_rows(extra_history_paths)
         query_id = str(structured_ticket.get("ticket_id") or "__query__")
         excluded = {query_id, *(exclude_ids or set())}
+        # Only compare within the ticket's project; history rows without a project are shared.
+        query_project = str(structured_ticket.get("project") or "").strip()
+        other_project_rows = 0
+        # A real history only holds reports filed before this one: never compare with later reports.
+        query_time = parse_time(structured_ticket.get("created_at") or structured_ticket.get("creation_time"))
+        later_rows = 0
 
         candidates = []
         raw_by_id: dict[str, dict[str, Any]] = {}
         for row in history:
+            row_project = str(row.get("project") or "").strip()
+            if query_project and row_project and row_project != query_project:
+                other_project_rows += 1
+                continue
+            if query_time is not None:
+                created = row_time(row)
+                if created is not None and created >= query_time:
+                    later_rows += 1
+                    continue
             try:
                 record = _row_to_ticket({key: _stringify(value) for key, value in row.items()}, content_columns=DEFAULT_CONTENT_COLUMNS)
             except ValueError:
@@ -198,8 +320,9 @@ class TeamDuplicateDetector:
 
         warnings: list[str] = []
         detector = self.sbert_detector()
+        encoded = 0
         if detector is not None:
-            title_scores, content_scores = dup_cli._sbert_score_matrices(detector, [query], candidates)
+            title_scores, content_scores, encoded = self._sbert_scores(detector, query, candidates)
             combine = settings.combine
             method = "sbert"
         else:
@@ -287,9 +410,14 @@ class TeamDuplicateDetector:
             "decision_policy": decision_policy,
             "top_k_candidates": top_candidates,
             "history_size": len(candidates),
+            "project_scope": query_project,
+            "other_project_rows_skipped": other_project_rows,
+            "later_rows_skipped": later_rows,
+            "query_created_at": query_time.isoformat() if query_time else "",
         }
         details = {
             "method": method,
+            "sbert_newly_encoded": encoded,
             "pipeline": steps,
             "history_sources": sources,
             "sbert_model_dir": str(settings.sbert_model_dir or ""),

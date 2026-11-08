@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-13462-20261108-144949",
+  "instance_id": "astropy__astropy-13462",
+  "patch_sha256": "f6512a812035c69a6cb0e472473e3c9e336d5fa6c5e267f53e29b6809cdde78f",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: astropy.utils.iers.iers.IERSStaleWarning: leap-second file is expired.\nWarning-as-error: astropy.utils.exceptions.AstropyWarning: leap-second auto-update failed due to the following exception: IERSStaleWarning('leap-second file is expired.')\nTypeError: '<=' not supported between instances of 'numpy.ndarray' and 'TimeDelta'\nFAILED astropy/time/tests/test_basic.py::TestBasic::test_simple\nFAILED astropy/time/tests/test_basic.py::test_linspace\nFAILED astropy/time/tests/test_basic.py::test_linspace_steps\nFAILED astropy/time/tests/test_basic.py::test_linspace_fmts\nFAILED astropy/time/tests/test_precision.py::test_day_frac_exact\nTraceback context:\nastropy/time/core.py:2895:\nastropy/utils/iers/iers.py:1074: IERSStaleWarning\nastropy/time/tests/test_basic.py:58:\nastropy/time/core.py:1382: in __getattr__\nastropy/time/core.py:601: in _set_scale\nastropy/time/core.py:2866: in _check_leapsec\nastropy/time/core.py:2899: AstropyWarning\nastropy/time/core.py:1008: TypeError\nastropy/time/tests/test_basic.py:2411:\nastropy/time/core.py:1010: TypeError\nastropy/time/tests/test_basic.py:2432:\nastropy/time/tests/test_basic.py:2448:\nastropy/time/tests/test_precision.py:346:\nastropy/time/tests/test_precision.py:351: AssertionError\nSKIPPED [1] astropy/time/tests/test_basic.py:1561: condition: not HAS_PYTZ\nSKIPPED [20] astropy/time/tests/test_basic.py:2279: Needs h5py\n/tmp/pip-build-env-akafue7z/overlay/lib/python3.9/site-packages/setuptools/config/setupcfg.py:293: _DeprecatedConfig: Deprecated config in `setup.cfg`\n/tmp/pip-build-env-akafue7z/overlay/lib/python3.9/site-packages/setuptools/command/editable_wheel.py:348: InformationOnly: Editable installation.\nSKIPPED [1] ../opt/miniconda3/envs/testbed/lib/python3.9/site-packages/pytest_remotedata/plugin.py:85: need --remote-data option to run\nFAIL_TO_PASS failed test: astropy/time/tests/test_precision.py::test_day_frac_exact\nPASS_TO_PASS failed test: astropy/time/tests/test_basic.py::test_linspace\nPASS_TO_PASS failed test: astropy/time/tests/test_basic.py::test_linspace_steps\nPASS_TO_PASS failed test: astropy/time/tests/test_basic.py::test_linspace_fmts",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-13462-20261108-144949",
+      "instance_id": "astropy__astropy-13462",
+      "patch_sha256": "f6512a812035c69a6cb0e472473e3c9e336d5fa6c5e267f53e29b6809cdde78f",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 353654,
+        "captured_bytes": 353654,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 353654
+          }
+        ],
+        "original_sha256": "a5dd0d82f69c519fec4d6d7a11ad7269d13332ed34cb5f8f534906bbbc21fe39",
+        "captured_sha256": "a5dd0d82f69c519fec4d6d7a11ad7269d13332ed34cb5f8f534906bbbc21fe39",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 28643,
+        "captured_bytes": 28643,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 28643
+          }
+        ],
+        "original_sha256": "f3be468b8fa8c1d41f100c67bd774d2727d35a91534fb40e2be93f541e0910b9",
+        "captured_sha256": "f3be468b8fa8c1d41f100c67bd774d2727d35a91534fb40e2be93f541e0910b9",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

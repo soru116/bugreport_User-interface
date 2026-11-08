@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-c3-14163-20261108-145123",
+  "instance_id": "astropy__astropy-14163",
+  "patch_sha256": "d40241daa6cdd9d5b709d31385a283b107ae27387dd26aad848031541934aee2",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "failed",
+  "official_resolved": false,
+  "feedback": "Warning-as-error: DeprecationWarning: `sometrue` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `any` instead.\nWarning-as-error: DeprecationWarning: `alltrue` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `all` instead.\nWarning-as-error: DeprecationWarning: `product` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `prod` instead.\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_sometrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_alltrue\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_product\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncReductions::test_cumproduct\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestUfuncLike::test_round_\nFAILED astropy/units/tests/test_quantity_non_ufuncs.py::TestReductionLikeFunctions::test_array_equal_incompatible_units\nTraceback context:\nastropy/units/tests/test_quantity_non_ufuncs.py:633:\nastropy/units/tests/test_quantity_non_ufuncs.py:637:\nastropy/units/tests/test_quantity_non_ufuncs.py:645:\nastropy/units/tests/test_quantity_non_ufuncs.py:653:\nastropy/units/tests/test_quantity_non_ufuncs.py:662:\nastropy/units/tests/test_quantity_non_ufuncs.py:76: in check\nastropy/units/quantity.py:976:\nastropy/units/core.py:1129: UnitConversionError\nastropy/units/tests/test_quantity_non_ufuncs.py:936:\nastropy/units/quantity.py:1840: in __array_function__\nastropy/units/quantity_helper/function_helpers.py:566: in array_equal\nastropy/units/quantity_helper/function_helpers.py:351: in _quantities2arrays\nastropy/units/quantity_helper/function_helpers.py:351: in <genexpr>\nastropy/units/quantity.py:1648: in _to_own_unit\nastropy/units/quantity.py:979: in to_value\nastropy/units/quantity.py:885: in _to_value\nastropy/units/core.py:1165: in to\nastropy/units/core.py:1094: in _get_converter\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestReductionLikeFunctions::test_array_equal_incompatible_units\nFAIL_TO_PASS failed test: astropy/units/tests/test_quantity_non_ufuncs.py::TestReductionLikeFunctions::test_array_equiv_incompatible_units",
+  "feedback_source": "artifact_test_output",
+  "feedback_quality": "test_failure_detail",
+  "failure_details_verified": true,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-c3-14163-20261108-145123",
+      "instance_id": "astropy__astropy-14163",
+      "patch_sha256": "d40241daa6cdd9d5b709d31385a283b107ae27387dd26aad848031541934aee2",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 373965,
+        "captured_bytes": 373965,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 373965
+          }
+        ],
+        "original_sha256": "abd8f5707046afb1f8bfb4f603d8a39c5a532bda84863ace7e54a8935f780d3a",
+        "captured_sha256": "abd8f5707046afb1f8bfb4f603d8a39c5a532bda84863ace7e54a8935f780d3a",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 27734,
+        "captured_bytes": 27734,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 27734
+          }
+        ],
+        "original_sha256": "1afc73e317933384e960bb0bbeeb1da05b640dccaec36409f2eaefe63185f5fc",
+        "captured_sha256": "1afc73e317933384e960bb0bbeeb1da05b640dccaec36409f2eaefe63185f5fc",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

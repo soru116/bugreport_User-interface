@@ -1,0 +1,59 @@
+{
+  "run_id": "rewrite-gemma4-12b-7336-20261025-024716",
+  "instance_id": "astropy__astropy-7336",
+  "patch_sha256": "68dda092b7f96d2956fb036998a2482a0e801b29937f7f52687f1f18c48e9a8a",
+  "dataset": "SWE-bench/SWE-bench",
+  "split": "test",
+  "status": "plausible",
+  "official_resolved": true,
+  "feedback": "Actual failed assertion/expected value unavailable; test details remain unknown.",
+  "feedback_source": "unknown",
+  "feedback_quality": "missing_test_details",
+  "failure_details_verified": false,
+  "log_source_separation_verified": true,
+  "log_evidence_version": "separated-official-logs-v1",
+  "feedback_provenance": {
+    "version": "separated-official-logs-v1",
+    "identity": {
+      "run_id": "rewrite-gemma4-12b-7336-20261025-024716",
+      "instance_id": "astropy__astropy-7336",
+      "patch_sha256": "68dda092b7f96d2956fb036998a2482a0e801b29937f7f52687f1f18c48e9a8a",
+      "dataset": "SWE-bench/SWE-bench",
+      "split": "test"
+    },
+    "files": {
+      "test_output.txt": {
+        "present": true,
+        "original_bytes": 81262,
+        "captured_bytes": 81262,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 81262
+          }
+        ],
+        "original_sha256": "28ac0592b2713c048f57d0a88d23971bc1d20733bd4fa5647ae5a101bbd70268",
+        "captured_sha256": "28ac0592b2713c048f57d0a88d23971bc1d20733bd4fa5647ae5a101bbd70268",
+        "source": "test_output.txt"
+      },
+      "run_instance.log": {
+        "present": true,
+        "original_bytes": 40380,
+        "captured_bytes": 40380,
+        "truncated": false,
+        "capture_mode": "complete",
+        "ranges": [
+          {
+            "offset": 0,
+            "length": 40380
+          }
+        ],
+        "original_sha256": "3cfe114daf3c8ac5f775ccc9db27e8e323679d84893bf7342fcb2e603b58ce68",
+        "captured_sha256": "3cfe114daf3c8ac5f775ccc9db27e8e323679d84893bf7342fcb2e603b58ce68",
+        "source": "run_instance.log"
+      }
+    }
+  }
+}

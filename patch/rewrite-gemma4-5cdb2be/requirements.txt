@@ -1,0 +1,12 @@
+# Core integration pipeline uses only the Python standard library.
+# Install these when you want to connect the existing model experiments.
+joblib
+numpy
+pandas
+pyarrow
+requests
+scikit-learn
+scipy
+
+# Optional: enables --embedding-backend sbert for fault localization.
+# sentence-transformers
