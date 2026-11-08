@@ -22,7 +22,7 @@ import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = WORKSPACE_ROOT.parent
@@ -345,6 +345,33 @@ class WorkspaceApp:
         self.pipeline.patch_precheck(key)  # readable error right away instead of a failed job
         return self._submit(key, "patch")
 
+    def patched_code(self, key: str, source: str) -> dict[str, Any]:
+        """The functions a patch touches, after applying it to the ticket's version of the code."""
+
+        from integration.patch import PatchUnavailable, patched_code
+
+        record = self.pipeline.get(key)
+        project = self.config.project(record.get("project"))
+        if project is None:
+            raise ValueError("這張 Ticket 沒有對應的專案程式碼。")
+        output = (record["stages"].get("patch") or {}).get("output") or {}
+        base_commit = str(output.get("base_commit") or (record.get("raw") or {}).get("base_commit") or "")
+        if source == "current":
+            patch = output.get("patch")
+        elif source == "experiment":
+            patch = (self.pipeline.patcher.experiment_record(str(record.get("ticket_id") or "")) or {}).get("patch")
+        elif source.startswith("candidate-"):
+            wanted = source.split("-", 1)[1]
+            patch = next((item.get("patch") for item in output.get("candidates") or [] if str(item.get("candidate_id")) == wanted), "")
+        else:
+            raise ValueError("不明的補丁來源")
+        if not patch:
+            raise ValueError("找不到這個補丁。")
+        try:
+            return {"base_commit": base_commit, "files": patched_code(project, base_commit, str(patch))}
+        except PatchUnavailable as exc:
+            raise ValueError(str(exc)) from exc
+
     def build_index(self, project_name: str) -> dict[str, Any]:
         project = self.config.project(project_name)
         if project is None:
@@ -493,6 +520,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"tickets": [self.app.ticket_summary(record) for record in records], "queue": self.app.queue_summary()})
             if len(parts) == 3 and parts[1] == "tickets":
                 return self._json(self.app.ticket_detail(parts[2]))
+            if len(parts) == 4 and parts[1] == "tickets" and parts[3] == "patched-code":
+                source = (parse_qs(urlparse(self.path).query).get("source") or ["current"])[0]
+                try:
+                    return self._json(self.app.patched_code(parts[2], source))
+                except ValueError as exc:
+                    return self._error(str(exc))
             if len(parts) == 5 and parts[1] == "tickets" and parts[3] == "artifact":
                 if parts[4] == "ticket.json":
                     data = self.app.ticket_detail(parts[2])

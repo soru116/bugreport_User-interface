@@ -20,8 +20,10 @@ that the official SWE-bench harness has judged.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
+import re
 import json
 import subprocess
 import sys
@@ -416,3 +418,130 @@ class TeamPatchGenerator:
         if official and official.get("official_resolved") is False:
             warnings.append("這個補丁和一個已經送過官方測試的補丁完全相同，官方判定：沒有修好。")
         return warnings
+
+
+# --------------------------------------------------------------------------------------------------
+# "Copy the fixed code": apply a unified diff to the file at base_commit and return the whole
+# functions it touches, so an engineer can paste working code instead of a diff.
+
+_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def parse_unified_diff(patch: str) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    hunk: dict[str, Any] | None = None
+    for line in patch.splitlines():
+        if line.startswith("--- "):
+            current = {"old": line[4:].strip(), "path": "", "hunks": []}
+            files.append(current)
+            hunk = None
+        elif line.startswith("+++ ") and current is not None and hunk is None:
+            path = line[4:].strip()
+            current["path"] = path[2:] if path.startswith("b/") else path
+        elif (match := _HUNK.match(line)) and current is not None:
+            hunk = {"old_start": int(match.group(1)), "new_start": int(match.group(3)), "lines": []}
+            current["hunks"].append(hunk)
+        elif hunk is not None and line[:1] in {" ", "+", "-", ""} and not line.startswith("\\"):
+            hunk["lines"].append(line if line else " ")
+    return [item for item in files if item["path"]]
+
+
+def apply_hunks(old_text: str, hunks: list[dict[str, Any]]) -> tuple[str, set[int]]:
+    """Apply hunks to ``old_text`` (LF line endings). Returns the new text and the changed new line numbers."""
+
+    old = old_text.split("\n")
+    new: list[str] = []
+    changed: set[int] = set()
+    cursor = 0  # index into old
+    for hunk in hunks:
+        start = hunk["old_start"] - 1 if hunk["old_start"] > 0 else 0
+        if start < cursor:
+            raise ValueError("補丁的區塊順序不正確")
+        new.extend(old[cursor:start])
+        cursor = start
+        for line in hunk["lines"]:
+            tag, text = line[:1], line[1:]
+            if tag in (" ", "-"):
+                if cursor >= len(old) or old[cursor].rstrip("\r") != text.rstrip("\r"):
+                    raise ValueError(f"補丁和第 {cursor + 1} 行的程式碼對不上")
+                if tag == " ":
+                    new.append(old[cursor])
+                else:
+                    changed.add(len(new) + 1)  # deletion point, in new numbering
+                cursor += 1
+            else:  # "+"
+                new.append(text)
+                changed.add(len(new))
+    new.extend(old[cursor:])
+    return "\n".join(new), changed
+
+
+def touched_functions(source: str, changed: set[int]) -> list[dict[str, Any]]:
+    """The innermost function or method containing each changed line (whole definition)."""
+
+    lines = source.split("\n")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        tree = None
+    spans: list[tuple[int, int, str]] = []
+    if tree is not None:
+        def visit(node: ast.AST, prefix: str) -> None:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    name = f"{prefix}{child.name}"
+                    if not isinstance(child, ast.ClassDef):
+                        start = min([child.lineno] + [d.lineno for d in child.decorator_list])
+                        spans.append((start, child.end_lineno or child.lineno, name))
+                    visit(child, f"{name}.")
+                else:
+                    visit(child, prefix)
+        visit(tree, "")
+    picked: dict[tuple[int, int], str] = {}
+    for line_no in sorted(changed):
+        line_no = min(max(line_no, 1), len(lines))
+        containing = [span for span in spans if span[0] <= line_no <= span[1]]
+        if containing:
+            start, end, name = min(containing, key=lambda span: span[1] - span[0])
+        else:  # module-level change: a few lines around it
+            start, end, name = max(1, line_no - 3), min(len(lines), line_no + 3), "（模組層級）"
+        picked[(start, end)] = name
+    merged = []
+    for (start, end), name in sorted(picked.items()):
+        if merged and start <= merged[-1]["end_line"]:
+            continue  # nested in a function already returned
+        merged.append({"name": name, "start_line": start, "end_line": end, "code": "\n".join(lines[start - 1:end]) + "\n"})
+    return merged
+
+
+def read_at_commit(project: ProjectSettings, base_commit: str, path: str) -> str:
+    """File text at ``base_commit`` with LF line endings (git first, then the version snapshot)."""
+
+    repo = Path(project.repo_path)
+    if base_commit and (repo / ".git").exists():
+        try:
+            return _git(repo, "show", f"{base_commit}:{path}").decode("utf-8").replace("\r\n", "\n")
+        except PatchUnavailable:
+            pass
+    candidates = []
+    if project.snapshots_dir and base_commit:
+        candidates.append(Path(project.snapshots_dir) / base_commit / path)
+    candidates.append(repo / path)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    where = f"版本 {base_commit[:12]}" if base_commit else f"專案「{project.name}」"
+    raise PatchUnavailable(f"找不到 {path} 在{where}的內容，無法還原修改後的程式碼。")
+
+
+def patched_code(project: ProjectSettings, base_commit: str, patch: str) -> list[dict[str, Any]]:
+    results = []
+    for item in parse_unified_diff(patch):
+        old_text = read_at_commit(project, base_commit, item["path"])
+        try:
+            new_text, changed = apply_hunks(old_text, item["hunks"])
+        except ValueError as exc:
+            raise PatchUnavailable(f"{item['path']}：{exc}") from exc
+        results.append({"path": item["path"], "functions": touched_functions(new_text, changed), "file": new_text})
+    return results

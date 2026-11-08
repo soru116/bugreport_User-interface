@@ -1167,11 +1167,12 @@ function patchReason(reason) {
 /* Patch texts shown on the page, so the copy/download buttons get the exact bytes (not the HTML). */
 const PATCH_TEXTS = new Map();
 
-function patchTools(patch, filename) {
+function patchTools(patch, filename, source) {
   const id = `p${PATCH_TEXTS.size + 1}`;
-  PATCH_TEXTS.set(id, { patch: String(patch || ""), filename });
+  PATCH_TEXTS.set(id, { patch: String(patch || ""), filename, source });
   return `<div class="patch-tools">
-      <button type="button" class="btn btn-quiet btn-small" data-copy-patch="${id}">複製補丁</button>
+      <button type="button" class="btn btn-primary btn-small" data-copy-code="${id}" title="套用補丁後的完整函式，可以直接貼上">複製修改後的程式碼</button>
+      <button type="button" class="btn btn-quiet btn-small" data-copy-patch="${id}" title="unified diff，可用 git apply 套用">複製補丁</button>
       <button type="button" class="btn btn-quiet btn-small" data-download-patch="${id}">下載 .diff</button>
     </div>`;
 }
@@ -1236,7 +1237,7 @@ function experimentBox(exp, currentSha, filename) {
   return `<div class="exp-box">${head}
     <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
     ${officialBox(exp.official, { mine: false })}
-    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename)}${diffHtml(exp.patch)}</details></div>`;
+    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details></div>`;
 }
 
 function renderPatchStage(r, n) {
@@ -1276,10 +1277,10 @@ function renderPatchStage(r, n) {
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r))}</div>${diffHtml(o.patch)}`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
-      .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`))}${diffHtml(c.patch)}</details>`).join("");
+      .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
     content = `${warnings}${summary}${diff}
       <h4 class="sub-head">${(o.candidates || []).length} 個候選</h4>
       <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
@@ -1307,6 +1308,26 @@ async function onDetailClick(event) {
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
+  const codeBtn = event.target.closest("[data-copy-code]");
+  if (codeBtn && state.detail) {
+    const item = PATCH_TEXTS.get(codeBtn.dataset.copyCode);
+    if (!item) return;
+    try {
+      codeBtn.disabled = true;
+      const data = await api(`/api/tickets/${encodeURIComponent(state.detail.key)}/patched-code?source=${encodeURIComponent(item.source)}`);
+      const parts = data.files.flatMap((f) => f.functions.map((fn) => ({ ...fn, path: f.path })));
+      const text = parts.length === 1
+        ? parts[0].code
+        : parts.map((fn) => `# ===== ${fn.path}  ${fn.name}（第 ${fn.start_line}–${fn.end_line} 行）=====\n${fn.code}`).join("\n");
+      const where = parts.map((fn) => `${fn.name}（${fn.path} 第 ${fn.start_line}–${fn.end_line} 行）`).join("、");
+      toast(await copyText(text) ? `已複製修改後的 ${where}` : "複製失敗");
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      codeBtn.disabled = false;
+    }
+    return;
+  }
   const copyBtn = event.target.closest("[data-copy-patch]");
   if (copyBtn) {
     const item = PATCH_TEXTS.get(copyBtn.dataset.copyPatch);

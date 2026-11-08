@@ -600,6 +600,15 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue((Path(output["run_dir"]) / "selected.diff").is_file())
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
 
+        # "Copy the fixed code": the patch applied to the file at base_commit, whole function returned.
+        from integration.patch import patched_code
+
+        [changed] = patched_code(self.config.projects["demo"], output["base_commit"], output["patch"])
+        self.assertEqual(changed["path"], "pkg/names.py")
+        self.assertEqual([fn["name"] for fn in changed["functions"]], ["clean"])
+        self.assertEqual(changed["functions"][0]["code"], fixed)
+        self.assertIn('return "hi " + clean(name)', changed["file"])
+
         record = pipeline.rerun_localization(key)  # new localization -> the old patch no longer applies
         self.assertNotIn("patch", record["stages"])
 
