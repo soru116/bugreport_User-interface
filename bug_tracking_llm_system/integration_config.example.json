@@ -62,6 +62,14 @@
     "timeout_seconds": 600
   },
 
+  "commit_message": {
+    "_說明": "補丁成功後自動使用 Code Llama-Instruct 零樣本產生一行 Conventional Commit 訊息。失敗不會刪除補丁。需要 ollama pull codellama:13b-instruct。",
+    "enabled": true,
+    "ollama_url": "http://localhost:11434",
+    "model": "codellama:13b-instruct",
+    "timeout_seconds": 180
+  },
+
   "projects": {
     "duplicate-detection": {
       "repo_path": "../bug-duplicate-detection",

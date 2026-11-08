@@ -301,13 +301,35 @@ class TeamDuplicateDetector:
             raw_by_id[record.ticket_id] = row
 
         if not candidates:
+            if not history:
+                message = "沒有可比對的歷史 Ticket 資料庫，請在設定檔 historical_tickets_paths 指定，或於工作台匯入歷史資料。"
+                policy = "歷史 Ticket 資料庫目前是空的。"
+            else:
+                reasons = []
+                if other_project_rows:
+                    reasons.append(f"其他專案 {other_project_rows} 筆")
+                if later_rows:
+                    reasons.append(f"建立時間不早於這張 Ticket 的 {later_rows} 筆")
+                detail = "、".join(reasons) or "格式無效、重複 ID 或這張 Ticket 本身"
+                message = f"歷史 Ticket 資料庫有 {len(history)} 筆，但篩選後沒有合格候選（已排除：{detail}）。"
+                policy = f"已讀取 {len(history)} 筆歷史 Ticket，但同專案且建立時間更早的候選為 0 筆。"
             return stage_result(
                 stage="duplicate",
                 status="skipped",
                 module=self.MODULE_LABEL,
                 implementation=self.implementation,
-                output={"top_k_candidates": [], "needs_review": False, "is_duplicate": False},
-                warnings=["沒有可比對的歷史 Ticket 資料庫，請在設定檔 historical_tickets_paths 指定，或於工作台匯入歷史資料。"],
+                output={
+                    "top_k_candidates": [],
+                    "needs_review": False,
+                    "is_duplicate": False,
+                    "decision_policy": policy,
+                    "history_size": len(history),
+                    "history_sources": sources,
+                    "project_scope": query_project,
+                    "other_project_rows_skipped": other_project_rows,
+                    "later_rows_skipped": later_rows,
+                },
+                warnings=[message],
                 started=started,
             )
 

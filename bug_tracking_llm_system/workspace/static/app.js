@@ -7,9 +7,11 @@ const STAGES = [
   ["assignee", "分派負責人"],
   ["localization", "錯誤定位"],
   ["patch", "補丁生成"],
+  ["commit", "提交訊息"],
 ];
-/* Patch generation only runs when an engineer asks for it, so progress counts the first five steps. */
-const MAIN_STAGES = STAGES.filter(([key]) => key !== "patch");
+/* Patch/commit only run when an engineer asks, so progress counts the first five automatic steps. */
+const MAIN_STAGES = STAGES.filter(([key]) => !["patch", "commit"].includes(key));
+const STATUS_STAGES = STAGES.filter(([key]) => key !== "commit");
 const STATUS_TEXT = {
   pending: "尚未執行",
   running: "執行中…",
@@ -641,12 +643,18 @@ function stageStatus(record, key) {
   return stage.status || "pending";
 }
 
+function flowStageState(r, key) {
+  if (key === "patch") return patchTabState(r);
+  if (key === "commit") return commitTabState(r);
+  return stageStatus(r, key);
+}
+
 /* The tab that needs attention: the open gate, the running stage, or the last finished stage. */
 function suggestedTab(r) {
   if (r.status === "awaiting_duplicate_review" || r.status === "duplicate") return "duplicate";
   if ((r.busy || r.status === "running" || r.status === "failed") && r.current_stage) return r.current_stage;
   if (r.status === "new") return "extraction";
-  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "running"].includes(stageStatus(r, k)));
+  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "ready", "running"].includes(flowStageState(r, k)));
   return finished.length ? finished[finished.length - 1] : "extraction";
 }
 
@@ -661,6 +669,7 @@ function selectTab(tab, { pinned = true } = {}) {
 
 function renderDetail() {
   PATCH_TEXTS.clear();
+  COMMIT_TEXTS.clear();
   const body = $("#detailBody");
   const r = state.detail;
   if (!state.selected || !r) { body.innerHTML = ""; return; }
@@ -669,11 +678,12 @@ function renderDetail() {
   const tab = state.tab || "extraction";
   const doneCount = MAIN_STAGES.filter(([key]) => ["done", "fallback", "skipped"].includes(stageStatus(r, key))).length;
   const tabs = STAGES.map(([key, name]) => {
-    const s = key === "patch" ? patchTabState(r) : stageStatus(r, key);
+    const s = flowStageState(r, key);
     const gate = key === "duplicate" && awaiting ? ' data-gate="open"' : "";
     const selected = key === tab;
-    return `<li data-s="${s}"${gate}${key === "patch" ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
-      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(key === "patch" ? PATCH_TAB_TEXT[s] || STATUS_TEXT[s] || s : STATUS_TEXT[s] || s)}</span></button></li>`;
+    const text = key === "patch" ? PATCH_TAB_TEXT[s] : key === "commit" ? COMMIT_TAB_TEXT[s] : STATUS_TEXT[s];
+    return `<li data-s="${s}"${gate}${["patch", "commit"].includes(key) ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
+      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(text || s)}</span></button></li>`;
   }).join("");
   const logSelected = tab === "log";
   const projectOptions = state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === r.project ? "selected" : ""}>${esc(p.project)}</option>`).join("");
@@ -765,6 +775,7 @@ function stageFrame(r, key, name, n, inner) {
 
 function renderStage(r, key, name, n, projectOptions) {
   if (key === "patch") return renderPatchStage(r, n);
+  if (key === "commit") return renderCommitStage(r, n);
   const renderers = {
     extraction: (o, st) => renderExtraction(r, o, st),
     duplicate: (o) => renderDuplicate(r, o),
@@ -1137,6 +1148,7 @@ function renderLocalization(r, o, projectOptions) {
 
 /* ------------------------------------------------------------------ patch */
 const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const COMMIT_TAB_TEXT = { pending: "等待補丁", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
   rewrite_no_change: "模型回傳原本的函式，沒有修改",
@@ -1157,6 +1169,19 @@ function patchTabState(r) {
   return o.patch_status === "generated" ? "generated" : "none";
 }
 
+function commitTabState(r) {
+  const patchState = patchTabState(r);
+  if (!["generated", "resolved"].includes(patchState)) {
+    if (["failed", "none"].includes(patchState)) return patchState === "none" ? "none" : "pending";
+    return "pending";
+  }
+  const commit = (((r.stages || {}).patch || {}).output || {}).commit_message || {};
+  if (commit.status === "generated" && commit.commit_message) return "generated";
+  if (commit.status === "failed") return "failed";
+  if (commit.status === "skipped") return "skipped";
+  return "pending";
+}
+
 function patchReason(reason) {
   if (!reason) return "";
   const [code, ...rest] = String(reason).split(":");
@@ -1166,6 +1191,43 @@ function patchReason(reason) {
 
 /* Patch texts shown on the page, so the copy/download buttons get the exact bytes (not the HTML). */
 const PATCH_TEXTS = new Map();
+const COMMIT_TEXTS = new Map();
+
+function commitMessageBox(commit) {
+  if (!commit || commit.status === "skipped") return "";
+  if (commit.status !== "generated" || !commit.commit_message) {
+    return `<div class="exp-box"><h4 class="sub-head">提交訊息</h4><p class="err">${esc(commit.error || "提交訊息生成失敗")}</p></div>`;
+  }
+  const id = `c${COMMIT_TEXTS.size + 1}`;
+  COMMIT_TEXTS.set(id, String(commit.commit_message));
+  return `<div class="exp-box"><h4 class="sub-head">提交訊息</h4>
+    <p><code>${esc(commit.commit_message)}</code></p>
+    <div class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-commit="${id}">複製提交訊息</button></div>
+    <p class="hint">由 ${esc(commit.model || "Code Llama-Instruct")} 根據這份補丁產生，提交前請人工審查。</p></div>`;
+}
+
+function renderCommitStage(r, n) {
+  const patch = (r.stages.patch || {}).output || {};
+  const commit = patch.commit_message || {};
+  const state = commitTabState(r);
+  const chipCls = { generated: "chip-done", failed: "chip-failed", skipped: "chip-fallback", none: "chip-fallback" }[state] || "";
+  let content;
+  if (state === "generated") {
+    content = `${commitMessageBox(commit)}<p class="hint">這是一行 Conventional Commit 草稿，由 Code Llama-Instruct 讀取選中的 unified diff 後產生；提交前仍需人工審查。</p>`;
+  } else if (state === "failed") {
+    content = `<p class="err">${esc(commit.error || "提交訊息生成失敗")}</p><p class="hint">補丁仍然保留，可以重新產生補丁以再次生成提交訊息。</p>`;
+  } else if (state === "skipped") {
+    content = `<p class="stage-pending">提交訊息功能已停用；可在 integration_config.json 的 commit_message.enabled 開啟。</p>`;
+  } else if (state === "none") {
+    content = `<p class="stage-pending">沒有通過檢查的補丁，因此不會生成提交訊息。</p>`;
+  } else {
+    content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動使用 Code Llama-Instruct 生成一句提交訊息。</p>`;
+  }
+  return `<section class="stage" id="stage-commit">
+    <div class="stage-head"><h3><span class="num">${n}</span>提交訊息</h3><span class="chip ${chipCls}">${esc(COMMIT_TAB_TEXT[state] || state)}</span></div>
+    <div class="stage-body">${content}</div>
+  </section>`;
+}
 
 function patchTools(patch, filename, source) {
   const id = `p${PATCH_TEXTS.size + 1}`;
@@ -1308,6 +1370,12 @@ async function onDetailClick(event) {
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
+  const commitBtn = event.target.closest("[data-copy-commit]");
+  if (commitBtn) {
+    const message = COMMIT_TEXTS.get(commitBtn.dataset.copyCommit);
+    if (message) toast(await copyText(message) ? "已複製提交訊息" : "複製失敗");
+    return;
+  }
   const codeBtn = event.target.closest("[data-copy-code]");
   if (codeBtn && state.detail) {
     const item = PATCH_TEXTS.get(codeBtn.dataset.copyCode);
@@ -1564,7 +1632,7 @@ async function openStatus() {
   $("#statusDialog").showModal();
   const [report, projects] = await Promise.all([api("/api/status"), api("/api/projects")]);
   $("#configPath").textContent = report.config.config_path || "（未指定設定檔，使用預設值）";
-  $("#statusBody").innerHTML = `<div class="status-grid">${STAGES.map(([key]) => {
+  $("#statusBody").innerHTML = `<div class="status-grid">${STATUS_STAGES.map(([key]) => {
     const s = report.stages[key];
     const chip = key === "patch" ? (s.ready ? "可以手動執行" : "目前無法使用") : (s.ready ? "可用訓練模型／資料" : "會使用備援或略過");
     return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4><ul>

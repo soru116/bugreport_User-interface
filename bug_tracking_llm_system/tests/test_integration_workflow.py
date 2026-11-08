@@ -216,6 +216,24 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertNotIn("LATE", ids)
         self.assertEqual(result["output"]["later_rows_skipped"], 1)
 
+    def test_duplicate_detection_explains_when_history_exists_but_all_rows_are_too_late(self) -> None:
+        history = self.root / "future-only.jsonl"
+        history.write_text(
+            json.dumps({"ticket_id": "FUTURE", "project": "demo", "created_at": "2026-10-02T00:00:00Z",
+                        "title": "Session expires", "description": "Session timeout"}) + "\n",
+            encoding="utf-8",
+        )
+        config = config_from_mapping({"workspace_root": str(WORKSPACE_ROOT), "historical_tickets_paths": [str(history)]})
+        result = TeamDuplicateDetector(config).detect(
+            {"ticket_id": "FIRST", "project": "demo", "created_at": "2026-10-01T00:00:00Z",
+             "title": "Session expires", "description": "Session timeout"}
+        )
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["output"]["history_size"], 1)
+        self.assertEqual(result["output"]["later_rows_skipped"], 1)
+        self.assertIn("資料庫有 1 筆", result["warnings"][0])
+        self.assertNotIn("資料庫目前是空的", result["output"]["decision_policy"])
+
     def test_auto_duplicate_threshold_closes_ticket(self) -> None:
         self.config.duplicate.auto_duplicate_threshold = 0.5
         result = TeamDuplicateDetector(self.config).detect({"ticket_id": "Q", "title": "Login crash when token missing", "description": "Missing auth token causes AttributeError during login validation."})
@@ -538,10 +556,30 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual([row for row in pipeline.store.history_rows() if row.get("project") == "smoke"], [])
         self.assertTrue(SMOKE_REPO.is_dir(), "the repository itself is never deleted")
 
+    def test_source_only_snapshot_is_wrapped_in_clean_git_cache(self) -> None:
+        from integration.patch import materialize_source_snapshot_git
+
+        source = self.root / "source_only" / "tree-v1"
+        (source / "pkg").mkdir(parents=True)
+        (source / "pkg" / "names.py").write_text("def clean(value):\n    return value.strip()\n", encoding="utf-8")
+        cache = self.root / "source_git_cache"
+
+        repo, commit = materialize_source_snapshot_git(source, repo="ThreadShop", revision="tree-v1", cache_dir=cache)
+        self.assertTrue((repo / ".git").is_dir())
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
+        self.assertEqual(subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip(), commit)
+        self.assertEqual((repo / "pkg" / "names.py").read_text(encoding="utf-8"),
+                         "def clean(value):\n    return value.strip()\n")
+        reused, reused_commit = materialize_source_snapshot_git(
+            source, repo="ThreadShop", revision="tree-v1", cache_dir=cache)
+        self.assertEqual((reused, reused_commit), (repo, commit))
+        self.assertFalse((source / ".git").exists(), "the public source-only fixture must stay untouched")
+
     def test_patch_generation_on_demand_with_the_vendored_rewrite_generator(self) -> None:
         """Workspace localization -> vendored fim_patch (5cdb2be) -> diff.  Only the gemma4 HTTP call is
         replaced; target selection, prompt, gates and git apply are the team's real code."""
         from integration.patch import EXPERIMENT_DIR, FROZEN_RUN_CONFIG, TeamPatchGenerator
+        from integration.commit_message import TeamCommitMessageGenerator
 
         repo = self.root / "demo_repo"
         (repo / "pkg").mkdir(parents=True)
@@ -572,7 +610,15 @@ class IntegrationWorkflowTests(unittest.TestCase):
                 return {"raw_response": next(self.outputs), "seed": seed, "stop_reason": "model_eos", "transport": "test"}
 
         fake = FakeGemma()
-        pipeline = IntegratedPipeline(self.config, patcher=TeamPatchGenerator(self.config, backend_factory=lambda: fake))
+        commit_prompts = []
+
+        def fake_commit_message(prompt: str) -> str:
+            commit_prompts.append(prompt)
+            return json.dumps({"type": "fix", "subject": "return an empty string for None input"})
+
+        commit_messenger = TeamCommitMessageGenerator(self.config, llm_call=fake_commit_message)
+        pipeline = IntegratedPipeline(self.config, patcher=TeamPatchGenerator(self.config, backend_factory=lambda: fake),
+                                      commit_messenger=commit_messenger)
         ticket = {"ticket_id": "PATCH-1", "title": "clean crashes on None", "project": "demo",
                   "description": "names.clean raises AttributeError when value is None; clean should return an empty string.",
                   "patch": "SECRET GOLD PATCH", "hints_text": "SECRET HINT"}
@@ -592,6 +638,12 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertIn('+    if value is None:', output["patch"])
         self.assertEqual([c["status"] for c in output["candidates"]], ["generated", "rejected", "rejected"])
         self.assertEqual(output["candidates"][1]["reason"], "rewrite_no_change")
+        self.assertEqual(output["commit_message"]["status"], "generated")
+        self.assertEqual(output["commit_message"]["commit_message"],
+                         "fix(names): return an empty string for None input")
+        self.assertEqual(output["commit_message"]["model"], "codellama:13b-instruct")
+        self.assertIn("ADDED:     if value is None:", commit_prompts[0])
+        self.assertNotIn("SECRET GOLD PATCH", commit_prompts[0])
         self.assertIsNone(output["official"])
         self.assertTrue(any("不等於「修好」" in warning for warning in stage["warnings"]))
         self.assertTrue(all("SECRET" not in prompt for prompt in fake.prompts), "ground truth must not reach the prompt")

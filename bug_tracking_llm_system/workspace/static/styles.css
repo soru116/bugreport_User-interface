@@ -280,7 +280,7 @@ mark { background: #ffe5a0; color: inherit; border-radius: 4px; padding: 0 1px; 
 /* The pipeline track. */
 .track {
   list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0;
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0;
   counter-reset: stage;
 }
 .track li { position: relative; padding: 0 8px 0 0; counter-increment: stage; }

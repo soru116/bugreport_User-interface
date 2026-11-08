@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from integration.assignee import TeamAssigneeRecommender
 from integration.common import stage_result, utc_now
+from integration.commit_message import TeamCommitMessageGenerator
 from integration.config import IntegrationConfig
 from integration.duplicate import TeamDuplicateDetector
 from integration.extraction import ToJsonExtractor, raw_ticket_id, raw_title
@@ -51,6 +52,7 @@ class IntegratedPipeline:
         assignee_recommender: TeamAssigneeRecommender | None = None,
         localizer: ProjectLocalizer | None = None,
         patcher: TeamPatchGenerator | None = None,
+        commit_messenger: TeamCommitMessageGenerator | None = None,
     ) -> None:
         self.config = config
         self.store = store or TicketStore(config.store_dir)
@@ -62,6 +64,7 @@ class IntegratedPipeline:
         )
         self.localizer = localizer or ProjectLocalizer(config)
         self.patcher = patcher or TeamPatchGenerator(config)
+        self.commit_messenger = commit_messenger or TeamCommitMessageGenerator(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
         # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
         # localization) use different models, so the two phases may run at the same time on different
@@ -378,6 +381,18 @@ class IntegratedPipeline:
                 stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
                 output_dir = self.store.artifact_path(key, "patch_runs") / stamp
                 result = self.patcher.generate(record, self.config.project(record.get("project")), raw, output_dir=output_dir)
+                output = result.get("output") or {}
+                if result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
+                    try:
+                        commit = self.commit_messenger.generate(record, str(output["patch"]))
+                    except Exception as exc:  # commit drafting is optional; never discard a valid patch
+                        commit = {"status": "failed", "commit_message": "",
+                                  "model": self.config.commit_message.model,
+                                  "generation_method": "code_llama_instruct_zero_shot",
+                                  "error": f"{type(exc).__name__}: {exc}"}
+                    output["commit_message"] = commit
+                    if commit["status"] == "failed":
+                        result.setdefault("warnings", []).append("補丁已生成，但提交訊息生成失敗：" + commit["error"])
             except Exception as exc:  # pragma: no cover - defensive; the patcher reports its own failures
                 result = stage_result(stage="patch", status="failed", module="補丁生成", implementation="", error=f"{type(exc).__name__}: {exc}",
                                       details={"traceback": traceback.format_exc()[-3000:]})

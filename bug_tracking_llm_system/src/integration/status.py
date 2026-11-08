@@ -127,9 +127,13 @@ def readiness_report(config: IntegrationConfig, *, store_history_path: Path | No
     ]
     if check_services and config.patch.enabled:
         patch_checks.append(_ollama_status(config.patch.ollama_url, config.patch.model))
+    if check_services and config.commit_message.enabled:
+        commit_check = _ollama_status(config.commit_message.ollama_url, config.commit_message.model)
+        commit_check["required"] = False  # a missing summarizer must not hide an otherwise usable patch
+        patch_checks.append(commit_check)
     git_projects = [name for name, project in config.projects.items() if (Path(project.repo_path) / ".git").exists()]
     patch_checks.append(_check("專案程式碼是 git repository", bool(git_projects), "、".join(git_projects) or "沒有任何專案的 repo_path 是 git checkout"))
-    stages["patch"] = {"title": f"補丁生成（對話式改寫 + {config.patch.model}，手動執行）", "checks": patch_checks}
+    stages["patch"] = {"title": f"補丁生成（{config.patch.model}）＋提交訊息（{config.commit_message.model}）", "checks": patch_checks}
 
     for item in stages.values():
         required = [check for check in item["checks"] if check["required"]]
