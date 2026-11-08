@@ -172,7 +172,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi" };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -202,6 +202,44 @@ async function api(path, options = {}) {
 }
 function post(path, body = {}) {
   return api(path, { method: "POST", body: JSON.stringify(body) });
+}
+
+/* ---------------------------------------------------------- operation mode */
+const MODE_KEY = "ticket-workspace-automation-mode";
+
+function applyAutomationMode(mode) {
+  state.automationMode = mode === "automatic" ? "automatic" : "semi";
+  try { localStorage.setItem(MODE_KEY, state.automationMode); } catch { /* private browsing */ }
+  const button = $("#settingsButton");
+  if (button) button.dataset.mode = state.automationMode;
+  const label = $("#modeButtonText");
+  if (label) label.textContent = state.automationMode === "automatic" ? "全自動" : "半自動";
+}
+
+function openSettings() {
+  const selected = document.querySelector(`input[name="automationMode"][value="${state.automationMode}"]`);
+  if (selected) selected.checked = true;
+  renderModeNotice();
+  $("#settingsDialog").showModal();
+}
+
+function renderModeNotice() {
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  const mode = selected ? selected.value : state.automationMode;
+  const notice = $("#modeNotice");
+  notice.dataset.mode = mode;
+  notice.textContent = mode === "automatic"
+    ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。模型或程式失敗時仍會停止。"
+    : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
+}
+
+function saveSettings(event) {
+  if (event.submitter && event.submitter.value === "cancel") return;
+  event.preventDefault();
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  applyAutomationMode(selected ? selected.value : "semi");
+  $("#settingsDialog").close();
+  toast(`已切換為${state.automationMode === "automatic" ? "全自動" : "半自動"}模式`);
 }
 
 /* ------------------------------------------------------------------ inbox */
@@ -512,12 +550,19 @@ function renderPickBar() {
 async function rerunPicked() {
   const keys = [...state.picked];
   if (!keys.length) return;
-  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n每張都會重新跑五個步驟，原本的處理結果會被新的結果取代。`)) return;
+  const automatic = state.automationMode === "automatic";
+  const scope = automatic
+    ? "每張會執行完整七個階段，包含補丁與提交訊息；補丁會依序使用 GPU，數量多時需要較長時間。"
+    : "每張會重新跑前五個步驟，並在人工確認點停下來。";
+  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n${scope}\n原本的處理結果會被新的結果取代。`)) return;
   let started = 0, skipped = 0;
   for (const key of keys) {
-    try { await post(`/api/tickets/${encodeURIComponent(key)}/run`); started += 1; } catch { skipped += 1; }
+    try {
+      await post(`/api/tickets/${encodeURIComponent(key)}/run`, { automation_mode: state.automationMode });
+      started += 1;
+    } catch { skipped += 1; }
   }
-  toast(`已開始重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
+  toast(`已開始${automatic ? "全自動" : "半自動"}重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
   setSelecting(false);
   await refresh();
 }
@@ -1419,8 +1464,8 @@ async function onDetailClick(event) {
     if (btn.dataset.action === "patch") state.tab = "patch";
     switch (btn.dataset.action) {
       case "rerun":
-        await post(`${path}/run`);
-        toast("已開始處理");
+        await post(`${path}/run`, { automation_mode: state.automationMode });
+        toast(state.automationMode === "automatic" ? "已開始全自動處理，將接續生成補丁與提交訊息" : "已開始處理");
         break;
       case "not-duplicate":
         await post(`${path}/duplicate`, { decision: "not_duplicate" });
@@ -1568,7 +1613,7 @@ function setImportMode(mode) {
 async function submitImport(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
-  const body = { project: $("#importProject").value };
+  const body = { project: $("#importProject").value, automation_mode: state.automationMode };
   if (importMode === "file") {
     if (!importFile) { $("#importError").textContent = "請先選擇檔案。"; return; }
     body.content = await importFile.text();
@@ -1591,7 +1636,7 @@ async function submitImport(event) {
     if (result.history_imported != null) {
       toast(`已加入 ${result.history_imported} 張歷史 Ticket，資料庫共 ${result.history_total} 張`);
     } else {
-      toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
+      toast(`已匯入 ${result.created.length} 張 Ticket，開始${state.automationMode === "automatic" ? "全自動" : "半自動"}處理`);
       if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
       else {
         const named = importMode === "file" && importFileProjects ? Object.keys(importFileProjects) : [];
@@ -1667,6 +1712,7 @@ async function onProjectClick(event) {
 
 /* ------------------------------------------------------------------ init */
 async function init() {
+  try { applyAutomationMode(localStorage.getItem(MODE_KEY) || "semi"); } catch { applyAutomationMode("semi"); }
   $("#homeView").addEventListener("click", (e) => {
     const pin = e.target.closest("[data-pin]");
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
@@ -1749,6 +1795,9 @@ async function init() {
     if (target) target.focus();
   });
   $("#importButton").addEventListener("click", openImport);
+  $("#settingsButton").addEventListener("click", openSettings);
+  $("#settingsForm").addEventListener("submit", saveSettings);
+  $$('#settingsForm input[name="automationMode"]').forEach((input) => input.addEventListener("change", renderModeNotice));
   $("#statusButton").addEventListener("click", openStatus);
   $("#projectBody").addEventListener("click", onProjectClick);
   $$(".seg").forEach((b) => b.addEventListener("click", () => setImportMode(b.dataset.mode)));

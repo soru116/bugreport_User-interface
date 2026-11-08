@@ -247,6 +247,7 @@ class IntegratedPipeline:
             raise ValueError(f"Ticket 目前狀態為 {record['status']}，不能進行重複判定。")
 
         def mutate(rec: dict[str, Any]) -> None:
+            actor = "全自動模式" if by == "workspace:auto" else "工程師"
             rec["decisions"]["duplicate"] = {
                 "decision": decision,
                 "duplicate_of": duplicate_of or None,
@@ -256,10 +257,10 @@ class IntegratedPipeline:
             }
             if decision == "duplicate":
                 rec["status"] = "duplicate"
-                self._event(rec, f"工程師確認為重複，對應 {duplicate_of or '（未指定）'}，流程結束")
+                self._event(rec, f"{actor}確認為重複，對應 {duplicate_of or '（未指定）'}，流程結束")
             else:
                 rec["status"] = "ready_to_continue"
-                self._event(rec, "工程師確認非重複，繼續後續流程")
+                self._event(rec, f"{actor}確認非重複，繼續後續流程")
 
         updated = self.store.update(key, mutate)
         if decision == "duplicate":
@@ -489,7 +490,7 @@ class IntegratedPipeline:
         record = self.get(key)
         prediction = record["stages"].get("assignee", {}).get("output") or {}
         feedback_saved = ""
-        if prediction:
+        if prediction and decision != "automatic":
             try:
                 feedback = build_assignee_feedback_record(
                     ticket_json=record["structured_ticket"],
@@ -517,7 +518,13 @@ class IntegratedPipeline:
                 "feedback": feedback_saved,
             }
             rec["attention"] = [item for item in rec.get("attention", []) if "負責人" not in item]
-            self._event(rec, f"負責人確認為 {assignee}（{ {'accept': '採用建議', 'override': '改選其他人', 'manual': '人工指定'}.get(decision, decision) }）")
+            label = {
+                "accept": "採用建議",
+                "override": "改選其他人",
+                "manual": "人工指定",
+                "automatic": "全自動模式採用建議",
+            }.get(decision, decision)
+            self._event(rec, f"負責人確認為 {assignee}（{label}）")
 
         updated = self.store.update(key, mutate)
         self.store.upsert_history([_history_row(updated["structured_ticket"], updated)])

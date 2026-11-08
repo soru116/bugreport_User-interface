@@ -1,6 +1,6 @@
 # Ticket 工作台（整合版）
 
-把組內**已經做好的五個功能**串成一條可以「匯入 Ticket → 逐步處理」的流程，並提供網頁介面和命令列兩種用法。錯誤定位完成後，可以再按一下「產生補丁」，用補丁生成組官方修好 6/36 題的版本產生補丁（第 6 步，手動執行）。
+把組內**已經做好的功能**串成一條可以「匯入 Ticket → 逐步處理 → 產生補丁與提交訊息」的流程，並提供網頁介面和命令列兩種用法。網頁可選半自動或全自動；半自動保留人工確認點，全自動會一鍵接續到補丁與提交訊息。
 
 整合層不重寫任何演算法，每一步都直接 import／呼叫子專案原本的程式：
 
@@ -29,6 +29,12 @@
 - 處理完的 Ticket 會加入工作台歷史資料（`data/workspace/history/workspace_history.jsonl`），之後匯入的 Ticket 可以和它比對重複。
 - 重複偵測只比對同一個專案、而且建立時間比這張 Ticket 早的歷史資料（真實系統裡，歷史一定比新回報早）；略過了幾張會寫在重複偵測的說明裡。
 - SBERT 會把歷史資料的向量存在 `data/workspace/cache/sbert/`，每份歷史只需要編碼一次，之後每張 Ticket 只算自己。換了 SBERT 模型會自動另存一份，不會混用。
+
+### 操作模式
+
+- **半自動**：維持既有流程；模糊的重複候選等待人工確認，負責人可確認或改派，補丁由使用者手動啟動。
+- **全自動**：匯入或重新執行後，一路完成轉換、重複偵測、優先級、負責人、錯誤定位、補丁及提交訊息。模糊的重複候選自動視為非重複，建議負責人自動採用；模型或程式失敗時停止並顯示原因。
+- 模式儲存在瀏覽器的 `localStorage`，只影響該瀏覽器之後啟動的工作，不會改寫模型設定或已經在執行的 Ticket。
 
 ### 處理順序與排隊
 
@@ -95,7 +101,7 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 開啟 <http://127.0.0.1:8780>：
 
-1. 右上「模型與資料狀態」：檢查每一步會用到的程式和產物在這台電腦上找不找得到，也可以建立 Repository 的程式碼索引。
+1. 右上「半自動／全自動」開啟操作模式設定；「模型與資料狀態」檢查每一步會用到的程式和產物，也可以建立 Repository 的程式碼索引。
 2. 「匯入 Ticket」：
    - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。下拉選單選這批歷史屬於哪個專案，它們就只會和那個專案的新 Ticket 比對；檔案裡已經寫好 `project` 的列照檔案。選「不指定」的歷史會和所有專案比對。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
@@ -114,9 +120,9 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 範例資料是**示範用的虛構 Ticket**，內容描述 `bug-duplicate-detection` 原始碼中可能出現的錯誤，搭配設定檔中的 `duplicate-detection` 專案示範錯誤定位。它們不是評估資料，不能拿來算準確率。
 
-## 補丁生成（第 6 步，手動執行）
+## 補丁生成（第 6 步）
 
-錯誤定位完成後，Ticket 頁面的「補丁生成」分頁會出現「產生補丁」按鈕。補丁生成很花時間又佔用 GPU，所以不會自動執行。
+半自動模式下，錯誤定位完成後，Ticket 頁面的「補丁生成」分頁會出現「產生補丁」按鈕。全自動模式會在錯誤定位成功後把補丁排入 GPU 佇列，完成後接續產生提交訊息。
 
 程式是補丁生成組 `fixed-patch` 分支 `codex/eval36-v7-timeout-flag-20261019`、commit `5cdb2be` 的快照，放在 repo 根目錄的 `patch/rewrite-gemma4-5cdb2be/`（說明見裡面的 `PROVENANCE_ZH.md`）。這一版在 36 題開發集產生 21 個補丁，**官方 SWE-bench 測試判定修好 6 題**。工作台用和那一輪完全相同的方法設定（`rewrite`、`first_supported_ast`、`task_last`、研究模式……，寫死在 `src/integration/patch.py` 的 `FROZEN_RUN_CONFIG`，測試會和那一輪的 `run_config.json` 比對），只有下面這些可以在設定檔 `patch` 區塊調整：
 

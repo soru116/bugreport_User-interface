@@ -386,6 +386,52 @@ class IntegrationWorkflowTests(unittest.TestCase):
             self.assertEqual(record["stages"]["priority"]["status"], "fallback")
         self.assertIsNone(app.queue_info(keys[0]))
 
+    def test_workspace_automatic_mode_runs_through_patch_and_commit(self) -> None:
+        import importlib.util
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server_auto", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        class FakePatcher:
+            def generate(self, record, project, raw, *, output_dir):
+                return {
+                    "stage": "patch",
+                    "status": "done",
+                    "module": "fake-patch",
+                    "implementation": "test",
+                    "output": {
+                        "patch_status": "generated",
+                        "patch": "--- a/src/auth/validator.py\n+++ b/src/auth/validator.py\n@@ -1 +1,2 @@\n+fixed = True\n",
+                        "modified_files": ["src/auth/validator.py"],
+                    },
+                }
+
+        class FakeCommitMessenger:
+            def generate(self, record, patch):
+                return {"status": "generated", "commit_message": "fix(auth): handle missing token", "model": "fake"}
+
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        app.pipeline.patcher = FakePatcher()
+        app.pipeline.commit_messenger = FakeCommitMessenger()
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        self.assertTrue(app.start(record["key"], automatic=True))
+
+        deadline = _time.time() + 30
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+
+        record = app.pipeline.get(record["key"])
+        self.assertEqual(record["decisions"]["duplicate"]["by"], "workspace:auto")
+        self.assertEqual(record["decisions"]["assignee"]["decision"], "automatic")
+        self.assertEqual(record["stages"]["patch"]["status"], "done")
+        commit = record["stages"]["patch"]["output"]["commit_message"]
+        self.assertEqual(commit["commit_message"], "fix(auth): handle missing token")
+        self.assertFalse(app.pipeline.store.feedback_path.exists(), "automatic routing is not human feedback")
+
     def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
         import shutil as _shutil
 

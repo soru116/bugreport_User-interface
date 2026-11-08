@@ -26,6 +26,9 @@
       <kbd class="search-key" aria-hidden="true">/</kbd>
     </div>
     <div class="topbar-actions">
+      <button class="btn btn-mode" id="settingsButton" type="button" aria-label="開啟操作模式設定">
+        <span class="mode-dot" aria-hidden="true"></span><span id="modeButtonText">半自動</span>
+      </button>
       <button class="btn btn-quiet" id="statusButton" type="button">模型與資料狀態</button>
       <button class="btn btn-primary" id="importButton" type="button">匯入 Ticket</button>
     </div>
@@ -142,6 +145,47 @@
       <h3 class="sub">專案程式碼索引</h3>
       <div id="projectBody"></div>
     </div>
+  </dialog>
+
+  <dialog class="sheet sheet-settings" id="settingsDialog" aria-labelledby="settingsTitle">
+    <form method="dialog" class="sheet-inner" id="settingsForm">
+      <header class="sheet-head">
+        <div>
+          <h2 id="settingsTitle">操作模式</h2>
+          <p class="hint">決定按下開始處理或匯入 Ticket 後，流程在哪裡停下來。</p>
+        </div>
+        <button class="icon-btn" value="cancel" aria-label="關閉">×</button>
+      </header>
+
+      <fieldset class="mode-picker">
+        <legend class="sr-only">選擇操作模式</legend>
+        <label class="mode-card">
+          <input type="radio" name="automationMode" value="semi">
+          <span class="mode-card-main">
+            <span class="mode-name">半自動</span>
+            <span class="mode-tag">目前流程</span>
+          </span>
+          <span class="mode-copy">系統完成分析後，在重複確認與補丁生成等關鍵點等你決定。</span>
+          <span class="mode-route">分析 → 人工確認 → 定位 → 手動產生補丁</span>
+        </label>
+
+        <label class="mode-card mode-card-auto">
+          <input type="radio" name="automationMode" value="automatic">
+          <span class="mode-card-main">
+            <span class="mode-name">全自動</span>
+            <span class="mode-tag">一鍵完成</span>
+          </span>
+          <span class="mode-copy">一鍵執行分析、優先級、負責人、錯誤定位、補丁與提交訊息。</span>
+          <span class="mode-route">模糊重複視為非重複，並自動採用建議負責人</span>
+        </label>
+      </fieldset>
+
+      <div class="mode-notice" id="modeNotice" role="status"></div>
+      <footer class="sheet-foot">
+        <button class="btn btn-quiet" value="cancel">取消</button>
+        <button class="btn btn-primary" id="saveSettings" type="submit" value="default">儲存模式</button>
+      </footer>
+    </form>
   </dialog>
 
 
