@@ -11,6 +11,7 @@
 | 3. 優先級 | `bug-priority-drone/scripts/build_features.py --mode transform`（DRONE／REP- 特徵）＋ `analyze_priority_errors.predict_model_or_bundle` | `recall_balanced_priority_model.joblib`、`features_bm25_p2_error_keywords_train/`（fitted encoders）、清洗後的歷史 CSV | 標示「備援」，改用主系統固定權重公式 |
 | 4. 分派負責人 | `bug_tracking_llm_system/src/modules/assignee_triager.py`（原封不動） | 負責人歷史 JSONL（預設找 paper_grade 的 bmo 資料） | 改用工作台匯入或確認過、含負責人的紀錄 |
 | 5. 錯誤定位 | `bug_tracking_llm_system/src/modules/bug_localizer.py` → `utils/fault_localization_stage3.py`（與 `fault_localization_feature_files/src/utils/fault_localization.py` 內容完全相同） | 要定位的 Repository（可預先建立 code index） | 沒有設定專案時略過 |
+| 6b. 提交訊息草稿 | `commit-message/codellama-instruct-ae8b88c/src/commit_message`（Lyy12705/commit-message-generator `ae8b88c`，原封不動） | 本機 Ollama 的 `codellama:7b-instruct`（和轉換 JSON 同一顆） | 不改用規則式訊息，直接顯示錯誤 |
 | 6. 補丁生成（手動） | `patch/rewrite-gemma4-5cdb2be/src/fim_patch`（fixed-patch commit `5cdb2be`，原封不動）的 `RepairPipeline` → `FIMPatchGenerator`（對話式改寫） | 本機 Ollama 的 `gemma4:12b`；專案的 `repo_path` 必須是 git clone | 不會改用備援，直接顯示無法執行的原因 |
 
 「備援」會顯示在畫面、CLI 輸出和結果 JSON（`status: "fallback"` 與 `fallback_reason`），不會把備援結果當成訓練模型的結果。
@@ -147,6 +148,15 @@ python3 workspace/server.py --config integration_config.json --port 8780
 - 錯誤定位信心不是「高」時，正式流程不會產生補丁；這裡照 6/36 實驗的研究模式照樣產生，並在畫面上標示需要人工審查。
 - 同樣的設定重跑，模型輸出不一定一樣；錯誤定位也是工作台重新算的，所以重新產生的補丁可能和實驗紀錄不同。
 - 36 題是開發集，被反覆用來調方法，不能當泛化證據。
+
+### 提交訊息草稿
+
+補丁產生後，工作台會接著用組員的提交訊息生成程式（`commit-message/codellama-instruct-ae8b88c/`，說明見 `PROVENANCE_ZH.md`）草擬一則 Conventional Commit 訊息，顯示在補丁下方，可以「複製提交訊息」。「36 題實驗中的紀錄」的補丁也可以按「產生提交訊息草稿」。
+
+- 模型是 `codellama:7b-instruct`，零樣本：只回傳 `type` 與 `subject`，程式驗證後組成 `fix(scope): subject`；scope 由 diff 的檔名決定。
+- 工作台另外加上 `Refs: <Ticket 編號>`。只有補丁和官方判定修好的補丁 sha256 完全相同時，才會加上 `Verified-by: official SWE-bench harness (...)`，並把判定交給模型；其他情況明確告訴模型「沒有執行測試」，草稿不會宣稱已修好。
+- 只是草稿，工作台不會執行 `git commit`。
+- 設定檔 `commit_message` 區塊可以改 `model`、`ollama_url`、`timeout_seconds`；`auto_after_patch: false` 可以關掉補丁產生後自動草擬。
 
 ### 匯入修好的那 6 題
 

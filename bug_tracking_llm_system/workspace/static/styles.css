@@ -782,3 +782,7 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .patch-head .sub-head { margin: 0; }
 .patch-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 details.raw > .patch-tools { margin: 8px 0; }
+
+.commit-box { margin: 14px 0 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface, #fff); }
+.commit-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.commit-msg { margin: 6px 0; padding: 10px 12px; background: var(--code-bg); border-radius: var(--radius-s); font-family: var(--font-mono); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }

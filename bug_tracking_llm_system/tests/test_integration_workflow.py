@@ -572,7 +572,28 @@ class IntegrationWorkflowTests(unittest.TestCase):
                 return {"raw_response": next(self.outputs), "seed": seed, "stop_reason": "model_eos", "transport": "test"}
 
         fake = FakeGemma()
-        pipeline = IntegratedPipeline(self.config, patcher=TeamPatchGenerator(self.config, backend_factory=lambda: fake))
+        # Commit-message drafts go through the vendored generator; only Ollama's HTTP reply is faked.
+        import io
+        from unittest import mock
+
+        from integration.commit_message import CommitMessageDrafter
+
+        drafter = CommitMessageDrafter(self.config)
+        generate_commit_message = drafter._generate()
+        llm_module = sys.modules["commit_message.llm"]
+        commit_prompts: list[dict] = []
+
+        def fake_urlopen(request, timeout=None):
+            commit_prompts.append(json.loads(request.data.decode("utf-8")))
+            reply = {"response": json.dumps({"type": "fix", "subject": "return an empty string when clean receives None"})}
+            return mock.MagicMock(__enter__=lambda self: io.BytesIO(json.dumps(reply).encode()), __exit__=lambda *a: False)
+
+        def draft_with_fake_ollama(payload, **kwargs):
+            with mock.patch.object(llm_module.urllib.request, "urlopen", fake_urlopen):
+                return generate_commit_message(payload, **kwargs)
+
+        pipeline = IntegratedPipeline(self.config, patcher=TeamPatchGenerator(self.config, backend_factory=lambda: fake),
+                                      drafter=CommitMessageDrafter(self.config, generate_fn=draft_with_fake_ollama))
         ticket = {"ticket_id": "PATCH-1", "title": "clean crashes on None", "project": "demo",
                   "description": "names.clean raises AttributeError when value is None; clean should return an empty string.",
                   "patch": "SECRET GOLD PATCH", "hints_text": "SECRET HINT"}
@@ -600,6 +621,22 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue((Path(output["run_dir"]) / "selected.diff").is_file())
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
 
+        # A commit-message draft is made right after the patch, from the diff and the ticket text.
+        draft = record["commit_messages"]["current"]
+        self.assertEqual(draft["status"], "done", draft.get("error"))
+        self.assertEqual(draft["commit_message"], "fix(names): return an empty string when clean receives None")
+        self.assertEqual(draft["full_message"], draft["commit_message"] + "\n\nRefs: PATCH-1\n")
+        self.assertEqual(draft["test_evidence"]["status"], "not_run")
+        [request] = commit_prompts
+        self.assertEqual(request["model"], "codellama:7b-instruct")
+        self.assertIn('"status": "not_run"', request["prompt"])
+        self.assertIn("+    if value is None:", request["prompt"])
+        self.assertNotIn("SECRET", request["prompt"])
+        with self.assertRaises(ValueError):
+            pipeline.commit_message_precheck(key, "candidate-2")  # rejected candidate: no patch
+        resolved = CommitMessageDrafter.test_evidence({"official_resolved": True, "run_id": "r1"})
+        self.assertEqual(resolved["official_swebench_harness"], "resolved")
+
         # "Copy the fixed code": the patch applied to the file at base_commit, whole function returned.
         from integration.patch import patched_code
 
@@ -611,6 +648,7 @@ class IntegrationWorkflowTests(unittest.TestCase):
 
         record = pipeline.rerun_localization(key)  # new localization -> the old patch no longer applies
         self.assertNotIn("patch", record["stages"])
+        self.assertNotIn("current", record.get("commit_messages", {}))
 
         # The frozen method settings are exactly those of the 6/36 run, and its official verdicts resolve.
         patcher = TeamPatchGenerator(self.config)

@@ -62,6 +62,15 @@
     "timeout_seconds": 600
   },
 
+  "commit_message": {
+    "_說明": "補丁產生後的提交訊息草稿。程式在 repo 根目錄的 commit-message/codellama-instruct-ae8b88c（Lyy12705/commit-message-generator）。",
+    "enabled": true,
+    "ollama_url": "http://localhost:11434",
+    "model": "codellama:7b-instruct",
+    "timeout_seconds": 120,
+    "auto_after_patch": true
+  },
+
   "projects": {
     "duplicate-detection": {
       "repo_path": "../bug-duplicate-detection",

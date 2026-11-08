@@ -1,0 +1,69 @@
+[
+  {
+    "name": "single_file",
+    "patch": "--- a/calculation.py\n+++ b/calculation.py\n@@ -1,2 +1,2 @@\n def calculate_total(a, b):\n-    return a / b\n+    return a / b if b else 0\n",
+    "success": true,
+    "subject": "fix(calculation): guard division in calculate_total against a falsy denominator",
+    "body_contains": ["For built-in numeric inputs", "ZeroDivisionError", "Return 0 when b is falsy", "not been verified by execution"],
+    "files": ["calculation.py"]
+  },
+  {
+    "name": "multiple_files",
+    "patch": "diff --git a/src/parser.py b/src/parser.py\nindex 1234567..abcdef0 100644\n--- a/src/parser.py\n+++ b/src/parser.py\n@@ -1 +1 @@\n-limit = 10\n+limit = 20\n--- a/tests/test_parser.py\n+++ b/tests/test_parser.py\n@@ -1 +1 @@\n-expected = 10\n+expected = 20\n",
+    "success": true,
+    "subject": "chore(multiple): update lines in 2 files",
+    "files": ["src/parser.py", "tests/test_parser.py"]
+  },
+  {
+    "name": "addition",
+    "patch": "diff --git a/src/helpers.py b/src/helpers.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/helpers.py\n@@ -0,0 +1,2 @@\n+def identity(value):\n+    return value\n",
+    "success": true,
+    "subject": "chore(helpers): add lines in helpers.py",
+    "files": ["src/helpers.py"]
+  },
+  {
+    "name": "deletion",
+    "patch": "--- a/legacy.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-def legacy():\n-    pass\n",
+    "success": true,
+    "subject": "chore(legacy): remove lines in legacy.py",
+    "files": ["legacy.py"]
+  },
+  {"name": "empty", "patch": "", "success": false, "error": "Patch is empty"},
+  {
+    "name": "malformed",
+    "patch": "--- a/broken.py\n+++ b/broken.py\n@@ -1,2 +1,2 @@\n-old\n+new\n",
+    "success": false,
+    "error": "Truncated hunk"
+  },
+  {
+    "name": "documentation",
+    "patch": "--- a/docs/usage.md\n+++ b/docs/usage.md\n@@ -1 +1 @@\n-Old instructions\n+Updated instructions\n",
+    "success": true,
+    "subject": "docs(usage): update documentation in usage.md",
+    "files": ["docs/usage.md"]
+  },
+  {
+    "name": "none_guard",
+    "patch": "--- a/username.py\n+++ b/username.py\n@@ -1,2 +1,4 @@\n def normalize_username(value):\n+    if value is None:\n+        return \"\"\n     return value.strip().lower()\n",
+    "success": true,
+    "subject": "fix(username): handle None input in normalize_username",
+    "body_contains": ["passing None", "value.strip()", "AttributeError", "Return \"\" when value is None", "not been verified by execution"],
+    "files": ["username.py"]
+  },
+  {
+    "name": "guard_without_failure_evidence",
+    "patch": "--- a/username.py\n+++ b/username.py\n@@ -1,2 +1,4 @@\n def normalize_username(value):\n+    if value is None:\n+        return \"\"\n     return value\n",
+    "success": true,
+    "subject": "chore(username): add lines in username.py",
+    "body_contains": ["Bug purpose: not reliably identifiable"],
+    "files": ["username.py"]
+  },
+  {
+    "name": "guard_without_context",
+    "patch": "--- a/username.py\n+++ b/username.py\n@@ -1,0 +2,2 @@\n+    if value is None:\n+        return \"\"\n",
+    "success": true,
+    "subject": "chore(username): add lines in username.py",
+    "body_contains": ["Bug purpose: not reliably identifiable"],
+    "files": ["username.py"]
+  }
+]

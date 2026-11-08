@@ -19,6 +19,7 @@ from integration.config import IntegrationConfig
 from integration.duplicate import TeamDuplicateDetector
 from integration.extraction import ToJsonExtractor, raw_ticket_id, raw_title
 from integration.localization import ProjectLocalizer
+from integration.commit_message import CommitMessageDrafter
 from integration.patch import TeamPatchGenerator
 from integration.priority import TeamPriorityPredictor
 from integration.store import TicketStore
@@ -51,6 +52,7 @@ class IntegratedPipeline:
         assignee_recommender: TeamAssigneeRecommender | None = None,
         localizer: ProjectLocalizer | None = None,
         patcher: TeamPatchGenerator | None = None,
+        drafter: CommitMessageDrafter | None = None,
     ) -> None:
         self.config = config
         self.store = store or TicketStore(config.store_dir)
@@ -62,6 +64,7 @@ class IntegratedPipeline:
         )
         self.localizer = localizer or ProjectLocalizer(config)
         self.patcher = patcher or TeamPatchGenerator(config)
+        self.drafter = drafter or CommitMessageDrafter(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
         # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
         # localization) use different models, so the two phases may run at the same time on different
@@ -339,6 +342,7 @@ class IntegratedPipeline:
                     rec["current_stage"] = ""
                     if rec["stages"].pop("patch", None):
                         self._event(rec, "錯誤定位結果變了，先前產生的補丁已清除")
+                    self._drop_patch_drafts(rec)
                     rec["attention"] = [item for item in rec.get("attention", []) if "定位" not in item]
                     if result["status"] in {"skipped", "failed"}:
                         rec["attention"].append("未完成錯誤定位")
@@ -371,6 +375,7 @@ class IntegratedPipeline:
             def running(rec: dict[str, Any]) -> None:
                 rec["status"], rec["current_stage"] = "running", "patch"
                 rec["stages"]["patch"] = {"stage": "patch", "status": "running", "started_at": utc_now()}
+                self._drop_patch_drafts(rec)
 
             self.store.update(key, running)
             try:
@@ -390,7 +395,60 @@ class IntegratedPipeline:
                     attention.append("補丁待人工審查")
                 rec["attention"] = attention
 
-            return self._set_stage(key, "patch", result, extra=finish)
+            record = self._set_stage(key, "patch", result, extra=finish)
+            if (result.get("output") or {}).get("patch_status") == "generated" and self.config.commit_message.auto_after_patch:
+                record = self._draft_commit_message(key, "current")
+            return record
+
+    # ---------------------------------------------- commit-message drafts
+    @staticmethod
+    def _drop_patch_drafts(rec: dict[str, Any]) -> None:
+        """Drafts describe a specific patch; the generated patch and its candidates just changed."""
+        drafts = rec.get("commit_messages") or {}
+        for source in [name for name in drafts if name == "current" or name.startswith("candidate-")]:
+            drafts.pop(source, None)
+
+    def commit_message_patch(self, record: dict[str, Any], source: str) -> tuple[str, dict[str, Any] | None]:
+        output = (record["stages"].get("patch") or {}).get("output") or {}
+        if source == "current":
+            return str(output.get("patch") or ""), output.get("official")
+        if source.startswith("candidate-"):
+            wanted = source.split("-", 1)[1]
+            patch = next((str(c.get("patch") or "") for c in output.get("candidates") or [] if str(c.get("candidate_id")) == wanted), "")
+            return patch, self.patcher.official_verdict(patch)
+        if source == "experiment":
+            experiment = self.patcher.experiment_record(str(record.get("ticket_id") or "")) or {}
+            return str(experiment.get("patch") or ""), experiment.get("official")
+        raise ValueError("不明的補丁來源")
+
+    def commit_message_precheck(self, key: str, source: str) -> None:
+        patch, _ = self.commit_message_patch(self.get(key), source)
+        if not patch:
+            raise ValueError("找不到這個補丁，無法產生提交訊息。")
+
+    def draft_commit_message(self, key: str, source: str) -> dict[str, Any]:
+        with self._patch_lock:  # same GPU queue as patch generation
+            return self._draft_commit_message(key, source)
+
+    def _draft_commit_message(self, key: str, source: str) -> dict[str, Any]:
+        record = self.get(key)
+        patch, official = self.commit_message_patch(record, source)
+
+        def running(rec: dict[str, Any]) -> None:
+            rec.setdefault("commit_messages", {})[source] = {"source": source, "status": "running", "started_at": utc_now()}
+
+        self.store.update(key, running)
+        result = self.drafter.draft(record, patch, official=official, source=source)
+
+        def finish(rec: dict[str, Any]) -> None:
+            rec.setdefault("commit_messages", {})[source] = result
+            label = {"current": "補丁", "experiment": "36 題實驗的補丁"}.get(source, f"候選 {source.split('-', 1)[-1]}")
+            if result["status"] == "done":
+                self._event(rec, f"提交訊息草稿（{label}）：{result['commit_message']}")
+            else:
+                self._event(rec, f"提交訊息草稿（{label}）失敗：{result.get('error', '')}")
+
+        return self.store.update(key, finish)
 
     # ------------------------------------------------- duplicate review aids
     def find_history_ticket(self, ticket_id: str) -> dict[str, Any] | None:

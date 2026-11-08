@@ -222,6 +222,7 @@ const QUEUE_PHASE = {
   after: "分派負責人與錯誤定位",
   localize: "錯誤定位",
   patch: "產生補丁",
+  commit: "產生提交訊息",
 };
 function queueText(q, { short = false } = {}) {
   if (!q) return "";
@@ -1210,6 +1211,36 @@ function diffFileName(r, suffix = "") {
   return `${String(r.ticket_id || r.key).replace(/[^\w.-]+/g, "_")}${suffix}.diff`;
 }
 
+function commitBox(r, source) {
+  const draft = (r.commit_messages || {})[source];
+  const queued = r.queue && r.queue.phase === "commit";
+  const button = (label) => `<button type="button" class="btn btn-quiet btn-small" data-action="commit-message" data-source="${esc(source)}" ${r.busy ? "disabled" : ""}>${label}</button>`;
+  const head = (extra) => `<div class="commit-head"><b>提交訊息草稿</b>${extra}</div>`;
+  if (!draft && !queued) {
+    return `<div class="commit-box">${head(button("產生提交訊息草稿"))}
+      <p class="hint">用 Code Llama 7B 根據這個補丁和 Ticket 內容，草擬一行 Conventional Commit 訊息，大約幾秒鐘。只是草稿，不會執行 git commit。</p></div>`;
+  }
+  if (queued || draft.status === "running") {
+    return `<div class="commit-box">${head("")}<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息草稿…"}</p></div>`;
+  }
+  if (draft.status !== "done") {
+    return `<div class="commit-box">${head(button("重新產生"))}<p class="err">${esc(draft.error || "產生失敗")}</p></div>`;
+  }
+  const id = `c${PATCH_TEXTS.size + 1}`;
+  PATCH_TEXTS.set(id, { patch: draft.full_message, label: "提交訊息" });
+  const evidence = draft.test_evidence || {};
+  const note = evidence.official_swebench_harness === "resolved"
+    ? "這個補丁和官方測試判定修好的補丁完全相同，所以草稿可以提到已驗證。"
+    : evidence.official_swebench_harness === "unresolved"
+      ? "這個補丁官方測試判定沒有修好；草稿只描述改了什麼。"
+      : "沒有測試證據，所以草稿只描述補丁改了什麼，不會說已經修好。";
+  return `<div class="commit-box">
+    ${head(`<span class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-patch="${id}">複製提交訊息</button>${button("重新產生")}</span>`)}
+    <pre class="commit-msg">${esc(draft.full_message)}</pre>
+    <p class="hint">${esc(note)} 模型 <code>${esc(draft.model || "")}</code>${draft.duration_ms != null ? `，${(draft.duration_ms / 1000).toFixed(1)} 秒` : ""}。</p>
+  </div>`;
+}
+
 function diffHtml(patch) {
   const lines = String(patch || "").replace(/\n$/, "").split("\n").map((line) => {
     const cls = line.startsWith("+++") || line.startsWith("---") ? "d-file" : line.startsWith("@@") ? "d-hunk" : line.startsWith("+") ? "d-add" : line.startsWith("-") ? "d-del" : "";
@@ -1228,7 +1259,7 @@ function officialBox(official, { mine = true } = {}) {
     <span class="hint">判定紀錄 <code>${esc(official.run_id || "")}</code></span></div>`;
 }
 
-function experimentBox(exp, currentSha, filename) {
+function experimentBox(r, exp, currentSha, filename) {
   if (!exp) return "";
   const head = `<h4 class="sub-head">36 題實驗中的紀錄 <code>${esc(exp.experiment)}</code></h4>`;
   if (!exp.generated) return `<div class="exp-box">${head}<p class="hint">這張 Ticket 是 36 題開發集的一題，那一輪沒有產生通過檢查的補丁。</p></div>`;
@@ -1237,7 +1268,8 @@ function experimentBox(exp, currentSha, filename) {
   return `<div class="exp-box">${head}
     <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
     ${officialBox(exp.official, { mine: false })}
-    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details></div>`;
+    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details>
+    ${commitBox(r, "experiment")}</div>`;
 }
 
 function renderPatchStage(r, n) {
@@ -1277,7 +1309,7 @@ function renderPatchStage(r, n) {
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}${commitBox(r, "current")}`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
       .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
@@ -1286,7 +1318,7 @@ function renderPatchStage(r, n) {
       <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
       <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
   }
-  const exp = experimentBox(r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
+  const exp = experimentBox(r, r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
   const foot = stage.module && s !== "running" ? `<div class="stage-foot">
       <span>使用模組 <b>${esc(stage.module)}</b></span>
       <span>程式 <code>${esc(stage.implementation || "")}</code></span>
@@ -1331,7 +1363,7 @@ async function onDetailClick(event) {
   const copyBtn = event.target.closest("[data-copy-patch]");
   if (copyBtn) {
     const item = PATCH_TEXTS.get(copyBtn.dataset.copyPatch);
-    if (item) toast(await copyText(item.patch) ? "已複製補丁" : "複製失敗，請改用「下載 .diff」");
+    if (item) toast(await copyText(item.patch) ? `已複製${item.label || "補丁"}` : "複製失敗");
     return;
   }
   const downloadBtn = event.target.closest("[data-download-patch]");
@@ -1374,6 +1406,10 @@ async function onDetailClick(event) {
         toast(`負責人已確認為 ${who}`);
         break;
       }
+      case "commit-message":
+        await post(`${path}/commit-message`, { source: btn.dataset.source });
+        toast("已開始產生提交訊息草稿");
+        break;
       case "patch":
         if (btn.dataset.again && !confirm("重新產生會用同樣的設定再跑一次，結果可能和這次不同（模型輸出不是逐位元可重現）。目前的補丁會被取代。確定嗎？")) { btn.disabled = false; return; }
         await post(`${path}/patch`);

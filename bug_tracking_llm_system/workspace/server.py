@@ -91,7 +91,7 @@ class WorkspaceApp:
     #     moment gets its priority from ONE PRI call, because build_features re-reads the whole history
     #     on each call and a batch costs about the same as a single ticket.
     #   * the patch worker runs patch generation (gemma4:12b on the GPU), only when an engineer asks.
-    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0, "patch": 240.0}
+    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0, "patch": 240.0, "commit": 20.0}
     BATCH_WAIT_SECONDS = 90.0  # how long a ready ticket may wait for others still in duplicate detection
 
     def _start_worker(self) -> None:
@@ -130,9 +130,9 @@ class WorkspaceApp:
         if lane == "review":
             jobs = [job for job in waiting if job["kind"] == "full"]
             return ("review", jobs[:1]) if jobs else None
-        if lane == "patch":
-            jobs = [job for job in waiting if job["kind"] == "patch"]
-            return ("patch", jobs[:1]) if jobs else None
+        if lane == "patch":  # patch generation and commit-message drafts share the GPU
+            jobs = [job for job in waiting if job["kind"] in {"patch", "commit"}]
+            return (jobs[0]["kind"], jobs[:1]) if jobs else None
         jobs = [job for job in waiting if job["kind"] in ("after", "localize")]
         if not jobs:
             return None
@@ -194,6 +194,11 @@ class WorkspaceApp:
                     pipeline.generate_patch(job["key"])
                     self._record("patch", time.time() - job["started_at"])
                     self._finish(job)
+                elif phase == "commit":
+                    job = batch[0]
+                    pipeline.draft_commit_message(job["key"], job.get("source", "current"))
+                    self._record("commit", time.time() - job["started_at"])
+                    self._finish(job)
                 else:
                     job = batch[0]
                     pipeline.rerun_localization(job["key"], project=job.get("project"))
@@ -210,6 +215,12 @@ class WorkspaceApp:
         resumed = []
         for record in self.pipeline.store.list():
             key, status = record["key"], record.get("status")
+            if any(item.get("status") == "running" for item in (record.get("commit_messages") or {}).values()):
+                def stop_drafts(rec: dict[str, Any]) -> None:
+                    for item in (rec.get("commit_messages") or {}).values():
+                        if item.get("status") == "running":
+                            item.update(status="failed", error="伺服器在產生提交訊息時停止，請重新產生。")
+                self.pipeline.store.update(key, stop_drafts)
             decision = (record.get("decisions") or {}).get("duplicate") or {}
             if status == "running" and record.get("current_stage") == "patch":
                 def stop_patch(rec: dict[str, Any]) -> None:  # the earlier steps were already finished
@@ -248,12 +259,12 @@ class WorkspaceApp:
 
             if job["active"]:
                 return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1), "eta_seconds": _coarse(remaining(job))}
-            if job["kind"] == "patch":
-                running = [item for item in self._queue if item["active"] and item["phase"] == "patch"]
-                waiting = [item for item in self._queue if item["kind"] == "patch" and not item["active"]]
+            if job["kind"] in {"patch", "commit"}:
+                running = [item for item in self._queue if item["active"] and item["phase"] in {"patch", "commit"}]
+                waiting = [item for item in self._queue if item["kind"] in {"patch", "commit"} and not item["active"]]
                 index = waiting.index(job)
-                eta = sum(remaining(item) for item in running) + (index + 1) * avg["patch"]
-                return {"state": "waiting", "phase": "patch", "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
+                eta = sum(remaining(item) for item in running) + sum(avg[item["kind"]] for item in waiting[: index + 1])
+                return {"state": "waiting", "phase": job["kind"], "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
             if job["kind"] == "full":
                 running = [item for item in self._queue if item["active"] and item["phase"] == "review"]
                 waiting = [item for item in self._queue if item["kind"] == "full" and not item["active"]]
@@ -371,6 +382,11 @@ class WorkspaceApp:
             return {"base_commit": base_commit, "files": patched_code(project, base_commit, str(patch))}
         except PatchUnavailable as exc:
             raise ValueError(str(exc)) from exc
+
+    def draft_commit_message(self, key: str, source: str) -> bool:
+        self.maybe_reload_config()
+        self.pipeline.commit_message_precheck(key, source)
+        return self._submit(key, "commit", source=source)
 
     def build_index(self, project_name: str) -> dict[str, Any]:
         project = self.config.project(project_name)
@@ -640,6 +656,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._json({"decisions": record["decisions"]})
                 if action == "patch":
                     app.generate_patch(key)
+                    return self._json({"started": True})
+                if action == "commit-message":
+                    app.draft_commit_message(key, str(body.get("source") or "current"))
                     return self._json({"started": True})
                 if action == "localize":
                     project = body.get("project")

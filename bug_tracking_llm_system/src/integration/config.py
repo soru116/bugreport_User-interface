@@ -121,6 +121,18 @@ class PatchSettings:
 
 
 @dataclass(slots=True)
+class CommitMessageSettings:
+    """Commit-message drafts (commit-message/codellama-instruct-ae8b88c, Lyy12705/commit-message-generator)."""
+
+    enabled: bool = True
+    code_dir: Path | None = None  # default: <workspace_root>/commit-message/codellama-instruct-ae8b88c
+    ollama_url: str = "http://localhost:11434"
+    model: str = "codellama:7b-instruct"
+    timeout_seconds: float = 120.0
+    auto_after_patch: bool = True  # draft one right after a patch is generated
+
+
+@dataclass(slots=True)
 class IntegrationConfig:
     workspace_root: Path = field(default_factory=default_workspace_root)
     store_dir: Path = field(default_factory=lambda: MAIN_PROJECT_ROOT / "data" / "workspace")
@@ -131,6 +143,7 @@ class IntegrationConfig:
     assignee: dict[str, Any] = field(default_factory=dict)
     localization: LocalizationSettings = field(default_factory=LocalizationSettings)
     patch: PatchSettings = field(default_factory=PatchSettings)
+    commit_message: CommitMessageSettings = field(default_factory=CommitMessageSettings)
     projects: dict[str, ProjectSettings] = field(default_factory=dict)
     default_project: str = ""
     config_path: Path | None = None
@@ -140,6 +153,9 @@ class IntegrationConfig:
 
     def patch_code_dir(self) -> Path:
         return self.patch.code_dir or self.workspace_root / "patch" / "rewrite-gemma4-5cdb2be"
+
+    def commit_message_code_dir(self) -> Path:
+        return self.commit_message.code_dir or self.workspace_root / "commit-message" / "codellama-instruct-ae8b88c"
 
     def patch_verdicts_path(self) -> Path:
         return self.patch.verdicts_path or self.patch_code_dir() / "official_verdicts.jsonl"
@@ -206,6 +222,12 @@ class IntegrationConfig:
                 "model": self.patch.model,
                 "candidates": self.patch.candidates,
                 "research_mode": self.patch.research_mode,
+            },
+            "commit_message": {
+                "enabled": self.commit_message.enabled,
+                "code_dir": _p(self.commit_message_code_dir()),
+                "model": self.commit_message.model,
+                "auto_after_patch": self.commit_message.auto_after_patch,
             },
             "projects": {
                 name: {
@@ -305,6 +327,10 @@ def config_from_mapping(
         if not hasattr(config.patch, key):
             continue
         setattr(config.patch, key, as_path(value) if key in {"code_dir", "verdicts_path"} else value)
+
+    for key, value in (data.get("commit_message") or {}).items():
+        if hasattr(config.commit_message, key):
+            setattr(config.commit_message, key, as_path(value) if key == "code_dir" else value)
 
     projects = data.get("projects") or {}
     if isinstance(projects, list):
