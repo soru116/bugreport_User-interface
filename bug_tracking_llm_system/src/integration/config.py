@@ -122,14 +122,12 @@ class PatchSettings:
 
 @dataclass(slots=True)
 class CommitMessageSettings:
-    """Commit-message drafts (commit-message/codellama-instruct-ae8b88c, Lyy12705/commit-message-generator)."""
+    """Single-line commit message generated from the selected patch."""
 
     enabled: bool = True
-    code_dir: Path | None = None  # default: <workspace_root>/commit-message/codellama-instruct-ae8b88c
     ollama_url: str = "http://localhost:11434"
-    model: str = "codellama:7b-instruct"
-    timeout_seconds: float = 120.0
-    auto_after_patch: bool = True  # draft one right after a patch is generated
+    model: str = "codellama:13b-instruct"
+    timeout_seconds: int = 180
 
 
 @dataclass(slots=True)
@@ -153,9 +151,6 @@ class IntegrationConfig:
 
     def patch_code_dir(self) -> Path:
         return self.patch.code_dir or self.workspace_root / "patch" / "rewrite-gemma4-5cdb2be"
-
-    def commit_message_code_dir(self) -> Path:
-        return self.commit_message.code_dir or self.workspace_root / "commit-message" / "codellama-instruct-ae8b88c"
 
     def patch_verdicts_path(self) -> Path:
         return self.patch.verdicts_path or self.patch_code_dir() / "official_verdicts.jsonl"
@@ -225,9 +220,9 @@ class IntegrationConfig:
             },
             "commit_message": {
                 "enabled": self.commit_message.enabled,
-                "code_dir": _p(self.commit_message_code_dir()),
+                "ollama_url": self.commit_message.ollama_url,
                 "model": self.commit_message.model,
-                "auto_after_patch": self.commit_message.auto_after_patch,
+                "timeout_seconds": self.commit_message.timeout_seconds,
             },
             "projects": {
                 name: {
@@ -328,9 +323,10 @@ def config_from_mapping(
             continue
         setattr(config.patch, key, as_path(value) if key in {"code_dir", "verdicts_path"} else value)
 
-    for key, value in (data.get("commit_message") or {}).items():
+    commit_message = data.get("commit_message") or {}
+    for key, value in commit_message.items():
         if hasattr(config.commit_message, key):
-            setattr(config.commit_message, key, as_path(value) if key == "code_dir" else value)
+            setattr(config.commit_message, key, value)
 
     projects = data.get("projects") or {}
     if isinstance(projects, list):

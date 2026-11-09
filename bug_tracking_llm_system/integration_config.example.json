@@ -63,12 +63,11 @@
   },
 
   "commit_message": {
-    "_說明": "補丁產生後的提交訊息草稿。程式在 repo 根目錄的 commit-message/codellama-instruct-ae8b88c（Lyy12705/commit-message-generator）。",
+    "_說明": "補丁成功後自動使用 Code Llama-Instruct 零樣本產生一行 Conventional Commit 訊息。失敗不會刪除補丁。預設 codellama:13b-instruct 需要先 ollama pull；也可以改成已有的 codellama:7b-instruct（和轉換 JSON 同一顆）。",
     "enabled": true,
     "ollama_url": "http://localhost:11434",
-    "model": "codellama:7b-instruct",
-    "timeout_seconds": 120,
-    "auto_after_patch": true
+    "model": "codellama:13b-instruct",
+    "timeout_seconds": 180
   },
 
   "projects": {

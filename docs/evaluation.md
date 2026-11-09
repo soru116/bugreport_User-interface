@@ -29,7 +29,7 @@ MAIN `scripts/evaluate_integrated_baselines.py` 及 `experiments/evaluate_*` 是
 
 [TestGenerator](../bug_tracking_llm_system/bug_tracking_llm_system/src/modules/test_generator.py) 接受 ticket tests／commands／test diff，或保留文字 reproduction plan。它不呼叫 LLM，也沒有完整 LIBRO 自主測試生成。`RegressionTester` 透過 [git_utils](../bug_tracking_llm_system/bug_tracking_llm_system/src/utils/git_utils.py) 在副本 apply，測試預設不執行、ticket commands 預設不信任。
 
-Regression output 的 `changed_code_coverage=0.0` 是常數；`ripr_analysis` 四欄由同一 success boolean 填入。尚未實作獨立 coverage instrumentation／RIPR 階段量測，不能寫成完成研究驗證。[CommitMessageGenerator](../bug_tracking_llm_system/bug_tracking_llm_system/src/modules/commit_message_generator.py) 只以 deterministic 規則產文字；不會 commit/push。
+Regression output 的 `changed_code_coverage=0.0` 是常數；`ripr_analysis` 四欄由同一 success boolean 填入。尚未實作獨立 coverage instrumentation／RIPR 階段量測，不能寫成完成研究驗證。[CommitMessageGenerator](../bug_tracking_llm_system/bug_tracking_llm_system/src/modules/commit_message_generator.py) 只以 deterministic 規則產文字；不會 commit/push。工作台的手動補丁路徑另在 [`src/integration/commit_message.py`](../bug_tracking_llm_system/src/integration/commit_message.py) 使用 Code Llama-Instruct 13B 根據選中 diff 產生一行草稿，同樣不會 commit/push，且模型輸出仍需人工審查。
 
 ## 局部驗證指令
 

@@ -165,6 +165,13 @@ class WorkspaceApp:
                 if phase == "review":
                     job = batch[0]
                     record = pipeline.run_until_review(job["key"])
+                    if job.get("automatic") and record["status"] == "awaiting_duplicate_review":
+                        record = pipeline.decide_duplicate(
+                            job["key"],
+                            "not_duplicate",
+                            note="全自動模式：模糊候選不阻塞流程",
+                            by="workspace:auto",
+                        )
                     self._record("review", time.time() - job["started_at"])
                     if record["status"] == "ready_to_continue":
                         with self._cv:  # hand over to the after worker, keeping its place in the queue
@@ -184,11 +191,30 @@ class WorkspaceApp:
                             job.update(phase="after", started_at=time.time())
                         try:
                             if pipeline.get(job["key"])["status"] == "ready_to_continue":
-                                pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
+                                record = pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
+                                if job.get("automatic"):
+                                    suggested = ((record.get("stages", {}).get("assignee") or {}).get("output") or {}).get("suggested_assignee")
+                                    if suggested:
+                                        record = pipeline.confirm_assignee(
+                                            job["key"],
+                                            str(suggested),
+                                            decision="automatic",
+                                            reviewer="workspace:auto",
+                                            note="全自動模式採用系統建議",
+                                        )
                         except Exception:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
+                        if job.get("automatic"):
+                            try:
+                                pipeline.patch_precheck(job["key"])
+                            except ValueError as exc:  # e.g. no code for this project: not a failure of the ticket
+                                pipeline.skip_patch(job["key"], str(exc))
+                            except Exception as exc:
+                                pipeline.skip_patch(job["key"], f"{type(exc).__name__}: {exc}")
+                            else:
+                                self._submit(job["key"], "patch", automatic=True)
                 elif phase == "patch":
                     job = batch[0]
                     pipeline.generate_patch(job["key"])
@@ -215,11 +241,15 @@ class WorkspaceApp:
         resumed = []
         for record in self.pipeline.store.list():
             key, status = record["key"], record.get("status")
-            if any(item.get("status") == "running" for item in (record.get("commit_messages") or {}).values()):
+            def running_drafts(rec: dict[str, Any]) -> list[dict[str, Any]]:
+                drafts = list((rec.get("commit_messages") or {}).values())
+                drafts.append(((rec.get("stages") or {}).get("patch") or {}).get("output", {}).get("commit_message") or {})
+                return [item for item in drafts if item.get("status") == "running"]
+
+            if running_drafts(record):
                 def stop_drafts(rec: dict[str, Any]) -> None:
-                    for item in (rec.get("commit_messages") or {}).values():
-                        if item.get("status") == "running":
-                            item.update(status="failed", error="伺服器在產生提交訊息時停止，請重新產生。")
+                    for item in running_drafts(rec):
+                        item.update(status="failed", error="伺服器在產生提交訊息時停止，請重新產生。")
                 self.pipeline.store.update(key, stop_drafts)
             decision = (record.get("decisions") or {}).get("duplicate") or {}
             if status == "running" and record.get("current_stage") == "patch":
@@ -339,9 +369,9 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return True
 
-    def start(self, key: str) -> bool:
+    def start(self, key: str, *, automatic: bool = False) -> bool:
         self.maybe_reload_config()
-        return self._submit(key, "full")
+        return self._submit(key, "full", automatic=automatic)
 
     def continue_after_duplicate(self, key: str) -> bool:
         self.maybe_reload_config()
@@ -599,7 +629,7 @@ class Handler(SimpleHTTPRequestHandler):
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):
                     for record in created:
-                        app.start(record["key"])
+                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic")
                 return self._json({"created": [record["key"] for record in created]})
             if parts == ["api", "delete-tickets"]:
                 deleted, skipped = [], []
@@ -625,7 +655,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":
-                    app.start(key)
+                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic")
                     return self._json({"started": True})
                 if action == "duplicate":
                     record = app.pipeline.decide_duplicate(

@@ -7,9 +7,11 @@ const STAGES = [
   ["assignee", "分派負責人"],
   ["localization", "錯誤定位"],
   ["patch", "補丁生成"],
+  ["commit", "提交訊息"],
 ];
-/* Patch generation only runs when an engineer asks for it, so progress counts the first five steps. */
-const MAIN_STAGES = STAGES.filter(([key]) => key !== "patch");
+/* Patch/commit only run when an engineer asks, so progress counts the first five automatic steps. */
+const MAIN_STAGES = STAGES.filter(([key]) => !["patch", "commit"].includes(key));
+const STATUS_STAGES = STAGES.filter(([key]) => key !== "commit");
 const STATUS_TEXT = {
   pending: "尚未執行",
   running: "執行中…",
@@ -170,7 +172,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi" };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -200,6 +202,44 @@ async function api(path, options = {}) {
 }
 function post(path, body = {}) {
   return api(path, { method: "POST", body: JSON.stringify(body) });
+}
+
+/* ---------------------------------------------------------- operation mode */
+const MODE_KEY = "ticket-workspace-automation-mode";
+
+function applyAutomationMode(mode) {
+  state.automationMode = mode === "automatic" ? "automatic" : "semi";
+  try { localStorage.setItem(MODE_KEY, state.automationMode); } catch { /* private browsing */ }
+  const button = $("#settingsButton");
+  if (button) button.dataset.mode = state.automationMode;
+  const label = $("#modeButtonText");
+  if (label) label.textContent = state.automationMode === "automatic" ? "全自動" : "半自動";
+}
+
+function openSettings() {
+  const selected = document.querySelector(`input[name="automationMode"][value="${state.automationMode}"]`);
+  if (selected) selected.checked = true;
+  renderModeNotice();
+  $("#settingsDialog").showModal();
+}
+
+function renderModeNotice() {
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  const mode = selected ? selected.value : state.automationMode;
+  const notice = $("#modeNotice");
+  notice.dataset.mode = mode;
+  notice.textContent = mode === "automatic"
+    ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。模型或程式失敗時仍會停止。"
+    : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
+}
+
+function saveSettings(event) {
+  if (event.submitter && event.submitter.value === "cancel") return;
+  event.preventDefault();
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  applyAutomationMode(selected ? selected.value : "semi");
+  $("#settingsDialog").close();
+  toast(`已切換為${state.automationMode === "automatic" ? "全自動" : "半自動"}模式`);
 }
 
 /* ------------------------------------------------------------------ inbox */
@@ -511,12 +551,19 @@ function renderPickBar() {
 async function rerunPicked() {
   const keys = [...state.picked];
   if (!keys.length) return;
-  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n每張都會重新跑五個步驟，原本的處理結果會被新的結果取代。`)) return;
+  const automatic = state.automationMode === "automatic";
+  const scope = automatic
+    ? "每張會執行完整七個階段，包含補丁與提交訊息；補丁會依序使用 GPU，數量多時需要較長時間。"
+    : "每張會重新跑前五個步驟，並在人工確認點停下來。";
+  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n${scope}\n原本的處理結果會被新的結果取代。`)) return;
   let started = 0, skipped = 0;
   for (const key of keys) {
-    try { await post(`/api/tickets/${encodeURIComponent(key)}/run`); started += 1; } catch { skipped += 1; }
+    try {
+      await post(`/api/tickets/${encodeURIComponent(key)}/run`, { automation_mode: state.automationMode });
+      started += 1;
+    } catch { skipped += 1; }
   }
-  toast(`已開始重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
+  toast(`已開始${automatic ? "全自動" : "半自動"}重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
   setSelecting(false);
   await refresh();
 }
@@ -642,12 +689,18 @@ function stageStatus(record, key) {
   return stage.status || "pending";
 }
 
+function flowStageState(r, key) {
+  if (key === "patch") return patchTabState(r);
+  if (key === "commit") return commitTabState(r);
+  return stageStatus(r, key);
+}
+
 /* The tab that needs attention: the open gate, the running stage, or the last finished stage. */
 function suggestedTab(r) {
   if (r.status === "awaiting_duplicate_review" || r.status === "duplicate") return "duplicate";
   if ((r.busy || r.status === "running" || r.status === "failed") && r.current_stage) return r.current_stage;
   if (r.status === "new") return "extraction";
-  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "running"].includes(stageStatus(r, k)));
+  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "ready", "running"].includes(flowStageState(r, k)));
   return finished.length ? finished[finished.length - 1] : "extraction";
 }
 
@@ -662,6 +715,7 @@ function selectTab(tab, { pinned = true } = {}) {
 
 function renderDetail() {
   PATCH_TEXTS.clear();
+  COMMIT_TEXTS.clear();
   const body = $("#detailBody");
   const r = state.detail;
   if (!state.selected || !r) { body.innerHTML = ""; return; }
@@ -670,11 +724,12 @@ function renderDetail() {
   const tab = state.tab || "extraction";
   const doneCount = MAIN_STAGES.filter(([key]) => ["done", "fallback", "skipped"].includes(stageStatus(r, key))).length;
   const tabs = STAGES.map(([key, name]) => {
-    const s = key === "patch" ? patchTabState(r) : stageStatus(r, key);
+    const s = flowStageState(r, key);
     const gate = key === "duplicate" && awaiting ? ' data-gate="open"' : "";
     const selected = key === tab;
-    return `<li data-s="${s}"${gate}${key === "patch" ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
-      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(key === "patch" ? PATCH_TAB_TEXT[s] || STATUS_TEXT[s] || s : STATUS_TEXT[s] || s)}</span></button></li>`;
+    const text = key === "patch" ? PATCH_TAB_TEXT[s] : key === "commit" ? COMMIT_TAB_TEXT[s] : STATUS_TEXT[s];
+    return `<li data-s="${s}"${gate}${["patch", "commit"].includes(key) ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
+      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(text || s)}</span></button></li>`;
   }).join("");
   const logSelected = tab === "log";
   const projectOptions = state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === r.project ? "selected" : ""}>${esc(p.project)}</option>`).join("");
@@ -766,6 +821,7 @@ function stageFrame(r, key, name, n, inner) {
 
 function renderStage(r, key, name, n, projectOptions) {
   if (key === "patch") return renderPatchStage(r, n);
+  if (key === "commit") return renderCommitStage(r, n);
   const renderers = {
     extraction: (o, st) => renderExtraction(r, o, st),
     duplicate: (o) => renderDuplicate(r, o),
@@ -1137,7 +1193,8 @@ function renderLocalization(r, o, projectOptions) {
 }
 
 /* ------------------------------------------------------------------ patch */
-const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const COMMIT_TAB_TEXT = { pending: "等待補丁", running: "產生中…", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
   rewrite_no_change: "模型回傳原本的函式，沒有修改",
@@ -1158,6 +1215,30 @@ function patchTabState(r) {
   return o.patch_status === "generated" ? "generated" : "none";
 }
 
+/* The current patch's commit message: step 7 data, or a draft made by the earlier version (ui-card-wall). */
+function currentCommit(r) {
+  const own = (((r.stages || {}).patch || {}).output || {}).commit_message;
+  if (own) return own;
+  const legacy = (r.commit_messages || {}).current;
+  if (!legacy) return {};
+  return legacy.status === "done" ? { ...legacy, status: "generated" } : legacy;
+}
+
+function commitTabState(r) {
+  const patchState = patchTabState(r);
+  if (!["generated", "resolved"].includes(patchState)) {
+    if (patchState === "none") return "none";
+    if (patchState === "skipped") return "skipped";
+    return "pending";
+  }
+  const commit = currentCommit(r);
+  if (commit.status === "running" || (r.queue && r.queue.phase === "commit")) return "running";
+  if (commit.status === "generated" && commit.commit_message) return "generated";
+  if (commit.status === "failed") return "failed";
+  if (commit.status === "skipped") return "skipped";
+  return "pending";
+}
+
 function patchReason(reason) {
   if (!reason) return "";
   const [code, ...rest] = String(reason).split(":");
@@ -1167,6 +1248,59 @@ function patchReason(reason) {
 
 /* Patch texts shown on the page, so the copy/download buttons get the exact bytes (not the HTML). */
 const PATCH_TEXTS = new Map();
+const COMMIT_TEXTS = new Map();
+
+function commitEvidenceNote(commit) {
+  const evidence = commit.test_evidence || {};
+  if (evidence.official_swebench_harness === "resolved") return "這個補丁和官方測試判定修好的補丁完全相同，所以附上驗證紀錄。";
+  if (evidence.official_swebench_harness === "unresolved") return "這個補丁官方測試判定沒有修好；訊息只描述改了什麼。";
+  return "沒有測試證據，所以訊息只描述補丁改了什麼，不會說已經修好。";
+}
+
+function commitRegenerate(r, source, label = "重新產生提交訊息") {
+  return `<button type="button" class="btn btn-quiet btn-small" data-action="commit-message" data-source="${esc(source)}" ${r.busy ? "disabled" : ""}>${label}</button>`;
+}
+
+function commitMessageBox(r, commit, source) {
+  if (!commit || commit.status === "skipped") return "";
+  if (commit.status !== "generated" || !commit.commit_message) {
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source)}</div><p class="err">${esc(commit.error || "提交訊息生成失敗")}</p></div>`;
+  }
+  const text = String(commit.full_message || commit.commit_message);
+  const id = `c${COMMIT_TEXTS.size + 1}`;
+  COMMIT_TEXTS.set(id, text);
+  return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>
+      <span class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-commit="${id}">複製提交訊息</button>${commitRegenerate(r, source)}</span></div>
+    <pre class="commit-msg">${esc(text)}</pre>
+    <p class="hint">${esc(commitEvidenceNote(commit))} 由 <code>${esc(commit.model || "Code Llama-Instruct")}</code> 根據這份補丁產生，提交前請人工審查；工作台不會執行 git commit。</p></div>`;
+}
+
+function renderCommitStage(r, n) {
+  const patch = (r.stages.patch || {}).output || {};
+  const commit = currentCommit(r);
+  const state = commitTabState(r);
+  const chipCls = { generated: "chip-done", failed: "chip-failed", skipped: "chip-fallback", none: "chip-fallback" }[state] || "";
+  let content;
+  if (state === "generated") {
+    content = commitMessageBox(r, commit, "current");
+  } else if (state === "running") {
+    content = `<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p>`;
+  } else if (state === "failed") {
+    content = `<p class="err">${esc(commit.error || "提交訊息生成失敗")}</p><p class="hint">補丁仍然保留。</p><div class="loc-controls">${commitRegenerate(r, "current")}</div>`;
+  } else if (state === "skipped" && stageStatus(r, "patch") === "skipped") {
+    content = `<p class="stage-pending">補丁生成被略過，所以沒有提交訊息。</p>`;
+  } else if (state === "skipped") {
+    content = `<p class="stage-pending">提交訊息功能已停用；可在 integration_config.json 的 commit_message.enabled 開啟。</p>`;
+  } else if (state === "none") {
+    content = `<p class="stage-pending">沒有通過檢查的補丁，因此不會生成提交訊息。</p>`;
+  } else {
+    content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動使用 Code Llama-Instruct 生成一句提交訊息。</p>`;
+  }
+  return `<section class="stage" id="stage-commit">
+    <div class="stage-head"><h3><span class="num">${n}</span>提交訊息</h3><span class="chip ${chipCls}">${esc(COMMIT_TAB_TEXT[state] || state)}</span></div>
+    <div class="stage-body">${content}</div>
+  </section>`;
+}
 
 function patchTools(patch, filename, source) {
   const id = `p${PATCH_TEXTS.size + 1}`;
@@ -1214,31 +1348,14 @@ function diffFileName(r, suffix = "") {
 function commitBox(r, source) {
   const draft = (r.commit_messages || {})[source];
   const queued = r.queue && r.queue.phase === "commit";
-  const button = (label) => `<button type="button" class="btn btn-quiet btn-small" data-action="commit-message" data-source="${esc(source)}" ${r.busy ? "disabled" : ""}>${label}</button>`;
-  const head = (extra) => `<div class="commit-head"><b>提交訊息草稿</b>${extra}</div>`;
   if (!draft && !queued) {
-    return `<div class="commit-box">${head(button("產生提交訊息草稿"))}
-      <p class="hint">用 Code Llama 7B 根據這個補丁和 Ticket 內容，草擬一行 Conventional Commit 訊息，大約幾秒鐘。只是草稿，不會執行 git commit。</p></div>`;
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source, "產生提交訊息")}</div>
+      <p class="hint">用 Code Llama 根據這個補丁和 Ticket 內容，寫一行 Conventional Commit 訊息，大約幾秒鐘。</p></div>`;
   }
   if (queued || draft.status === "running") {
-    return `<div class="commit-box">${head("")}<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息草稿…"}</p></div>`;
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b></div><p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p></div>`;
   }
-  if (draft.status !== "done") {
-    return `<div class="commit-box">${head(button("重新產生"))}<p class="err">${esc(draft.error || "產生失敗")}</p></div>`;
-  }
-  const id = `c${PATCH_TEXTS.size + 1}`;
-  PATCH_TEXTS.set(id, { patch: draft.full_message, label: "提交訊息" });
-  const evidence = draft.test_evidence || {};
-  const note = evidence.official_swebench_harness === "resolved"
-    ? "這個補丁和官方測試判定修好的補丁完全相同，所以草稿可以提到已驗證。"
-    : evidence.official_swebench_harness === "unresolved"
-      ? "這個補丁官方測試判定沒有修好；草稿只描述改了什麼。"
-      : "沒有測試證據，所以草稿只描述補丁改了什麼，不會說已經修好。";
-  return `<div class="commit-box">
-    ${head(`<span class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-patch="${id}">複製提交訊息</button>${button("重新產生")}</span>`)}
-    <pre class="commit-msg">${esc(draft.full_message)}</pre>
-    <p class="hint">${esc(note)} 模型 <code>${esc(draft.model || "")}</code>${draft.duration_ms != null ? `，${(draft.duration_ms / 1000).toFixed(1)} 秒` : ""}。</p>
-  </div>`;
+  return commitMessageBox(r, draft.status === "done" ? { ...draft, status: "generated" } : draft, source);
 }
 
 function diffHtml(patch) {
@@ -1293,6 +1410,9 @@ function renderPatchStage(r, n) {
       : `${method}<p class="stage-pending">要先完成錯誤定位，才能產生補丁。</p>`;
   } else if (s === "failed") {
     content = `<p class="err">${esc(stage.error || "")}</p>${method}<div class="loc-controls">${button(false)}</div>`;
+  } else if (s === "skipped") {
+    const why = (stage.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    content = `<ul class="warn-list">${why}</ul>${method}${locDone ? `<div class="loc-controls">${button(false)}</div>` : ""}`;
   } else {
     const o = stage.output || {};
     const warnings = (stage.warnings || []).length ? `<ul class="warn-list">${stage.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
@@ -1309,7 +1429,7 @@ function renderPatchStage(r, n) {
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}${commitBox(r, "current")}`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">提交訊息草稿在第 7 步「提交訊息」。</p>`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
       .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
@@ -1340,6 +1460,12 @@ async function onDetailClick(event) {
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
+  const commitBtn = event.target.closest("[data-copy-commit]");
+  if (commitBtn) {
+    const message = COMMIT_TEXTS.get(commitBtn.dataset.copyCommit);
+    if (message) toast(await copyText(message) ? "已複製提交訊息" : "複製失敗");
+    return;
+  }
   const codeBtn = event.target.closest("[data-copy-code]");
   if (codeBtn && state.detail) {
     const item = PATCH_TEXTS.get(codeBtn.dataset.copyCode);
@@ -1383,8 +1509,8 @@ async function onDetailClick(event) {
     if (btn.dataset.action === "patch") state.tab = "patch";
     switch (btn.dataset.action) {
       case "rerun":
-        await post(`${path}/run`);
-        toast("已開始處理");
+        await post(`${path}/run`, { automation_mode: state.automationMode });
+        toast(state.automationMode === "automatic" ? "已開始全自動處理，將接續生成補丁與提交訊息" : "已開始處理");
         break;
       case "not-duplicate":
         await post(`${path}/duplicate`, { decision: "not_duplicate" });
@@ -1536,7 +1662,7 @@ function setImportMode(mode) {
 async function submitImport(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
-  const body = { project: $("#importProject").value };
+  const body = { project: $("#importProject").value, automation_mode: state.automationMode };
   if (importMode === "file") {
     if (!importFile) { $("#importError").textContent = "請先選擇檔案。"; return; }
     body.content = await importFile.text();
@@ -1559,7 +1685,7 @@ async function submitImport(event) {
     if (result.history_imported != null) {
       toast(`已加入 ${result.history_imported} 張歷史 Ticket，資料庫共 ${result.history_total} 張`);
     } else {
-      toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
+      toast(`已匯入 ${result.created.length} 張 Ticket，開始${state.automationMode === "automatic" ? "全自動" : "半自動"}處理`);
       if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
       else {
         const named = importMode === "file" && importFileProjects ? Object.keys(importFileProjects) : [];
@@ -1600,7 +1726,7 @@ async function openStatus() {
   $("#statusDialog").showModal();
   const [report, projects] = await Promise.all([api("/api/status"), api("/api/projects")]);
   $("#configPath").textContent = report.config.config_path || "（未指定設定檔，使用預設值）";
-  $("#statusBody").innerHTML = `<div class="status-grid">${STAGES.map(([key]) => {
+  $("#statusBody").innerHTML = `<div class="status-grid">${STATUS_STAGES.map(([key]) => {
     const s = report.stages[key];
     const chip = key === "patch" ? (s.ready ? "可以手動執行" : "目前無法使用") : (s.ready ? "可用訓練模型／資料" : "會使用備援或略過");
     return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4><ul>
@@ -1635,6 +1761,7 @@ async function onProjectClick(event) {
 
 /* ------------------------------------------------------------------ init */
 async function init() {
+  try { applyAutomationMode(localStorage.getItem(MODE_KEY) || "semi"); } catch { applyAutomationMode("semi"); }
   $("#homeView").addEventListener("click", (e) => {
     const pin = e.target.closest("[data-pin]");
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
@@ -1717,6 +1844,9 @@ async function init() {
     if (target) target.focus();
   });
   $("#importButton").addEventListener("click", openImport);
+  $("#settingsButton").addEventListener("click", openSettings);
+  $("#settingsForm").addEventListener("submit", saveSettings);
+  $$('#settingsForm input[name="automationMode"]').forEach((input) => input.addEventListener("change", renderModeNotice));
   $("#statusButton").addEventListener("click", openStatus);
   $("#projectBody").addEventListener("click", onProjectClick);
   $$(".seg").forEach((b) => b.addEventListener("click", () => setImportMode(b.dataset.mode)));

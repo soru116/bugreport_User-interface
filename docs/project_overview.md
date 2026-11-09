@@ -37,7 +37,7 @@
 | REPAIR batch／official harness adapter | Partially implemented | batch、post-generation reference comparison、official adapter 已實作；正式 resolved 成功結果本次 Not verified |
 | Test generation | Partially implemented | 只 normalize supplied executable tests 或產生文字 test plan；自主 LLM 從 prose 產生可執行測試 Not implemented |
 | Regression validation | Implemented | 暫存副本 apply、before/after/regression 有實作；MAIN 本機兩項 runtime 測試失敗，端到端完成狀態 Not verified |
-| Commit message | Implemented | deterministic Conventional Commit 文字；不是自動 Git commit／push |
+| Commit message | Implemented | MAIN 為 deterministic 文字；工作台手動補丁成功後另以 Code Llama-Instruct 13B 產生單行草稿；都不會自動 Git commit／push |
 | 全系統 production 自動修復部署 | Not verified | 沒有本次完整真實模型、外部 tracker assignment、official benchmark 通過的證據 |
 
 ## 完整系統實際流程

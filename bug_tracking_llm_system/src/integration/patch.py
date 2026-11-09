@@ -25,6 +25,7 @@ import hashlib
 import importlib.util
 import re
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -95,6 +96,51 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if line.strip():
             rows.append(json.loads(line))
     return rows
+
+
+def _safe_cache_name(value: str) -> str:
+    normalized = value.replace("/", "__").replace("\\", "__").replace(":", "_")
+    return "".join(char if char.isalnum() or char in "._-" else "_" for char in normalized)
+
+
+def materialize_source_snapshot_git(source: Path, *, repo: str, revision: str, cache_dir: Path) -> tuple[Path, str]:
+    """Wrap an immutable source-only snapshot in a cached local Git repository.
+
+    Synthetic evaluation fixtures identify versions by a SHA-256 tree digest rather than a Git
+    commit.  The vendored patch generator intentionally requires Git for its clean-tree and
+    ``git apply`` gates, so copy that exact public snapshot into the workspace cache and create one
+    local baseline commit.  The fixture itself is never modified; callers keep reporting the public
+    SHA-256 revision while using the returned Git commit internally.
+    """
+
+    source = Path(source).resolve()
+    if not source.is_dir():
+        raise PatchUnavailable(f"找不到程式碼快照：{source}")
+    destination = (Path(cache_dir) / f"{_safe_cache_name(repo)}__source__{_safe_cache_name(revision)[:16]}").resolve()
+    marker_name = "source-snapshot-revision"
+    if destination.exists():
+        marker = destination / ".git" / marker_name
+        if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != revision:
+            raise PatchUnavailable(f"快取路徑已存在，但不是要求的程式碼版本：{destination}")
+        if _git(destination, "status", "--porcelain").decode().strip():
+            raise PatchUnavailable(f"程式碼快取已被修改，請刪除後重試：{destination}")
+        return destination, _git(destination, "rev-parse", "HEAD").decode().strip()
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination)
+    try:
+        _git(destination, "init", "-q")
+        _git(destination, "config", "core.autocrlf", "false")
+        _git(destination, "config", "core.eol", "lf")
+        _git(destination, "add", "-A")
+        _git(destination, "-c", "user.name=workspace", "-c", "user.email=workspace@example.invalid",
+             "commit", "-qm", f"source snapshot {revision}")
+        commit = _git(destination, "rev-parse", "HEAD").decode().strip()
+        (destination / ".git" / marker_name).write_text(revision + "\n", encoding="utf-8")
+        return destination, commit
+    except Exception:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise
 
 
 class TeamPatchGenerator:
@@ -286,17 +332,32 @@ class TeamPatchGenerator:
                 raise PatchUnavailable("這張 Ticket 還沒有錯誤定位結果，請先完成錯誤定位。")
             if project is None:
                 raise PatchUnavailable("這張 Ticket 沒有對應的專案程式碼（設定檔 projects）。")
-            source_repo = Path(project.repo_path)
-            if not (source_repo / ".git").exists():
-                raise PatchUnavailable(f"補丁生成需要 git checkout，但「{project.name}」的 repo_path 不是 git repository：{source_repo}")
             modules = self._load()
             location = json.loads(json.dumps(localization))  # private copy
             ticket = self.build_ticket(record, location)
+            public_base_commit = ticket["base_commit"]
+            source_repo = Path(project.repo_path)
+            if not (source_repo / ".git").exists():
+                source_only = Path(project.snapshots_dir) / public_base_commit if project.snapshots_dir and public_base_commit else None
+                if source_only is None or not source_only.is_dir():
+                    raise PatchUnavailable(
+                        f"補丁生成需要 git checkout，但「{project.name}」的 repo_path 不是 git repository：{source_repo}"
+                    )
+                source_repo, internal_commit = materialize_source_snapshot_git(
+                    source_only,
+                    repo=ticket["repo"] or project.name,
+                    revision=public_base_commit,
+                    cache_dir=self.config.store_dir / "source_snapshot_git",
+                )
+                ticket["base_commit"] = internal_commit
+                location["base_commit"] = internal_commit
             if not ticket["base_commit"]:
                 ticket["base_commit"] = _git(source_repo, "rev-parse", "HEAD").decode().strip()
-            if project.snapshots_dir and ticket["base_commit"]:
-                # Localized in the ticket's own version snapshot. Results saved before the localization
-                # fix carry the workspace repository's HEAD here instead (the snapshot has no .git).
+            if project.snapshots_dir and public_base_commit and (Path(project.repo_path) / ".git").exists():
+                # Localized in the ticket's own version snapshot and patched from the project's git clone.
+                # Results saved before the localization fix carry the workspace repository's HEAD here
+                # instead (the snapshot has no .git).  When there is no clone, the snapshot wrapper above
+                # already set both to its internal commit.
                 location["base_commit"] = ticket["base_commit"]
             if not location.get("base_commit"):
                 location["base_commit"] = ticket["base_commit"]
@@ -336,6 +397,8 @@ class TeamPatchGenerator:
             return stage_result(stage="patch", status="failed", module=MODULE, implementation=IMPLEMENTATION, error=str(exc), started=started)
 
         output = self._summarize(result, location, ticket, output_dir, model_info, aligned)
+        if public_base_commit:
+            output["base_commit"] = public_base_commit
         warnings = self._warnings(output)
         return stage_result(
             stage="patch",
