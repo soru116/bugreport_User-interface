@@ -46,18 +46,25 @@ def _git(repo: Path, *args: str) -> str:
     return done.stdout.strip()
 
 
-def commit_at(repo: Path, created_at: str) -> str:
-    """The last commit of the clone's checked-out branch made before ``created_at`` (or its tip)."""
+def commit_at(repo: Path, created_at: str) -> tuple[str, bool]:
+    """The last commit made before ``created_at`` (or the newest one) and whether it came from the
+    checked-out branch.  The SWE-bench clones have no branch at all, only one ref per ticket version
+    (``swebench-base-*``) and shallow history, so without HEAD every ref is searched: the newest
+    version in the clone made before the report date."""
 
-    when = parse_time(created_at)
     from datetime import timezone
 
+    when = parse_time(created_at)
     stamp = when.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S +0000") if when else ""
-    args = ["rev-list", "-1"] + ([f"--before={stamp}"] if stamp else []) + ["HEAD"]
-    commit = _git(repo, *args)
+    try:
+        _git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
+        scope, on_branch = ["HEAD"], True
+    except RuntimeError:
+        scope, on_branch = ["--all"], False
+    commit = _git(repo, "rev-list", "-1", *([f"--before={stamp}"] if stamp else []), *scope)
     if not commit:
-        raise RuntimeError(f"{repo} 在 {created_at} 之前沒有任何 commit")
-    return commit
+        raise RuntimeError(f"{repo} 裡沒有 {created_at[:10] or '任何時間'} 以前的版本")
+    return commit, on_branch
 
 
 def export_snapshot(repo: Path, commit: str, snapshot: Path) -> None:
@@ -194,7 +201,7 @@ class ProjectLocalizer:
             # source of the snapshots; its folder may hold nothing but .git.
             reported = str(structured_ticket.get("created_at") or structured_ticket.get("creation_time") or "")
             try:
-                base_commit = commit_at(Path(project.repo_path), reported)
+                base_commit, on_branch = commit_at(Path(project.repo_path), reported)
                 export_snapshot(Path(project.repo_path), base_commit, Path(project.snapshots_dir) / base_commit)
             except Exception as exc:
                 return (
@@ -203,8 +210,9 @@ class ProjectLocalizer:
                     None,
                 )
             day = reported[:10] if parse_time(reported) else ""
-            version_note = (f"這張 Ticket 沒有指定程式碼版本，改用回報日期 {day} 當時的程式碼（commit {base_commit[:12]}）。"
-                            if day else f"這張 Ticket 沒有指定程式碼版本，也沒有回報日期，改用最新的程式碼（commit {base_commit[:12]}）。")
+            which = "當時的程式碼" if on_branch else "以前、這份 clone 裡最新的一個版本"
+            version_note = (f"這張 Ticket 沒有指定程式碼版本，改用回報日期 {day} {which}（commit {base_commit[:12]}）。"
+                            if day else f"這張 Ticket 沒有指定程式碼版本，也沒有回報日期，改用這份 clone 最新的版本（commit {base_commit[:12]}）。")
         if project.snapshots_dir and base_commit:
             snapshot = self.snapshot_project(project, base_commit)
             if isinstance(snapshot, str):
