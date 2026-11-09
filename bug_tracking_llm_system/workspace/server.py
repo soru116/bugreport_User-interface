@@ -32,7 +32,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from integration.config import IntegrationConfig, load_integration_config  # noqa: E402
-from integration.importers import parse_import_payload  # noqa: E402
+from integration.importers import MAX_HISTORY_RECORDS, MAX_RECORDS, parse_import_payload  # noqa: E402
 from integration.pipeline import STAGE_LABELS, STAGES, IntegratedPipeline  # noqa: E402
 from integration.status import readiness_report  # noqa: E402
 
@@ -675,7 +675,8 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()
             app = self.app
             if parts == ["api", "import"]:
-                records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""))
+                records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""),
+                                               limit=MAX_HISTORY_RECORDS if body.get("as_history") else MAX_RECORDS)
                 if body.get("ticket"):
                     records = [body["ticket"]]
                 if not records:

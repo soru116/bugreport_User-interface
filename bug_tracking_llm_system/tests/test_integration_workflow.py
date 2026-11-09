@@ -821,6 +821,12 @@ class IntegrationWorkflowTests(unittest.TestCase):
         jsonl = '{"id": "1", "bug_report": "x crashes", "meta": {"title": "x"}}\n'
         self.assertEqual(parse_import_payload(jsonl, filename="unlabeled.jsonl")[0]["id"], "1")
         self.assertEqual(len(parse_import_payload('{"tickets": [{"title": "a"}, {"title": "b"}]}', filename="a.json")), 2)
+        many = "".join(json.dumps({"title": f"t{index}"}) + "\n" for index in range(5001))
+        with self.assertRaises(ValueError):
+            parse_import_payload(many, filename="new.jsonl")  # new tickets are each queued: capped
+        from integration.importers import MAX_HISTORY_RECORDS
+
+        self.assertEqual(len(parse_import_payload(many, filename="history.jsonl", limit=MAX_HISTORY_RECORDS)), 5001)
 
 
 @unittest.skipUnless(_has("numpy", "sklearn", "pandas", "scipy", "joblib"), "PRI test needs pandas/scipy/joblib")
