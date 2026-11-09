@@ -266,6 +266,9 @@ const QUEUE_PHASE = {
 };
 function queueText(q, { short = false } = {}) {
   if (!q) return "";
+  if (q.state === "running" && q.stopping) {
+    return short ? (q.deleting ? "這一步結束後刪除" : "這一步結束後停止") : `正在執行目前這一步，模型呼叫無法中途打斷；這一步結束後會${q.deleting ? "刪除這張 Ticket" : "停止"}（${fmtEta(q.eta_seconds)}）。`;
+  }
   if (q.state === "running") {
     const what = q.phase === "priority_batch" && q.batch_size > 1 ? `優先級判定（${q.batch_size} 張一起算）` : QUEUE_PHASE[q.phase] || "處理";
     return short ? `${what}，${fmtEta(q.eta_seconds)}` : `正在執行「${what}」，預計還要${fmtEta(q.eta_seconds)}，完成後會自動更新。`;
@@ -546,6 +549,7 @@ function renderPickBar() {
   $("#pickCount").textContent = state.picked.size;
   $("[data-pick-delete]").disabled = state.picked.size === 0;
   $("[data-pick-rerun]").disabled = state.picked.size === 0;
+  $("[data-pick-stop]").disabled = state.picked.size === 0;
 }
 
 async function rerunPicked() {
@@ -568,6 +572,18 @@ async function rerunPicked() {
   await refresh();
 }
 
+async function stopPicked() {
+  const keys = [...state.picked];
+  if (!keys.length) return;
+  try {
+    const result = await post("/api/stop-tickets", { keys });
+    const parts = [result.removed.length ? `已取消 ${result.removed.length} 張` : "", result.stopping.length ? `${result.stopping.length} 張會在目前這一步結束後停止` : ""].filter(Boolean);
+    toast(parts.join("；") || "選取的 Ticket 都沒有在處理");
+    setSelecting(false);
+    await refresh();
+  } catch (err) { toast(err.message); }
+}
+
 async function deletePicked() {
   const keys = [...state.picked];
   if (!keys.length) return;
@@ -576,7 +592,7 @@ async function deletePicked() {
   if (!confirm(`刪除 ${preview}？\n\n這些 Ticket 的處理結果會一起刪除，無法復原。`)) return;
   try {
     const result = await post("/api/delete-tickets", { keys });
-    toast(`已刪除 ${result.deleted.length} 張${result.skipped.length ? `；${result.skipped.length} 張正在處理，沒有刪除` : ""}`);
+    toast(`已刪除 ${result.deleted.length} 張${result.deferred.length ? `；${result.deferred.length} 張正在執行，這一步結束後刪除` : ""}${result.skipped.length ? `；${result.skipped.length} 張找不到` : ""}`);
     setSelecting(false);
     await refresh();
   } catch (err) { toast(err.message); }
@@ -595,9 +611,9 @@ async function openDeleteProject() {
     ${option("tickets", usage.tickets > 0, usage.tickets === 0, `刪除這個專案的 <b>${usage.tickets}</b> 張 Ticket（含處理結果）`)}
     ${name === NO_PROJECT ? "" : option("history", usage.history_rows > 0, usage.history_rows === 0, `刪除這個專案的 <b>${usage.history_rows}</b> 筆比對歷史（重複偵測與負責人推薦用的資料）`)}
     ${usage.configured ? option("config", true, false, `從設定檔移除這個專案（程式碼與版本快照不會刪除；設定檔會先備份成 <code>.bak</code>）`) : ""}
-    ${usage.busy.length ? `<p class="form-error">有 ${usage.busy.length} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。</p>` : ""}
+    ${usage.busy.length ? `<p class="hint">有 ${usage.busy.length} 張 Ticket 正在處理或排隊：排隊中的會直接取消並刪除，正在執行的會在目前這一步結束後刪除。</p>` : ""}
     ${!usage.configured && name !== NO_PROJECT ? `<p class="hint">這個專案不在設定檔裡；Ticket 和比對歷史都刪除後，資料夾就會消失。</p>` : ""}`;
-  $("#deleteProjectConfirm").disabled = usage.busy.length > 0;
+  $("#deleteProjectConfirm").disabled = false;
   $("#deleteProjectDialog").showModal();
 }
 
@@ -615,6 +631,7 @@ async function confirmDeleteProject() {
       result.tickets_removed.length ? `${result.tickets_removed.length} 張 Ticket` : "",
       result.history_rows_removed ? `${result.history_rows_removed} 筆比對歷史` : "",
     ].filter(Boolean);
+    if ((result.deferred || []).length) parts.push(`另外 ${result.deferred.length} 張正在執行，這一步結束後刪除`);
     const removedConfig = result.config_removed ? `已從設定檔移除「${projectName(name)}」` : "";
     toast([parts.length ? `已刪除 ${parts.join("、")}` : "", removedConfig].filter(Boolean).join("，") || "沒有需要刪除的內容");
     goHome();
@@ -736,9 +753,12 @@ function renderDetail() {
 
   let hint = "";
   if (awaiting && tab !== "duplicate") hint = `<div class="pin-hint pin-gate"><span>重複偵測正在等你確認，確認後才會繼續後面的步驟。</span><button class="btn btn-gate btn-small" data-tab="duplicate">前往確認</button></div>`;
-  else if (r.status === "failed") hint = `<div class="pin-hint pin-failed"><span>流程在「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", r.current_stage])[1])}」停止：${esc(r.error)}</span></div>`;
+  else if (r.status === "failed") {
+    const where = (STAGES.find((x) => x[0] === r.current_stage) || ["", r.current_stage])[1];
+    hint = `<div class="pin-hint pin-failed"><span>${where ? `流程在「${esc(where)}」停止` : "流程已停止"}：${esc(r.error)}</span></div>`;
+  }
   else if (r.status === "duplicate") hint = `<div class="pin-hint pin-info"><span>已判定為 <b class="mono">${esc((r.decisions.duplicate || {}).duplicate_of || "")}</b> 的重複，流程結束。</span></div>`;
-  else if (r.queue) hint = `<div class="pin-hint pin-info"><span>${esc(queueText(r.queue))}</span></div>`;
+  else if (r.queue) hint = `<div class="pin-hint pin-info"><span>${esc(queueText(r.queue))}</span>${r.queue.stopping ? "" : `<button class="btn btn-quiet btn-small" data-action="stop">${r.queue.state === "running" ? "停止" : "取消排隊"}</button>`}</div>`;
   else if (r.busy || r.status === "running") hint = `<div class="pin-hint pin-info"><span>正在執行「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", "處理"])[1])}」，完成後會自動更新。</span></div>`;
 
   let panel;
@@ -783,7 +803,7 @@ function renderDetail() {
               <p>匯入 <b>${esc(fmtTime(r.created_at))}</b></p>
               <a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/ticket.json">下載完整結果 JSON</a>
               <button class="btn btn-quiet btn-small" data-action="rerun" ${r.busy ? "disabled" : ""}>${r.status === "new" ? "開始處理" : "從頭重新執行"}</button>
-              <button class="btn btn-quiet btn-small" data-action="delete" ${r.busy ? "disabled" : ""}>刪除這張 Ticket</button>
+              <button class="btn btn-quiet btn-small" data-action="delete">刪除這張 Ticket</button>
             </div>
           </details>
         </div>
@@ -1561,12 +1581,19 @@ async function onDetailClick(event) {
         toast(`已移到「${target}」並開始錯誤定位`);
         break;
       }
-      case "delete":
-        if (!confirm(`刪除 ${state.detail.ticket_id}？\n\n這張 Ticket 的處理結果會一起刪除，無法復原。`)) { btn.disabled = false; return; }
-        await api(path, { method: "DELETE" });
-        toast(`已刪除 ${state.detail.ticket_id}`);
+      case "stop": {
+        const result = await post(`${path}/stop`, {});
+        toast(result.state === "stopping" ? "目前這一步結束後就會停止" : "已停止處理");
+        break;
+      }
+      case "delete": {
+        const running = state.detail.queue && state.detail.queue.state === "running";
+        if (!confirm(`刪除 ${state.detail.ticket_id}？\n\n這張 Ticket 的處理結果會一起刪除，無法復原。${running ? "\n它正在執行一個步驟，會在這一步結束後刪除。" : ""}`)) { btn.disabled = false; return; }
+        const result = await api(path, { method: "DELETE" });
+        toast(result.deferred ? `${state.detail.ticket_id} 會在目前這一步結束後刪除` : `已刪除 ${state.detail.ticket_id}`);
         goHome(projectKey(state.detail));
         break;
+      }
     }
     await refresh();
   } catch (err) {
@@ -1825,6 +1852,7 @@ async function init() {
     if (e.target.closest("[data-pick-cancel]")) setSelecting(false);
     else if (e.target.closest("[data-pick-delete]")) deletePicked();
     else if (e.target.closest("[data-pick-rerun]")) rerunPicked();
+    else if (e.target.closest("[data-pick-stop]")) stopPicked();
     else if (e.target.closest("[data-pick-all]")) {
       $$("#homeView .tile").forEach((tile) => state.picked.add(tile.dataset.key));
       state.homeSignature = null;

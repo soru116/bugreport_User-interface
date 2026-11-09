@@ -505,11 +505,15 @@ class IntegratedPipeline:
         history = [row for row in self.store.history_rows() if project and str(row.get("project") or "") == project]
         return {"project": project, "tickets": len(tickets), "ticket_keys": [record["key"] for record in tickets], "history_rows": len(history)}
 
-    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True) -> dict[str, Any]:
+    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True,
+                            keep: set[str] | None = None) -> dict[str, Any]:
+        """``keep``: tickets still running a step; the workspace deletes them when that step ends."""
+
         removed_tickets = []
+        keep = keep or set()
         if tickets:
             for record in self.store.list():
-                if str(record.get("project") or "") == project:
+                if str(record.get("project") or "") == project and record["key"] not in keep:
                     self.store.delete(record["key"])
                     removed_tickets.append(record["key"])
         removed_history = 0

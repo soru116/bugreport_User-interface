@@ -414,6 +414,50 @@ class IntegrationWorkflowTests(unittest.TestCase):
             self.assertEqual(record["stages"]["priority"]["status"], "fallback")
         self.assertIsNone(app.queue_info(keys[0]))
 
+    def test_workspace_stops_and_deletes_tickets_that_are_queued_or_running(self) -> None:
+        import importlib.util
+        import threading
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        app = server.WorkspaceApp(self.config)
+        gate, entered = threading.Event(), threading.Event()
+
+        def slow_llama(prompt: str) -> str:  # the first ticket blocks inside conversion
+            entered.set()
+            gate.wait(10)
+            return fake_code_llama(prompt)
+
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=slow_llama)
+        raws = [{**self.raw_ticket(), "ticket_id": f"S-{index}", "project": "smoke"} for index in range(4)]
+        keys = [record["key"] for record in app.pipeline.import_raw(raws, source="test")]
+        for key in keys:
+            app.start(key)
+        self.assertTrue(entered.wait(10))
+
+        self.assertEqual(app.stop(keys[1]), "removed", "a waiting ticket leaves the queue at once")
+        self.assertFalse(app.busy(keys[1]))
+        self.assertEqual(app.pipeline.get(keys[1])["status"], "new")
+        self.assertEqual(app.stop(keys[0]), "stopping", "a running step is not cut off")
+        self.assertTrue(app.queue_info(keys[0])["stopping"])
+
+        result = app.delete_project("smoke", tickets=True, history=False, config=False)
+        self.assertEqual(result["deferred"], [keys[0]])
+        self.assertEqual(sorted(result["tickets_removed"]), sorted(keys[1:]))  # S-2, S-3 cancelled out of the queue
+        self.assertIsNotNone(app.pipeline.get(keys[0]), "the running ticket is kept until its step ends")
+
+        gate.set()
+        deadline = _time.time() + 30
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+        with self.assertRaises(KeyError):
+            app.pipeline.get(keys[0])
+        self.assertEqual(app.pipeline.store.list(), [])
+
     def test_workspace_automatic_mode_runs_through_patch_and_commit(self) -> None:
         import importlib.util
         import time as _time

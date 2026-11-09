@@ -148,6 +148,53 @@ class WorkspaceApp:
         with self._cv:
             self._queue = [item for item in self._queue if item is not job]
             self._cv.notify_all()
+        if job.get("delete"):
+            try:
+                self.pipeline.delete_ticket(job["key"])
+            except KeyError:
+                pass
+        elif job.get("stop"):
+            self._mark_stopped(job["key"])
+
+    STOPPED_MESSAGE = "已手動停止。按「從頭重新執行」可以重新開始。"
+
+    def _mark_stopped(self, key: str) -> None:
+        """A ticket taken out of the queue half-way: show it as stopped instead of 'processing'."""
+
+        def mutate(rec: dict[str, Any]) -> None:
+            if rec.get("status") in {"running", "ready_to_continue"}:
+                rec["status"], rec["error"] = "failed", self.STOPPED_MESSAGE
+                rec.setdefault("events", []).append({"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "message": "手動停止處理"})
+
+        try:
+            self.pipeline.store.update(key, mutate)
+        except KeyError:
+            pass
+
+    def stop(self, key: str, *, delete: bool = False) -> str:
+        """Stop a ticket's processing.  A job still waiting is taken out of the queue at once
+        ("removed"); a job that is running finishes the step it is in (a model call cannot be cut
+        off) and then stops ("stopping").  With ``delete`` the ticket is deleted at that point."""
+
+        with self._cv:
+            job = next((item for item in self._queue if item["key"] == key), None)
+            if job is None:
+                return "idle"
+            if job["active"]:
+                job["stop"] = True
+                job["delete"] = bool(job.get("delete") or delete)
+                return "stopping"
+            self._queue = [item for item in self._queue if item is not job]
+            self._cv.notify_all()
+        if delete:
+            self.pipeline.delete_ticket(key)
+        else:
+            self._mark_stopped(key)
+        return "removed"
+
+    def stopping(self, key: str) -> bool:
+        with self._cv:
+            return any(item["key"] == key and item.get("stop") for item in self._queue)
 
     def _worker(self, lane: str) -> None:
         while True:
@@ -173,7 +220,7 @@ class WorkspaceApp:
                             by="workspace:auto",
                         )
                     self._record("review", time.time() - job["started_at"])
-                    if record["status"] == "ready_to_continue":
+                    if record["status"] == "ready_to_continue" and not job.get("stop"):
                         with self._cv:  # hand over to the after worker, keeping its place in the queue
                             job.update(kind="after", active=False, phase="waiting", ready_at=time.time())
                             self._cv.notify_all()
@@ -189,6 +236,9 @@ class WorkspaceApp:
                     for job in batch:
                         with self._cv:
                             job.update(phase="after", started_at=time.time())
+                        if job.get("stop"):  # stopped while the batch priority ran
+                            self._finish(job)
+                            continue
                         try:
                             if pipeline.get(job["key"])["status"] == "ready_to_continue":
                                 record = pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
@@ -206,7 +256,7 @@ class WorkspaceApp:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
-                        if job.get("automatic"):
+                        if job.get("automatic") and not job.get("stop"):
                             try:
                                 pipeline.patch_precheck(job["key"])
                             except ValueError as exc:  # e.g. no code for this project: not a failure of the ticket
@@ -288,7 +338,8 @@ class WorkspaceApp:
                 return max(5.0, avg.get(item["phase"], 10.0) - (now - item["started_at"]))
 
             if job["active"]:
-                return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1), "eta_seconds": _coarse(remaining(job))}
+                return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1),
+                        "eta_seconds": _coarse(remaining(job)), "stopping": bool(job.get("stop")), "deleting": bool(job.get("delete"))}
             if job["kind"] in {"patch", "commit"}:
                 running = [item for item in self._queue if item["active"] and item["phase"] in {"patch", "commit"}]
                 waiting = [item for item in self._queue if item["kind"] in {"patch", "commit"} and not item["active"]]
@@ -344,9 +395,15 @@ class WorkspaceApp:
     def delete_project(self, name: str, *, tickets: bool, history: bool, config: bool) -> dict[str, Any]:
         project = "" if name == self.NO_PROJECT else name
         usage = self.project_usage(name)
-        if usage["busy"]:
-            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。")
-        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history)
+        deferred, cancelled = [], []
+        if tickets:  # waiting tickets leave the queue now; running ones are deleted when their step ends
+            for key in usage["busy"]:
+                (deferred if self.stop(key, delete=True) == "stopping" else cancelled).append(key)
+        elif usage["busy"] and history:
+            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理；只刪比對歷史時請先停止它們。")
+        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history, keep=set(deferred))
+        result["tickets_removed"] = cancelled + result["tickets_removed"]
+        result["deferred"] = deferred
         result["config_removed"] = self.remove_project_from_config(project) if config and project else False
         return result
 
@@ -632,23 +689,34 @@ class Handler(SimpleHTTPRequestHandler):
                         app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic")
                 return self._json({"created": [record["key"] for record in created]})
             if parts == ["api", "delete-tickets"]:
-                deleted, skipped = [], []
+                deleted, deferred, skipped = [], [], []
                 for key in [str(item) for item in body.get("keys") or []]:
-                    if app.busy(key):
-                        skipped.append(key)
-                        continue
                     try:
-                        app.pipeline.delete_ticket(key)
+                        state = app.stop(key, delete=True)
+                        if state == "stopping":
+                            deferred.append(key)  # deleted once the running step ends
+                            continue
+                        if state == "idle":
+                            app.pipeline.delete_ticket(key)
                         deleted.append(key)
                     except KeyError:
                         skipped.append(key)
-                return self._json({"deleted": deleted, "skipped": skipped})
+                return self._json({"deleted": deleted, "deferred": deferred, "skipped": skipped})
+            if parts == ["api", "stop-tickets"]:
+                result = {"removed": [], "stopping": []}
+                for key in [str(item) for item in body.get("keys") or []]:
+                    state = app.stop(key)
+                    if state in result:
+                        result[state].append(key)
+                return self._json(result)
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "delete":
                 return self._json(app.delete_project(
                     parts[2], tickets=bool(body.get("tickets", True)), history=bool(body.get("history", False)), config=bool(body.get("config", False))
                 ))
             if len(parts) == 4 and parts[:2] == ["api", "tickets"]:
                 key, action = parts[2], parts[3]
+                if action == "stop":
+                    return self._json({"state": app.stop(key)})
                 if action == "pin":  # display-only, allowed while the ticket is being processed
                     record = app.pipeline.set_pinned(key, bool(body.get("pinned", True)))
                     return self._json({"pinned": record["pinned"]})
@@ -709,9 +777,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parts = self._parts()
         if len(parts) == 3 and parts[:2] == ["api", "tickets"]:
-            if self.app.busy(parts[2]):
-                return self._error("這張 Ticket 正在處理中，請稍候。", 409)
             try:
+                state = self.app.stop(parts[2], delete=True)
+                if state == "stopping":
+                    return self._json({"deleted": "", "deferred": parts[2]})
+                if state == "removed":
+                    return self._json({"deleted": parts[2], "history_rows_removed": 0})
                 return self._json(self.app.pipeline.delete_ticket(parts[2]))
             except KeyError:
                 return self._error("找不到這張 Ticket。", 404)
