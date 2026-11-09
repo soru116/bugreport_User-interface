@@ -614,6 +614,18 @@ class IntegrationWorkflowTests(unittest.TestCase):
         missing, _ = localizer.localize({**tickets[0], "base_commit": "0" * 40}, config.project("demo/lib"))
         self.assertEqual(missing["status"], "failed")
 
+        # A ticket without a commit (a GitHub issue) uses the code as of its report date.
+        issue_ticket = {key: value for key, value in tickets[1].items() if key != "base_commit"}
+        result, raw = localizer.localize({**issue_ticket, "created_at": "2099-01-01T00:00:00Z"}, config.project("demo/lib"))
+        self.assertEqual(result["status"], "done", result.get("error"))
+        self.assertEqual(result["output"]["base_commit"], second)
+        self.assertEqual(result["output"]["base_commit_source"], "reported_date")
+        self.assertTrue(any("2099-01-01" in warning for warning in result["warnings"]))
+        self.assertEqual(result["output"]["ranked_symbols"][0]["file_path"], "pkg/cookies.py")
+        too_early, _ = localizer.localize({**issue_ticket, "created_at": "2000-01-01T00:00:00Z"}, config.project("demo/lib"))
+        self.assertEqual(too_early["status"], "failed")
+        self.assertIn("回報日期", too_early["error"])
+
     def test_localization_explains_a_project_without_repository(self) -> None:
         from integration.localization import ProjectLocalizer
 
