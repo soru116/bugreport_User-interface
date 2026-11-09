@@ -341,6 +341,34 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertIn("smoke", assignee["details"]["history_source"])
         self.assertTrue(any(row.get("ticket_id") == "T-1" and row.get("project") == "smoke" for row in pipeline.store.history_rows()))
 
+    def test_assignee_history_only_uses_rows_created_before_the_ticket(self) -> None:
+        config = config_from_mapping(
+            {
+                "workspace_root": str(WORKSPACE_ROOT),
+                "store_dir": str(self.root / "cutoff_store"),
+                "priority": {"model_path": str(self.root / "missing.joblib")},
+                "projects": {"smoke": {"repo_path": str(SMOKE_REPO)}},
+                "default_project": "smoke",
+            }
+        )
+        pipeline = IntegratedPipeline(config, extractor=ToJsonExtractor(config, llm_call=fake_code_llama))
+        text = {"project": "smoke", "title": "Login page crashes when token is missing", "description": "Missing token crashes login.", "component": "authentication"}
+        pipeline.import_history(
+            [
+                {"ticket_id": "E-1", "assignee": "early-dev@example.com", "created_at": "2017-01-01T00:00:00Z", **text},
+                {"ticket_id": "L-1", "assignee": "later-dev@example.com", "created_at": "2022-01-01T00:00:00Z", **text},
+            ]
+        )
+        raw = {**self.raw_ticket(), "created_at": "2018-06-01T00:00:00Z"}
+        [record] = pipeline.import_raw([raw], source="test", project="smoke")
+        record = pipeline.run_until_review(record["key"])
+        pipeline.decide_duplicate(record["key"], "not_duplicate")
+        record = pipeline.run_after_duplicate(record["key"])
+        assignee = record["stages"]["assignee"]
+        self.assertIn("early-dev@example.com", assignee["output"]["ranked_candidates"])
+        self.assertNotIn("later-dev@example.com", assignee["output"]["ranked_candidates"])
+        self.assertEqual(assignee["details"]["later_rows_skipped"], 1)
+
     def test_workspace_queue_batches_priority_and_reports_position(self) -> None:
         import importlib.util
         import threading

@@ -1126,6 +1126,12 @@ function openFactorHelp(target) {
   }
 }
 
+function historyNote(r) {
+  const d = ((r.stages || {}).assignee || {}).details || {};
+  if (!d.history_rows) return "";
+  return `<p class="hint" style="margin-bottom:10px">參考了 ${d.history_rows} 筆歷史紀錄${d.later_rows_skipped ? `（比這張晚建立的 ${d.later_rows_skipped} 筆不使用）` : ""}。</p>`;
+}
+
 function renderAssignee(r, o) {
   const details = o.candidate_details || [];
   const confirmed = (r.decisions || {}).assignee;
@@ -1141,6 +1147,7 @@ function renderAssignee(r, o) {
   const routing = { assigned: "已依模型分派", assigned_by_fallback: "以 fallback 規則分派", needs_manual_triage: "建議人工分派" }[o.routing_status] || o.routing_status || "";
   return `<p style="margin-bottom:10px">${esc(routing)}${o.suggested_assignee ? `：建議 <b>${esc(o.suggested_assignee)}</b>` : ""}${o.confidence != null ? `（信心 ${num(o.confidence, 2)}）` : ""}</p>
     ${o.reason ? `<p class="hint" style="margin-bottom:10px">${esc(o.reason)}</p>` : ""}
+    ${historyNote(r)}
     ${rows ? `<ol class="assignee-list">${rows}</ol>` : "<p class=\"hint\">沒有可推薦的候選人。</p>"}
     ${canConfirm ? `<div class="manual-assign"><input id="manualAssignee" placeholder="或輸入其他負責人的 email／帳號" aria-label="指定負責人"><button class="btn btn-quiet btn-small" data-action="assign-manual">指定這位負責人</button></div>` : ""}
     ${confirmed ? `<p class="confirmed-line">已確認負責人：<b>${esc(confirmed.assignee)}</b>（${esc(fmtTime(confirmed.at))}）</p>` : ""}`;
