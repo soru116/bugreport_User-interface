@@ -6,13 +6,18 @@ the same file as ``fault_localization_feature_files/src/utils/fault_localization
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
 from integration.common import stage_result
 from integration.config import IntegrationConfig, ProjectSettings
+from integration.duplicate import parse_time
 from modules.bug_localizer import BugLocalizer
 from utils.fault_localization import format_user_facing_localization_result
 from utils.fault_localization_stage3 import build_code_index, load_code_index
@@ -32,6 +37,51 @@ SYMBOL_KEYS = (
     "llm_score",
     "reason",
 )
+
+
+def _git(repo: Path, *args: str) -> str:
+    done = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if done.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} 失敗：{done.stderr.strip()[-300:]}")
+    return done.stdout.strip()
+
+
+def commit_at(repo: Path, created_at: str) -> tuple[str, bool]:
+    """The last commit made before ``created_at`` (or the newest one) and whether it came from the
+    checked-out branch.  The SWE-bench clones have no branch at all, only one ref per ticket version
+    (``swebench-base-*``) and shallow history, so without HEAD every ref is searched: the newest
+    version in the clone made before the report date."""
+
+    from datetime import timezone
+
+    when = parse_time(created_at)
+    stamp = when.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S +0000") if when else ""
+    try:
+        _git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
+        scope, on_branch = ["HEAD"], True
+    except RuntimeError:
+        scope, on_branch = ["--all"], False
+    commit = _git(repo, "rev-list", "-1", *([f"--before={stamp}"] if stamp else []), *scope)
+    if not commit:
+        raise RuntimeError(f"{repo} 裡沒有 {created_at[:10] or '任何時間'} 以前的版本")
+    return commit, on_branch
+
+
+def export_snapshot(repo: Path, commit: str, snapshot: Path) -> None:
+    """Source tree at ``commit`` without .git (same as scripts/build_swebench_demo.py)."""
+
+    if snapshot.is_dir() and any(snapshot.iterdir()):
+        return
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "snapshot.zip"
+        _git(repo, "archive", "--format=zip", "-o", str(archive), commit)
+        partial = snapshot.with_name(snapshot.name + ".partial")
+        if partial.exists():
+            shutil.rmtree(partial)
+        with zipfile.ZipFile(archive) as handle:
+            handle.extractall(partial)
+        partial.rename(snapshot)
 
 
 def _trim_code(text: Any, limit: int = MAX_SNIPPET_LINES) -> str:
@@ -144,6 +194,25 @@ class ProjectLocalizer:
             )
         base_commit = str(structured_ticket.get("base_commit") or "").strip()
         snapshot_used = False
+        version_note = ""
+        if project.snapshots_dir and not base_commit and (Path(project.repo_path) / ".git").exists():
+            # A versioned project (SWE-bench style) whose ticket names no commit, e.g. a GitHub issue:
+            # use the code as it was when the ticket was reported.  The clone itself is only the
+            # source of the snapshots; its folder may hold nothing but .git.
+            reported = str(structured_ticket.get("created_at") or structured_ticket.get("creation_time") or "")
+            try:
+                base_commit, on_branch = commit_at(Path(project.repo_path), reported)
+                export_snapshot(Path(project.repo_path), base_commit, Path(project.snapshots_dir) / base_commit)
+            except Exception as exc:
+                return (
+                    stage_result(stage="localization", status="failed", module=self.MODULE_LABEL, implementation=self.IMPLEMENTATION,
+                                 error=f"這張 Ticket 沒有指定程式碼版本，改用回報日期的版本時失敗：{exc}", started=started),
+                    None,
+                )
+            day = reported[:10] if parse_time(reported) else ""
+            which = "當時的程式碼" if on_branch else "以前、這份 clone 裡最新的一個版本"
+            version_note = (f"這張 Ticket 沒有指定程式碼版本，改用回報日期 {day} {which}（commit {base_commit[:12]}）。"
+                            if day else f"這張 Ticket 沒有指定程式碼版本，也沒有回報日期，改用這份 clone 最新的版本（commit {base_commit[:12]}）。")
         if project.snapshots_dir and base_commit:
             snapshot = self.snapshot_project(project, base_commit)
             if isinstance(snapshot, str):
@@ -153,6 +222,14 @@ class ProjectLocalizer:
                 )
             project = snapshot
             snapshot_used = True
+        if (Path(project.repo_path).is_dir() and not (project.code_index_path and Path(project.code_index_path).is_file())
+                and not any(item.name != ".git" for item in Path(project.repo_path).iterdir())):
+            return (
+                stage_result(stage="localization", status="failed", module=self.MODULE_LABEL, implementation=self.IMPLEMENTATION,
+                             error=f"程式碼資料夾是空的（只有 .git）：{project.repo_path}。請確認 integration_config.json 的 repo_path，"
+                                   "或在 Ticket 裡提供 base_commit。", started=started),
+                None,
+            )
         if not Path(project.repo_path).is_dir() and not (project.code_index_path and Path(project.code_index_path).is_file()):
             return (
                 stage_result(
@@ -188,7 +265,8 @@ class ProjectLocalizer:
         output = {
             "project": project.name,
             "repository": raw.get("repo") or project.name,
-            "base_commit": str(structured_ticket.get("base_commit") or "") or raw.get("base_commit", ""),
+            "base_commit": base_commit or raw.get("base_commit", ""),
+            "base_commit_source": "ticket" if structured_ticket.get("base_commit") else ("reported_date" if version_note else ""),
             "status": user_facing.get("status"),
             "summary": user_facing.get("summary", {}),
             "confidence_level": raw.get("confidence_level"),
@@ -200,7 +278,7 @@ class ProjectLocalizer:
             "engineering_guidance": user_facing.get("engineering_guidance", []),
             "input_validation": raw.get("input_validation", {}),
         }
-        warnings = list(user_facing.get("warnings") or [])
+        warnings = ([version_note] if version_note else []) + list(user_facing.get("warnings") or [])
         if raw.get("should_manual_review"):
             warnings.append("定位信心未達自動化門檻，請工程師以候選清單為參考人工確認。")
         return (

@@ -1,6 +1,6 @@
 # Ticket 工作台（整合版）
 
-把組內**已經做好的五個功能**串成一條可以「匯入 Ticket → 逐步處理」的流程，並提供網頁介面和命令列兩種用法。錯誤定位完成後，可以再按一下「產生補丁」，用補丁生成組官方修好 6/36 題的版本產生補丁（第 6 步，手動執行）。
+把組內**已經做好的功能**串成一條可以「匯入 Ticket → 逐步處理 → 產生補丁與提交訊息」的流程，並提供網頁介面和命令列兩種用法。網頁可選半自動或全自動；半自動保留人工確認點，全自動會一鍵接續到補丁與提交訊息。
 
 整合層不重寫任何演算法，每一步都直接 import／呼叫子專案原本的程式：
 
@@ -12,6 +12,7 @@
 | 4. 分派負責人 | `bug_tracking_llm_system/src/modules/assignee_triager.py`（原封不動） | 負責人歷史 JSONL（預設找 paper_grade 的 bmo 資料） | 改用工作台匯入或確認過、含負責人的紀錄 |
 | 5. 錯誤定位 | `bug_tracking_llm_system/src/modules/bug_localizer.py` → `utils/fault_localization_stage3.py`（與 `fault_localization_feature_files/src/utils/fault_localization.py` 內容完全相同） | 要定位的 Repository（可預先建立 code index） | 沒有設定專案時略過 |
 | 6. 補丁生成（手動） | `patch/rewrite-gemma4-5cdb2be/src/fim_patch`（fixed-patch commit `5cdb2be`，原封不動）的 `RepairPipeline` → `FIMPatchGenerator`（對話式改寫） | 本機 Ollama 的 `gemma4:12b`；專案的 `repo_path` 必須是 git clone | 不會改用備援，直接顯示無法執行的原因 |
+| 7. 提交訊息 | `src/integration/commit_message.py`（組員 Lyy12705 的生成器）讀取選中的 unified diff，以零樣本提示產生一行 Conventional Commit | 本機 Ollama 的 `codellama:13b-instruct`（預設；沒裝的話在設定檔把 `commit_message.model` 改成 `codellama:7b-instruct`） | 保留補丁並顯示訊息生成失敗，不會假裝成功 |
 
 「備援」會顯示在畫面、CLI 輸出和結果 JSON（`status: "fallback"` 與 `fallback_reason`），不會把備援結果當成訓練模型的結果。
 
@@ -28,6 +29,12 @@
 - 處理完的 Ticket 會加入工作台歷史資料（`data/workspace/history/workspace_history.jsonl`），之後匯入的 Ticket 可以和它比對重複。
 - 重複偵測只比對同一個專案、而且建立時間比這張 Ticket 早的歷史資料（真實系統裡，歷史一定比新回報早）；略過了幾張會寫在重複偵測的說明裡。
 - SBERT 會把歷史資料的向量存在 `data/workspace/cache/sbert/`，每份歷史只需要編碼一次，之後每張 Ticket 只算自己。換了 SBERT 模型會自動另存一份，不會混用。
+
+### 操作模式
+
+- **半自動**：維持既有流程；模糊的重複候選等待人工確認，負責人可確認或改派，補丁由使用者手動啟動。
+- **全自動**：匯入或重新執行後，一路完成轉換、重複偵測、優先級、負責人、錯誤定位、補丁及提交訊息。模糊的重複候選自動視為非重複；有模型建議時直接採用，模型 abstain 時依序採用最相近的同專案歷史 Ticket owner、低信心候選、同 component／product 或同專案最常處理者，不留下人工確認；錯誤定位信心低時保留原始分數但略過人工確認門檻；補丁第一次沒有任何有效候選時，以不同 seeds（接續第一輪範圍）及第一輪的候選拒絕原因自動重試一次，第二次仍沒有補丁就結束並顯示原因；其他模型或程式失敗時停止並顯示原因。
+- 模式儲存在瀏覽器的 `localStorage`，只影響該瀏覽器之後啟動的工作，不會改寫模型設定或已經在執行的 Ticket。
 
 ### 處理順序與排隊
 
@@ -94,7 +101,7 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 開啟 <http://127.0.0.1:8780>：
 
-1. 右上「模型與資料狀態」：檢查每一步會用到的程式和產物在這台電腦上找不找得到，也可以建立 Repository 的程式碼索引。
+1. 右上「半自動／全自動」開啟操作模式設定；「模型與資料狀態」檢查每一步會用到的程式和產物，也可以建立 Repository 的程式碼索引。
 2. 「匯入 Ticket」：
    - 勾選「這是歷史 Ticket」可以把舊資料加入比對資料庫，例如 `workspace/examples/history_tickets.jsonl`。下拉選單選這批歷史屬於哪個專案，它們就只會和那個專案的新 Ticket 比對；檔案裡已經寫好 `project` 的列照檔案。選「不指定」的歷史會和所有專案比對。
    - 一般匯入會立刻開始處理，例如 `workspace/examples/new_tickets.jsonl`。
@@ -113,9 +120,9 @@ python3 workspace/server.py --config integration_config.json --port 8780
 
 範例資料是**示範用的虛構 Ticket**，內容描述 `bug-duplicate-detection` 原始碼中可能出現的錯誤，搭配設定檔中的 `duplicate-detection` 專案示範錯誤定位。它們不是評估資料，不能拿來算準確率。
 
-## 補丁生成（第 6 步，手動執行）
+## 補丁生成（第 6 步）
 
-錯誤定位完成後，Ticket 頁面的「補丁生成」分頁會出現「產生補丁」按鈕。補丁生成很花時間又佔用 GPU，所以不會自動執行。
+半自動模式下，錯誤定位完成後，Ticket 頁面的「補丁生成」分頁會出現「產生補丁」按鈕。全自動模式會在錯誤定位成功後把補丁排入 GPU 佇列，完成後接續產生提交訊息。
 
 程式是補丁生成組 `fixed-patch` 分支 `codex/eval36-v7-timeout-flag-20261019`、commit `5cdb2be` 的快照，放在 repo 根目錄的 `patch/rewrite-gemma4-5cdb2be/`（說明見裡面的 `PROVENANCE_ZH.md`）。這一版在 36 題開發集產生 21 個補丁，**官方 SWE-bench 測試判定修好 6 題**。工作台用和那一輪完全相同的方法設定（`rewrite`、`first_supported_ast`、`task_last`、研究模式……，寫死在 `src/integration/patch.py` 的 `FROZEN_RUN_CONFIG`，測試會和那一輪的 `run_config.json` 比對），只有下面這些可以在設定檔 `patch` 區塊調整：
 
@@ -129,24 +136,51 @@ python3 workspace/server.py --config integration_config.json --port 8780
 }
 ```
 
+補丁通過檢查後，工作台會自動以選中的 diff 生成一行提交訊息。設定檔可調整：
+
+```json
+"commit_message": {
+  "enabled": true,
+  "ollama_url": "http://localhost:11434",
+  "model": "codellama:13b-instruct",
+  "timeout_seconds": 180
+}
+```
+
 做法：
 
 1. 用工作台**這張 Ticket 自己的錯誤定位結果**（不是標準答案），從排名第一的函式開始，找第一個可以改寫的函式。
 2. 從專案的 git clone 建立 `base_commit` 那一版的 git 快照（存在 `data/workspace/patch_snapshots/`，原本的 clone 不會被修改）。
 3. 請 gemma4:12b 重寫整個函式 3 次（seed 42／43／44，同一個 prompt）。
 4. 每個候選都要通過語法、AST、函式簽名不變、`git apply` 等檢查；通過的候選中取改動最少的一個。
+5. 將選中的 unified diff 與可觀察 Ticket 脈絡交給 Code Llama-Instruct，產生並驗證單行 `type(scope): subject`；gold patch 與 hints 不會進入提示詞。
 
 畫面會顯示補丁 diff、3 個候選各自通過或被擋下的原因，以及：
 
 - **官方判定**：只有在產生的補丁和某個已經送過官方測試的補丁 **sha256 完全相同**時才會顯示（判定資料在 `patch/rewrite-gemma4-5cdb2be/official_verdicts.jsonl`）。工作台本身沒有 Docker，不會自己跑官方測試。
 - **36 題實驗中的紀錄**：如果這張 Ticket 是那 36 題之一，會列出 6/36 那一輪對它產生的補丁和官方判定，並標出和這次的結果相不相同。
+- **提交訊息**：顯示可複製的單行草稿；內容由模型產生，提交前仍需人工審查。
 
 必須跟結果一起講的限制：
 
 - 「產生補丁」只代表通過靜態檢查與 `git apply`，**不等於修好**。
 - 錯誤定位信心不是「高」時，正式流程不會產生補丁；這裡照 6/36 實驗的研究模式照樣產生，並在畫面上標示需要人工審查。
 - 同樣的設定重跑，模型輸出不一定一樣；錯誤定位也是工作台重新算的，所以重新產生的補丁可能和實驗紀錄不同。
+- 提交訊息生成失敗不會刪除已通過檢查的補丁；結果 JSON 會保留錯誤原因。
 - 36 題是開發集，被反覆用來調方法，不能當泛化證據。
+
+### 第 7 步：提交訊息草稿
+
+補丁產生後，工作台接著用組員的提交訊息生成器（`src/integration/commit_message.py`）草擬一則 Conventional Commit 訊息，顯示在第 7 步，可以複製或「重新產生」（不會重跑補丁）。「36 題實驗中的紀錄」的補丁也可以按「產生提交訊息草稿」。
+
+- 預設模型 `codellama:13b-instruct`，零樣本：只回傳 `type` 與 `subject`，程式驗證後組成 `fix(scope): subject`；scope 由 diff 的檔名決定。電腦上只有 `codellama:7b-instruct` 的話，在設定檔加 `"commit_message": {"model": "codellama:7b-instruct"}`。
+- 工作台另外加上 `Refs: <Ticket 編號>`。只有補丁和官方判定修好的補丁 sha256 完全相同時，才會加上 `Verified-by: official SWE-bench harness (...)`，並把判定交給模型；其他情況明確告訴模型「沒有執行測試」，草稿不會宣稱已修好。
+- 只是草稿，工作台不會執行 `git commit`。
+- 設定檔 `commit_message` 區塊可以改 `enabled`、`model`、`ollama_url`、`timeout_seconds`。
+
+### 全自動模式
+
+右上角「設定」可以切換「全自動」：不重複、負責人直接分派（模型 abstain 時改用同領域／同專案歷史 owner）、補丁和提交訊息自動產生。沒有程式碼庫（錯誤定位略過）的 Ticket 只把第 6、7 步標成「略過」，不會把整張 Ticket 判成失敗。
 
 ### 匯入修好的那 6 題
 
@@ -291,6 +325,7 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 - PRI：用 PRI 自己的 `clean_bug_reports.py` → `build_experiment_splits.py` → `build_features.py` → `train_recall_balanced_priority_model.py` 在小型合成資料上訓練模型，再透過整合層預測，P1 和 P5 都預測正確。
 - 完整流程：確認重複的關卡、主系統 AssigneeTriager 的候選、Stage-3 定位到正確檔案、負責人確認後寫回歷史資料。
 - 補丁生成：工作台的錯誤定位結果能交給補丁生成組的 `RepairPipeline`（通過它自己的定位驗證），在 base_commit 的 git 快照上產生可 `git apply` 的 diff；候選被擋下的原因、標準答案欄位不會進入 prompt、原本的 clone 保持乾淨、方法設定和 6/36 那一輪的 `run_config.json` 一致、官方判定以 sha256 對應到 6 題。測試只把 gemma4 的 HTTP 呼叫換成假回應。另外 `patch/rewrite-gemma4-5cdb2be` 自己的 154 項測試（`tests.test_fim`、`tests.test_repair_pipeline`）在複製後全部通過。
+- 提交訊息：精準整合測試驗證 generated patch 會得到一行訊息、gold/hints 不進提示詞，模型失敗時補丁仍保留。真實 13B 模型只驗證直接生成；完整 UI 的 gemma4 → Code Llama 串接仍需實跑。
 
 **Not verified**（這台開發環境沒有組內的模型與資料）：
 
@@ -299,5 +334,6 @@ JSON、JSONL、CSV 都可以。每筆可以是：
 - 實際 Eclipse 歷史 CSV 的 `build_features.py` 執行時間；它會重算整份歷史的特徵，資料大時可以設定 `priority.history_max_rows` 只取最近的 N 筆，但這會縮小相關報告因子的比對範圍
 - paper_grade 的 bmo 負責人歷史資料
 - 真正的 `gemma4:12b` 在工作台裡產生的補丁，以及工作台錯誤定位和 36 題實驗凍結定位的差異（重跑結果可能和實驗紀錄不同）
+- 工作台內完整執行真實 `gemma4:12b` 補丁生成後，再接真實 `codellama:13b-instruct` 的端到端結果
 
 這幾項請在有產物的電腦上執行 `check`，並各跑一次範例。

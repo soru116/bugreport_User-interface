@@ -25,6 +25,7 @@ import hashlib
 import importlib.util
 import re
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -67,6 +68,9 @@ GROUND_TRUTH_FIELDS = frozenset({
     "FAIL_TO_PASS", "PASS_TO_PASS", "fixed_files", "fix_pull_request",
 })
 STRUCTURED_FALLBACK_FIELDS = ("expected_behavior", "actual_behavior", "error_message", "steps_to_reproduce")
+PUBLIC_CONTEXT_MAX_RANKED = 8
+PUBLIC_CONTEXT_MAX_HELPERS = 3
+PUBLIC_CONTEXT_MAX_CHARS = 2400
 
 _IMPORT_LOCK = threading.Lock()
 
@@ -95,6 +99,51 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if line.strip():
             rows.append(json.loads(line))
     return rows
+
+
+def _safe_cache_name(value: str) -> str:
+    normalized = value.replace("/", "__").replace("\\", "__").replace(":", "_")
+    return "".join(char if char.isalnum() or char in "._-" else "_" for char in normalized)
+
+
+def materialize_source_snapshot_git(source: Path, *, repo: str, revision: str, cache_dir: Path) -> tuple[Path, str]:
+    """Wrap an immutable source-only snapshot in a cached local Git repository.
+
+    Synthetic evaluation fixtures identify versions by a SHA-256 tree digest rather than a Git
+    commit.  The vendored patch generator intentionally requires Git for its clean-tree and
+    ``git apply`` gates, so copy that exact public snapshot into the workspace cache and create one
+    local baseline commit.  The fixture itself is never modified; callers keep reporting the public
+    SHA-256 revision while using the returned Git commit internally.
+    """
+
+    source = Path(source).resolve()
+    if not source.is_dir():
+        raise PatchUnavailable(f"找不到程式碼快照：{source}")
+    destination = (Path(cache_dir) / f"{_safe_cache_name(repo)}__source__{_safe_cache_name(revision)[:16]}").resolve()
+    marker_name = "source-snapshot-revision"
+    if destination.exists():
+        marker = destination / ".git" / marker_name
+        if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != revision:
+            raise PatchUnavailable(f"快取路徑已存在，但不是要求的程式碼版本：{destination}")
+        if _git(destination, "status", "--porcelain").decode().strip():
+            raise PatchUnavailable(f"程式碼快取已被修改，請刪除後重試：{destination}")
+        return destination, _git(destination, "rev-parse", "HEAD").decode().strip()
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination)
+    try:
+        _git(destination, "init", "-q")
+        _git(destination, "config", "core.autocrlf", "false")
+        _git(destination, "config", "core.eol", "lf")
+        _git(destination, "add", "-A")
+        _git(destination, "-c", "user.name=workspace", "-c", "user.email=workspace@example.invalid",
+             "commit", "-qm", f"source snapshot {revision}")
+        commit = _git(destination, "rev-parse", "HEAD").decode().strip()
+        (destination / ".git" / marker_name).write_text(revision + "\n", encoding="utf-8")
+        return destination, commit
+    except Exception:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise
 
 
 class TeamPatchGenerator:
@@ -222,6 +271,84 @@ class TeamPatchGenerator:
         return ticket
 
     @staticmethod
+    def public_code_context(localization: dict[str, Any], snapshot: Path) -> tuple[str, list[dict[str, Any]]]:
+        """Return bounded non-test helper implementations from the localized public source tree.
+
+        The first ranked symbol remains the rewrite target.  Later ranked functions can explain
+        contracts that are otherwise invisible to rewrite mode (for example, a shipping threshold
+        implemented in another file).  Tests, ground truth and reference patches are deliberately
+        excluded.
+        """
+
+        root = Path(snapshot).resolve()
+        ranked = list(localization.get("stage3_ranked_symbols") or [])
+        if not ranked:
+            return "", []
+        target = ranked[0]
+        target_identity = (
+            str(target.get("file_path") or "").replace("\\", "/"),
+            str(target.get("symbol_qualified_name") or target.get("symbol_name") or ""),
+        )
+        blocks: list[str] = []
+        audit: list[dict[str, Any]] = []
+        used_chars = 0
+        for row in ranked[1:PUBLIC_CONTEXT_MAX_RANKED]:
+            relative = str(row.get("file_path") or "").replace("\\", "/")
+            symbol = str(row.get("symbol_qualified_name") or row.get("symbol_name") or "")
+            parts = Path(relative).parts
+            filename = Path(relative).name.lower()
+            if not relative or not symbol or symbol == "<module>" or (relative, symbol) == target_identity:
+                continue
+            if any(part.lower() in {"test", "tests"} for part in parts) or filename.startswith("test_"):
+                continue
+            candidate = (root / Path(relative)).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                continue
+            if candidate.suffix != ".py" or not candidate.is_file():
+                continue
+            try:
+                source = candidate.read_text(encoding="utf-8")
+                tree = ast.parse(source)
+            except (OSError, UnicodeError, SyntaxError):
+                continue
+            leaf = symbol.rsplit(".", 1)[-1]
+            functions = [
+                node for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == leaf
+            ]
+            if not functions:
+                continue
+            start_hint = int(row.get("start_line") or 0)
+            functions.sort(key=lambda node: abs(int(node.lineno) - start_hint) if start_hint else int(node.lineno))
+            node = functions[0]
+            lines = source.splitlines(keepends=True)
+            start = min([int(node.lineno), *[int(item.lineno) for item in node.decorator_list]])
+            implementation = "".join(lines[start - 1:int(node.end_lineno)]).rstrip()
+            header = f"[{relative}::{symbol}]"
+            block = f"{header}\n{implementation}"
+            remaining = PUBLIC_CONTEXT_MAX_CHARS - used_chars
+            if remaining <= len(header) + 20:
+                break
+            if len(block) > remaining:
+                block = block[:remaining].rstrip() + "\n# ... context truncated"
+            blocks.append(block)
+            used_chars += len(block) + 2
+            audit.append({
+                "file_path": relative,
+                "symbol": symbol,
+                "start_line": start,
+                "end_line": int(node.end_lineno),
+                "sha256": _sha256(implementation.encode("utf-8")),
+            })
+            if len(audit) >= PUBLIC_CONTEXT_MAX_HELPERS or used_chars >= PUBLIC_CONTEXT_MAX_CHARS:
+                break
+        if not blocks:
+            return "", []
+        return "Related public code context (repository source; tests and reference patches excluded):\n\n" + "\n\n".join(blocks), audit
+
+    @staticmethod
     def align_line_endings(localization: dict[str, Any], snapshot: Path, commit: str) -> list[str]:
         """The localization hashes the files it read; the workspace's version snapshots come from
         ``git archive``, which may convert line endings (core.autocrlf on Windows).  The patch
@@ -257,13 +384,13 @@ class TeamPatchGenerator:
             temperature=float(settings.temperature),
         )
 
-    def _generator(self, modules: dict[str, Any], backend: Any) -> Any:
+    def _generator(self, modules: dict[str, Any], backend: Any, *, seed: int | None = None) -> Any:
         settings = self.config.patch
         frozen = {key: value for key, value in FROZEN_RUN_CONFIG.items() if key != "max_targets"}
         return modules["generator"].FIMPatchGenerator(
             backend,
             candidates=int(settings.candidates),
-            seed=int(settings.seed),
+            seed=int(settings.seed if seed is None else seed),
             research_mode=bool(settings.research_mode),
             **frozen,
         )
@@ -276,6 +403,8 @@ class TeamPatchGenerator:
         localization: dict[str, Any] | None,
         *,
         output_dir: Path,
+        seed_override: int | None = None,
+        retry_feedback: str = "",
     ) -> dict[str, Any]:
         started = time.perf_counter()
         settings = self.config.patch
@@ -286,17 +415,35 @@ class TeamPatchGenerator:
                 raise PatchUnavailable("這張 Ticket 還沒有錯誤定位結果，請先完成錯誤定位。")
             if project is None:
                 raise PatchUnavailable("這張 Ticket 沒有對應的專案程式碼（設定檔 projects）。")
-            source_repo = Path(project.repo_path)
-            if not (source_repo / ".git").exists():
-                raise PatchUnavailable(f"補丁生成需要 git checkout，但「{project.name}」的 repo_path 不是 git repository：{source_repo}")
             modules = self._load()
             location = json.loads(json.dumps(localization))  # private copy
             ticket = self.build_ticket(record, location)
+            if retry_feedback:
+                description = str(ticket.get("description") or "").rstrip()
+                ticket["description"] = description + "\n\nAutomatic retry feedback: " + retry_feedback.strip()
+            public_base_commit = ticket["base_commit"]
+            source_repo = Path(project.repo_path)
+            if not (source_repo / ".git").exists():
+                source_only = Path(project.snapshots_dir) / public_base_commit if project.snapshots_dir and public_base_commit else None
+                if source_only is None or not source_only.is_dir():
+                    raise PatchUnavailable(
+                        f"補丁生成需要 git checkout，但「{project.name}」的 repo_path 不是 git repository：{source_repo}"
+                    )
+                source_repo, internal_commit = materialize_source_snapshot_git(
+                    source_only,
+                    repo=ticket["repo"] or project.name,
+                    revision=public_base_commit,
+                    cache_dir=self.config.store_dir / "source_snapshot_git",
+                )
+                ticket["base_commit"] = internal_commit
+                location["base_commit"] = internal_commit
             if not ticket["base_commit"]:
                 ticket["base_commit"] = _git(source_repo, "rev-parse", "HEAD").decode().strip()
-            if project.snapshots_dir and ticket["base_commit"]:
-                # Localized in the ticket's own version snapshot. Results saved before the localization
-                # fix carry the workspace repository's HEAD here instead (the snapshot has no .git).
+            if project.snapshots_dir and public_base_commit and (Path(project.repo_path) / ".git").exists():
+                # Localized in the ticket's own version snapshot and patched from the project's git clone.
+                # Results saved before the localization fix carry the workspace repository's HEAD here
+                # instead (the snapshot has no .git).  When there is no clone, the snapshot wrapper above
+                # already set both to its internal commit.
                 location["base_commit"] = ticket["base_commit"]
             if not location.get("base_commit"):
                 location["base_commit"] = ticket["base_commit"]
@@ -317,6 +464,10 @@ class TeamPatchGenerator:
                 raise PatchUnavailable(f"無法建立 base_commit 的程式碼快照：{exc}") from exc
             commit = _git(Path(snapshot), "rev-parse", "HEAD").decode().strip()
             aligned = self.align_line_endings(location, Path(snapshot), commit)
+            public_context, public_context_audit = self.public_code_context(location, Path(snapshot))
+            if public_context:
+                description = str(ticket.get("description") or "").rstrip()
+                ticket["description"] = description + "\n\n" + public_context
 
             backend = self._backend(modules)
             try:
@@ -326,7 +477,9 @@ class TeamPatchGenerator:
                     f"無法使用模型 {settings.model}（{type(exc).__name__}: {exc}）。請確認 Ollama 正在執行，並已 ollama pull {settings.model}。"
                 ) from exc
 
-            pipeline = modules["pipeline"].RepairPipeline(self._generator(modules, backend))
+            pipeline = modules["pipeline"].RepairPipeline(
+                self._generator(modules, backend, seed=seed_override)
+            )
             try:
                 location, result = pipeline.run(ticket, str(snapshot), location)
             except ValueError as exc:
@@ -336,6 +489,10 @@ class TeamPatchGenerator:
             return stage_result(stage="patch", status="failed", module=MODULE, implementation=IMPLEMENTATION, error=str(exc), started=started)
 
         output = self._summarize(result, location, ticket, output_dir, model_info, aligned)
+        output["retry_feedback_applied"] = bool(retry_feedback)
+        output["public_code_context"] = public_context_audit
+        if public_base_commit:
+            output["base_commit"] = public_base_commit
         warnings = self._warnings(output)
         return stage_result(
             stage="patch",
@@ -398,7 +555,14 @@ class TeamPatchGenerator:
             "repo": ticket.get("repo"),
             "base_commit": ticket.get("base_commit"),
             "model": {key: model_info.get(key) for key in ("model", "digest", "num_ctx", "max_new_tokens", "temperature") if key in model_info},
-            "settings": {"candidates": settings.candidates, "seed": settings.seed, "temperature": settings.temperature},
+            "settings": {
+                "candidates": settings.candidates,
+                "seed": next(
+                    (item.get("seed") for item in (result.get("candidates") or []) if item.get("seed") is not None),
+                    settings.seed,
+                ),
+                "temperature": settings.temperature,
+            },
             "official": self.official_verdict(patch),
             "experiment": experiment,
             "line_endings_aligned": aligned,

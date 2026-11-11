@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-11-09T06:40:14+00:00",
+  "history_rows": 5559,
+  "history_with_assignee": 2176,
+  "history_duplicates": 149,
+  "held_out_issues_removed": 43,
+  "answers": [
+    {
+      "ticket_id": "astropy#11571",
+      "title": "Frame attributes in sky coordinates do not obey Numpy broadcasting rules",
+      "kind": "duplicate",
+      "duplicate_of": "astropy#8812",
+      "duplicate_of_title": "BUG: Frame attributes in sky coordinates do not obey Numpy broadcasting rules",
+      "duplicate_evidence": "pllim: \"duplicate of #8812\"",
+      "url": "https://github.com/astropy/astropy/issues/11571"
+    },
+    {
+      "ticket_id": "astropy#11104",
+      "title": "Cannot use negative distance in spherical representation despite error message",
+      "kind": "duplicate",
+      "duplicate_of": "astropy#8091",
+      "duplicate_of_title": "Constructing a SphericalRepresentation object with a negative distance is impossible",
+      "duplicate_evidence": "adrn: \"duplicate of #8091\"",
+      "url": "https://github.com/astropy/astropy/issues/11104"
+    },
+    {
+      "ticket_id": "astropy#9412",
+      "title": "Cutout2D does not work correctly with NDData objects",
+      "kind": "duplicate",
+      "duplicate_of": "astropy#9173",
+      "duplicate_of_title": "When an NDData is passed to Cutout2D, it should use the wcs",
+      "duplicate_evidence": "bsipocz: links issues/9173",
+      "url": "https://github.com/astropy/astropy/issues/9412"
+    },
+    {
+      "ticket_id": "astropy__astropy-6938",
+      "title": "Possible bug in io.fits related to D exponents",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#6921",
+      "fixed_by": "saimn",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/6938",
+      "fixed_files": [
+        "astropy/io/fits/fitsrec.py"
+      ],
+      "experiment_patch_sha256": "0d3510616350f0ceb81dc7d7959acb1cf466e7096b159e480db5200b3a4e73b8",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-c3-6938-20261108-145823"
+    },
+    {
+      "ticket_id": "astropy__astropy-7336",
+      "title": "units.quantity_input decorator fails for constructors with type hinted return value -> None",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#7335",
+      "fixed_by": "Cadair",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/7336",
+      "fixed_files": [
+        "astropy/units/decorators.py"
+      ],
+      "experiment_patch_sha256": "7efc3ee48a15a10038129c4c8af84355af6d54c2729b308a857d7699b7550262",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-c3-7336-20261108-145823"
+    },
+    {
+      "ticket_id": "astropy__astropy-7606",
+      "title": "Unit equality comparison with None raises TypeError for UnrecognizedUnit",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#7603",
+      "fixed_by": "mhvk",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/7606",
+      "fixed_files": [
+        "astropy/units/core.py"
+      ],
+      "experiment_patch_sha256": "5bf2266a37d99ea87c0c4764fc798b9c51023d3eb477cf52c89cbe3f889f3d9a",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-12b-7606-1"
+    },
+    {
+      "ticket_id": "astropy__astropy-7671",
+      "title": "minversion failures",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#7670",
+      "fixed_by": "larrybradley",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/7671",
+      "fixed_files": [
+        "astropy/utils/introspection.py"
+      ],
+      "experiment_patch_sha256": "389a467ea22b441976beec65776a8016d00dac5e3bd87892f0cffdb4542840a5",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-c3-7671-20261108-145823"
+    },
+    {
+      "ticket_id": "astropy__astropy-13572",
+      "title": "Problem in function nutation_matrix in earth_orientation.py",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#6583",
+      "fixed_by": "ayshih",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/13572",
+      "fixed_files": [
+        "astropy/coordinates/earth_orientation.py"
+      ],
+      "experiment_patch_sha256": "c213b48ab368c0df8d227c8776f32d34a2d66269921152e329c4ae1bbbfa759f",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-c3-13572-20261108-145123"
+    },
+    {
+      "ticket_id": "astropy__astropy-14995",
+      "title": "In v5.3, NDDataRef mask propagation fails when one of the operand does not have a mask",
+      "kind": "patch",
+      "duplicate_of": "",
+      "github_issue": "astropy#14978",
+      "fixed_by": "bmorris3",
+      "fix_pull_request": "https://github.com/astropy/astropy/pull/14995",
+      "fixed_files": [
+        "astropy/nddata/mixins/ndarithmetic.py"
+      ],
+      "experiment_patch_sha256": "f015aee8c76c7fd29dae02eca629e47ffe3f050a86a26e916a66d858b32d9214",
+      "official_resolved": true,
+      "official_run_id": "rewrite-gemma4-c3-14995-20261108-145145"
+    }
+  ]
+}

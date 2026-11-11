@@ -140,6 +140,38 @@ def _configure_verbatim_checkout(snapshot_path: Path) -> None:
         _run_git(["config", key, value], cwd=snapshot_path)
 
 
+def _inherit_promisor_remote(source_repo: Path, snapshot_path: Path) -> None:
+    """Let a shared snapshot lazily retrieve blobs omitted by a partial clone.
+
+    ``git clone --shared`` points the snapshot's ``origin`` at the local source
+    checkout.  When that source is a ``--filter=blob:none`` partial clone, the
+    alternates object store contains commits and trees but may not contain the
+    historical blobs needed by ``base_commit``.  The local origin is not marked
+    as a promisor, so checkout silently cannot materialize those files.  Copy
+    the source promisor's real URL and filter to the snapshot before checkout;
+    Git can then fetch only the missing blobs while retaining the cheap shared
+    clone for objects already present locally.
+    """
+
+    configured = _git_output(["config", "--get-regexp", r"^remote\..*\.promisor$"], cwd=source_repo, check=False)
+    for line in configured.splitlines():
+        key, _, value = line.partition(" ")
+        if value.strip().lower() != "true":
+            continue
+        remote = key.split(".", 2)[1]
+        url = _git_output(["remote", "get-url", remote], cwd=source_repo, check=False)
+        if not url:
+            continue
+        partial_filter = _git_output(
+            ["config", "--get", f"remote.{remote}.partialclonefilter"], cwd=source_repo, check=False
+        )
+        _run_git(["remote", "set-url", "origin", url], cwd=snapshot_path)
+        _run_git(["config", "remote.origin.promisor", "true"], cwd=snapshot_path)
+        if partial_filter:
+            _run_git(["config", "remote.origin.partialclonefilter", partial_filter], cwd=snapshot_path)
+        return
+
+
 def _verbatim_marker_path(snapshot_path: Path) -> Path:
     """Where a snapshot records that its working tree holds blob bytes.
 
@@ -236,6 +268,7 @@ def materialize_commit_snapshot(
 
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
     _run_git(["clone", "--shared", "--no-checkout", str(source_repo), str(snapshot_path)], cwd=snapshot_path.parent)
+    _inherit_promisor_remote(source_repo, snapshot_path)
     _configure_verbatim_checkout(snapshot_path)
     _run_git(["checkout", "--detach", resolved_commit], cwd=snapshot_path)
     _mark_verbatim(snapshot_path, resolved_commit)

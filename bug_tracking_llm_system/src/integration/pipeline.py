@@ -15,8 +15,9 @@ from typing import Any, Callable
 
 from integration.assignee import TeamAssigneeRecommender
 from integration.common import stage_result, utc_now
+from integration.commit_message import TeamCommitMessageGenerator
 from integration.config import IntegrationConfig
-from integration.duplicate import TeamDuplicateDetector
+from integration.duplicate import TeamDuplicateDetector, parse_time, row_time
 from integration.extraction import ToJsonExtractor, raw_ticket_id, raw_title
 from integration.localization import ProjectLocalizer
 from integration.patch import TeamPatchGenerator
@@ -51,6 +52,7 @@ class IntegratedPipeline:
         assignee_recommender: TeamAssigneeRecommender | None = None,
         localizer: ProjectLocalizer | None = None,
         patcher: TeamPatchGenerator | None = None,
+        commit_messenger: TeamCommitMessageGenerator | None = None,
     ) -> None:
         self.config = config
         self.store = store or TicketStore(config.store_dir)
@@ -62,6 +64,7 @@ class IntegratedPipeline:
         )
         self.localizer = localizer or ProjectLocalizer(config)
         self.patcher = patcher or TeamPatchGenerator(config)
+        self.commit_messenger = commit_messenger or TeamCommitMessageGenerator(config)
         # Heavy model calls are serialized so concurrent UI requests do not fight for CPU/RAM.
         # Conversion + duplicate detection (Code Llama, SBERT) and the later steps (PRI, assignee,
         # localization) use different models, so the two phases may run at the same time on different
@@ -244,6 +247,7 @@ class IntegratedPipeline:
             raise ValueError(f"Ticket 目前狀態為 {record['status']}，不能進行重複判定。")
 
         def mutate(rec: dict[str, Any]) -> None:
+            actor = "全自動模式" if by == "workspace:auto" else "工程師"
             rec["decisions"]["duplicate"] = {
                 "decision": decision,
                 "duplicate_of": duplicate_of or None,
@@ -253,10 +257,10 @@ class IntegratedPipeline:
             }
             if decision == "duplicate":
                 rec["status"] = "duplicate"
-                self._event(rec, f"工程師確認為重複，對應 {duplicate_of or '（未指定）'}，流程結束")
+                self._event(rec, f"{actor}確認為重複，對應 {duplicate_of or '（未指定）'}，流程結束")
             else:
                 rec["status"] = "ready_to_continue"
-                self._event(rec, "工程師確認非重複，繼續後續流程")
+                self._event(rec, f"{actor}確認非重複，繼續後續流程")
 
         updated = self.store.update(key, mutate)
         if decision == "duplicate":
@@ -339,6 +343,7 @@ class IntegratedPipeline:
                     rec["current_stage"] = ""
                     if rec["stages"].pop("patch", None):
                         self._event(rec, "錯誤定位結果變了，先前產生的補丁已清除")
+                    self._drop_patch_drafts(rec)
                     rec["attention"] = [item for item in rec.get("attention", []) if "定位" not in item]
                     if result["status"] in {"skipped", "failed"}:
                         rec["attention"].append("未完成錯誤定位")
@@ -363,21 +368,92 @@ class IntegratedPipeline:
             raise ValueError("這張 Ticket 沒有對應的專案程式碼。")
         return record
 
-    def generate_patch(self, key: str) -> dict[str, Any]:
+    def accept_localization_for_automatic(self, key: str) -> dict[str, Any]:
+        """Remove the human localization gate in automatic mode without hiding its evidence."""
+
+        def mutate(rec: dict[str, Any]) -> None:
+            stage = rec.get("stages", {}).get("localization") or {}
+            output = stage.get("output") or {}
+            if stage.get("status") != "done" or not output.get("should_manual_review"):
+                return
+            output["automation_gate_override"] = {
+                "applied": True,
+                "reason": "automatic_mode",
+                "original_should_manual_review": True,
+                "original_recommend_patch_generation": bool(output.get("recommend_patch_generation")),
+            }
+            output["should_manual_review"] = False
+            output["recommend_patch_generation"] = True
+            output.setdefault("summary", {})["message"] = (
+                "全自動模式已略過定位信心門檻；保留原始分數供後續審查。"
+            )
+            stage["warnings"] = [
+                warning for warning in stage.get("warnings", [])
+                if "定位信心未達自動化門檻" not in warning
+            ]
+            rec["attention"] = [item for item in rec.get("attention", []) if item != "定位結果需人工確認"]
+            self._event(rec, "全自動模式已略過錯誤定位的人工確認門檻")
+
+        return self.store.update(key, mutate)
+
+    def generate_patch(self, key: str, *, automatic: bool = False, automatic_retry: int = 0) -> dict[str, Any]:
         with self._patch_lock:
             record = self.patch_precheck(key)
             previous = {"status": record["status"], "current_stage": record.get("current_stage", "")}
+            patch_kwargs: dict[str, Any] = {}
+            if automatic_retry:
+                prior_output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
+                reasons = [str(item.get("reason") or "unknown") for item in prior_output.get("candidates") or []]
+                counts = {reason: reasons.count(reason) for reason in sorted(set(reasons))}
+                reason_summary = ", ".join(f"{reason} ({count})" for reason, count in counts.items()) or "unknown"
+                patch_kwargs = {
+                    "seed_override": int(self.config.patch.seed) + int(self.config.patch.candidates) * automatic_retry,
+                    "retry_feedback": (
+                        "The previous attempt produced no valid patch. Candidate rejection reasons: "
+                        f"{reason_summary}. Re-evaluate the selected function and its related helper calls. "
+                        "Do not repeat the original function unchanged; make only an evidence-based minimal change, "
+                        "or return NO_CHANGE if the public evidence is still insufficient."
+                    ),
+                }
 
             def running(rec: dict[str, Any]) -> None:
                 rec["status"], rec["current_stage"] = "running", "patch"
                 rec["stages"]["patch"] = {"stage": "patch", "status": "running", "started_at": utc_now()}
+                self._drop_patch_drafts(rec)
 
             self.store.update(key, running)
             try:
                 raw = json.loads(self.store.artifact_path(key, "bug_location_raw.json").read_text(encoding="utf-8"))
                 stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
                 output_dir = self.store.artifact_path(key, "patch_runs") / stamp
-                result = self.patcher.generate(record, self.config.project(record.get("project")), raw, output_dir=output_dir)
+                result = self.patcher.generate(
+                    record,
+                    self.config.project(record.get("project")),
+                    raw,
+                    output_dir=output_dir,
+                    **patch_kwargs,
+                )
+                output = result.get("output") or {}
+                if automatic and str(raw.get("confidence_level") or "").lower() != "high":
+                    result["warnings"] = [
+                        warning for warning in result.get("warnings", [])
+                        if not warning.startswith("錯誤定位信心為")
+                    ]
+                    result.setdefault("warnings", []).append(
+                        "全自動模式已略過錯誤定位信心門檻；生成結果仍須通過所有補丁安全檢查。"
+                    )
+                if automatic_retry:
+                    output["automatic_retry_count"] = automatic_retry
+                    output["automatic_retry_reason"] = "no_valid_candidate"
+                    output["automatic_retry_seed"] = patch_kwargs["seed_override"]
+                    result.setdefault("warnings", []).append(
+                        f"全自動模式第一次沒有有效補丁，已使用新 seeds 與 no-op 回饋自動重試 {automatic_retry} 次。"
+                    )
+                if result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
+                    commit = self._commit_message(record, str(output["patch"]), output.get("official"))
+                    output["commit_message"] = commit
+                    if commit["status"] == "failed":
+                        result.setdefault("warnings", []).append("補丁已生成，但提交訊息生成失敗：" + commit["error"])
             except Exception as exc:  # pragma: no cover - defensive; the patcher reports its own failures
                 result = stage_result(stage="patch", status="failed", module="補丁生成", implementation="", error=f"{type(exc).__name__}: {exc}",
                                       details={"traceback": traceback.format_exc()[-3000:]})
@@ -391,6 +467,74 @@ class IntegratedPipeline:
                 rec["attention"] = attention
 
             return self._set_stage(key, "patch", result, extra=finish)
+
+    def skip_patch(self, key: str, reason: str) -> dict[str, Any]:
+        """Automatic mode on a ticket that cannot be patched (no code, localization skipped...).
+        Only step 6 is marked skipped; the ticket keeps its status."""
+
+        result = stage_result(stage="patch", status="skipped", module="補丁生成", implementation="",
+                              warnings=[f"全自動模式略過補丁生成：{reason}"])
+        return self._set_stage(key, "patch", result)
+
+    # ------------------------------------------------------- commit messages
+    def _commit_message(self, record: dict[str, Any], patch: str, official: dict[str, Any] | None) -> dict[str, Any]:
+        try:
+            return self.commit_messenger.generate(record, patch, official=official)
+        except Exception as exc:  # commit drafting is optional; never discard a valid patch
+            return {"status": "failed", "commit_message": "", "model": self.config.commit_message.model,
+                    "generation_method": "code_llama_instruct_zero_shot", "error": f"{type(exc).__name__}: {exc}"}
+
+    @staticmethod
+    def _drop_patch_drafts(rec: dict[str, Any]) -> None:
+        """Drop drafts of the previous generated patch (records made before step 7 kept them here)."""
+        drafts = rec.get("commit_messages") or {}
+        for source in [name for name in drafts if name == "current" or name.startswith("candidate-")]:
+            drafts.pop(source, None)
+
+    def commit_message_patch(self, record: dict[str, Any], source: str) -> tuple[str, dict[str, Any] | None]:
+        if source == "current":
+            output = (record["stages"].get("patch") or {}).get("output") or {}
+            return (str(output.get("patch") or "") if output.get("patch_status") == "generated" else ""), output.get("official")
+        if source == "experiment":
+            experiment = self.patcher.experiment_record(str(record.get("ticket_id") or "")) or {}
+            return str(experiment.get("patch") or ""), experiment.get("official")
+        raise ValueError("不明的補丁來源")
+
+    def commit_message_precheck(self, key: str, source: str) -> None:
+        patch, _ = self.commit_message_patch(self.get(key), source)
+        if not patch:
+            raise ValueError("找不到這個補丁，無法產生提交訊息。")
+
+    def draft_commit_message(self, key: str, source: str) -> dict[str, Any]:
+        """Draft (again) without regenerating the patch: the current patch (step 7) or the 6/36 run's patch."""
+
+        with self._patch_lock:  # same GPU queue as patch generation
+            record = self.get(key)
+            patch, official = self.commit_message_patch(record, source)
+
+            def store(value: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+                def mutate(rec: dict[str, Any]) -> None:
+                    if source == "current":
+                        output = (rec["stages"].get("patch") or {}).get("output")
+                        if output is not None:
+                            output["commit_message"] = value
+                            rec["stages"]["patch"]["warnings"] = [w for w in rec["stages"]["patch"].get("warnings", []) if "提交訊息" not in w]
+                    else:
+                        rec.setdefault("commit_messages", {})[source] = value
+                return mutate
+
+            self.store.update(key, store({"status": "running", "started_at": utc_now()}))
+            result = self._commit_message(record, patch, official)
+
+            def finish(rec: dict[str, Any]) -> None:
+                store(result)(rec)
+                label = "補丁" if source == "current" else "36 題實驗的補丁"
+                if result["status"] == "generated":
+                    self._event(rec, f"提交訊息（{label}）：{result['commit_message']}")
+                else:
+                    self._event(rec, f"提交訊息（{label}）失敗：{result.get('error', '')}")
+
+            return self.store.update(key, finish)
 
     # ------------------------------------------------- duplicate review aids
     def find_history_ticket(self, ticket_id: str) -> dict[str, Any] | None:
@@ -425,11 +569,15 @@ class IntegratedPipeline:
         history = [row for row in self.store.history_rows() if project and str(row.get("project") or "") == project]
         return {"project": project, "tickets": len(tickets), "ticket_keys": [record["key"] for record in tickets], "history_rows": len(history)}
 
-    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True) -> dict[str, Any]:
+    def delete_project_data(self, project: str, *, tickets: bool = True, history: bool = True,
+                            keep: set[str] | None = None) -> dict[str, Any]:
+        """``keep``: tickets still running a step; the workspace deletes them when that step ends."""
+
         removed_tickets = []
+        keep = keep or set()
         if tickets:
             for record in self.store.list():
-                if str(record.get("project") or "") == project:
+                if str(record.get("project") or "") == project and record["key"] not in keep:
                     self.store.delete(record["key"])
                     removed_tickets.append(record["key"])
         removed_history = 0
@@ -474,7 +622,7 @@ class IntegratedPipeline:
         record = self.get(key)
         prediction = record["stages"].get("assignee", {}).get("output") or {}
         feedback_saved = ""
-        if prediction:
+        if prediction and decision != "automatic":
             try:
                 feedback = build_assignee_feedback_record(
                     ticket_json=record["structured_ticket"],
@@ -502,11 +650,92 @@ class IntegratedPipeline:
                 "feedback": feedback_saved,
             }
             rec["attention"] = [item for item in rec.get("attention", []) if "負責人" not in item]
-            self._event(rec, f"負責人確認為 {assignee}（{ {'accept': '採用建議', 'override': '改選其他人', 'manual': '人工指定'}.get(decision, decision) }）")
+            label = {
+                "accept": "採用建議",
+                "override": "改選其他人",
+                "manual": "人工指定",
+                "automatic": "全自動模式採用建議",
+            }.get(decision, decision)
+            self._event(rec, f"負責人確認為 {assignee}（{label}）")
 
         updated = self.store.update(key, mutate)
         self.store.upsert_history([_history_row(updated["structured_ticket"], updated)])
         return updated
+
+    def automatic_assignee_choice(self, key: str) -> dict[str, str]:
+        """Choose an auditable owner for automatic mode without leaving a human-confirmation gate.
+
+        Prefer the routing model.  If its deployment gate returns manual triage, use the owner of
+        the closest same-project historical ticket from duplicate retrieval, then progressively
+        fall back to same component/product and finally the project's most frequent owner.
+        """
+
+        record = self.get(key)
+        prediction = (record.get("stages", {}).get("assignee", {}).get("output") or {})
+        suggested = str(prediction.get("suggested_assignee") or "").strip()
+        if suggested:
+            return {"assignee": suggested, "source": "routing_model", "reason": "全自動模式採用分派模型建議"}
+
+        invalid = {"", "manual_triage", "unknown", "none", "unassigned"}
+        duplicate_candidates = (
+            record.get("stages", {}).get("duplicate", {}).get("output", {}).get("top_k_candidates") or []
+        )
+        for candidate in duplicate_candidates:
+            owner = str(candidate.get("assignee") or "").strip()
+            if owner.lower() not in invalid:
+                ticket_id = str(candidate.get("ticket_id") or "").strip()
+                return {
+                    "assignee": owner,
+                    "source": "same_domain_history",
+                    "reason": f"全自動模式採用最相近的同專案歷史 Ticket {ticket_id or '（無編號）'} 之負責人",
+                }
+
+        for owner_value in prediction.get("ranked_candidates") or []:
+            owner = str(owner_value or "").strip()
+            if owner.lower() not in invalid:
+                return {"assignee": owner, "source": "routing_candidate", "reason": "全自動模式採用分派模型最高順位候選"}
+
+        structured = record.get("structured_ticket") or {}
+        project = str(record.get("project") or "").strip()
+        query_time = parse_time(structured.get("created_at") or structured.get("creation_time"))
+
+        def known(value: Any) -> str:
+            text = str(value or "").strip().lower()
+            return "" if text in invalid or text == "n/a" else text
+
+        product = known(structured.get("product"))
+        component = known(structured.get("component"))
+        rows = []
+        for index, row in enumerate(self.store.history_rows()):
+            owner = str(row.get("assignee") or "").strip()
+            row_project = str(row.get("project") or "").strip()
+            if owner.lower() in invalid or row_project != project:
+                continue
+            created = row_time(row) if query_time else None
+            if created is not None and created >= query_time:
+                continue
+            row_product, row_component = known(row.get("product")), known(row.get("component"))
+            tier = 0
+            if component and row_component == component:
+                tier = 3
+            elif product and row_product == product:
+                tier = 2
+            rows.append((tier, index, owner))
+        if rows:
+            best_tier = max(item[0] for item in rows)
+            eligible = [item for item in rows if item[0] == best_tier]
+            counts: dict[str, tuple[int, int]] = {}
+            for _, index, owner in eligible:
+                count, last = counts.get(owner, (0, -1))
+                counts[owner] = (count + 1, max(last, index))
+            owner = max(counts, key=lambda item: counts[item])
+            label = "同 component" if best_tier == 3 else "同 product" if best_tier == 2 else "同專案"
+            return {
+                "assignee": owner,
+                "source": "project_history",
+                "reason": f"全自動模式依{label}歷史處理次數分派",
+            }
+        return {}
 
     # --------------------------------------------------------------- batch/CLI
     def predict_priority_batch(self, keys: list[str]) -> dict[str, dict[str, Any]]:

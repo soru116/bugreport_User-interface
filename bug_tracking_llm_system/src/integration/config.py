@@ -121,6 +121,16 @@ class PatchSettings:
 
 
 @dataclass(slots=True)
+class CommitMessageSettings:
+    """Single-line commit message generated from the selected patch."""
+
+    enabled: bool = True
+    ollama_url: str = "http://localhost:11434"
+    model: str = "codellama:13b-instruct"
+    timeout_seconds: int = 180
+
+
+@dataclass(slots=True)
 class IntegrationConfig:
     workspace_root: Path = field(default_factory=default_workspace_root)
     store_dir: Path = field(default_factory=lambda: MAIN_PROJECT_ROOT / "data" / "workspace")
@@ -131,6 +141,7 @@ class IntegrationConfig:
     assignee: dict[str, Any] = field(default_factory=dict)
     localization: LocalizationSettings = field(default_factory=LocalizationSettings)
     patch: PatchSettings = field(default_factory=PatchSettings)
+    commit_message: CommitMessageSettings = field(default_factory=CommitMessageSettings)
     projects: dict[str, ProjectSettings] = field(default_factory=dict)
     default_project: str = ""
     config_path: Path | None = None
@@ -206,6 +217,12 @@ class IntegrationConfig:
                 "model": self.patch.model,
                 "candidates": self.patch.candidates,
                 "research_mode": self.patch.research_mode,
+            },
+            "commit_message": {
+                "enabled": self.commit_message.enabled,
+                "ollama_url": self.commit_message.ollama_url,
+                "model": self.commit_message.model,
+                "timeout_seconds": self.commit_message.timeout_seconds,
             },
             "projects": {
                 name: {
@@ -305,6 +322,11 @@ def config_from_mapping(
         if not hasattr(config.patch, key):
             continue
         setattr(config.patch, key, as_path(value) if key in {"code_dir", "verdicts_path"} else value)
+
+    commit_message = data.get("commit_message") or {}
+    for key, value in commit_message.items():
+        if hasattr(config.commit_message, key):
+            setattr(config.commit_message, key, value)
 
     projects = data.get("projects") or {}
     if isinstance(projects, list):

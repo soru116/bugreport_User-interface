@@ -17,10 +17,11 @@ from typing import Any
 
 
 LIST_COLUMNS = {"steps_to_reproduce"}
-MAX_RECORDS = 5000
+MAX_RECORDS = 5000  # new tickets: each one is queued for processing
+MAX_HISTORY_RECORDS = 50000  # historical tickets are only stored
 
 
-def parse_import_payload(content: str, *, filename: str = "") -> list[dict[str, Any]]:
+def parse_import_payload(content: str, *, filename: str = "", limit: int = MAX_RECORDS) -> list[dict[str, Any]]:
     text = (content or "").lstrip("﻿").strip()
     if not text:
         return []
@@ -41,8 +42,9 @@ def parse_import_payload(content: str, *, filename: str = "") -> list[dict[str, 
     else:
         records = _parse_csv(text) if "," in text.splitlines()[0] else [{"text": text}]
     cleaned = [record for record in records if isinstance(record, dict) and any(str(v).strip() for v in record.values())]
-    if len(cleaned) > MAX_RECORDS:
-        raise ValueError(f"一次最多匯入 {MAX_RECORDS} 筆 Ticket。")
+    if len(cleaned) > limit:
+        what = "歷史 Ticket" if limit == MAX_HISTORY_RECORDS else "Ticket"
+        raise ValueError(f"一次最多匯入 {limit} 筆{what}（這個檔案有 {len(cleaned)} 筆），請分成幾個檔案匯入。")
     return cleaned
 
 

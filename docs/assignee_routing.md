@@ -8,6 +8,8 @@
 
 校準／open-set／roster gate、mapping fallback 和候選建議需分開解讀。`assigned` 或 `assigned_by_fallback` 是本地 routing 結果；沒有因此證明外部 tracker 已更新。MAIN orchestrator 收到 manual routing 後仍會繼續 FL／patch，而非等待人員完成分派。
 
+工作台的全自動模式不保留 assignee 人工關卡：先採模型的 `suggested_assignee`；模型 abstain 時，依序使用重複檢索中最相近的同專案歷史 Ticket owner、低信心 routing 候選、同 component／product 的歷史 owner，最後才用同專案最常處理者。所有歷史 fallback 都只使用比目前 Ticket 更早建立的紀錄。自動決定會記錄來源與理由，但不寫成 human feedback；半自動模式仍保留原有 manual triage 語意。
+
 ## 研究與部署子模組
 
 | 路由 | 實際內容 | 狀態 |

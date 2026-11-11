@@ -32,7 +32,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from integration.config import IntegrationConfig, load_integration_config  # noqa: E402
-from integration.importers import parse_import_payload  # noqa: E402
+from integration.importers import MAX_HISTORY_RECORDS, MAX_RECORDS, parse_import_payload  # noqa: E402
 from integration.pipeline import STAGE_LABELS, STAGES, IntegratedPipeline  # noqa: E402
 from integration.status import readiness_report  # noqa: E402
 
@@ -91,7 +91,7 @@ class WorkspaceApp:
     #     moment gets its priority from ONE PRI call, because build_features re-reads the whole history
     #     on each call and a batch costs about the same as a single ticket.
     #   * the patch worker runs patch generation (gemma4:12b on the GPU), only when an engineer asks.
-    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0, "patch": 240.0}
+    DEFAULT_SECONDS = {"review": 30.0, "priority_batch": 150.0, "after": 2.0, "localize": 20.0, "patch": 240.0, "commit": 20.0}
     BATCH_WAIT_SECONDS = 90.0  # how long a ready ticket may wait for others still in duplicate detection
 
     def _start_worker(self) -> None:
@@ -130,9 +130,9 @@ class WorkspaceApp:
         if lane == "review":
             jobs = [job for job in waiting if job["kind"] == "full"]
             return ("review", jobs[:1]) if jobs else None
-        if lane == "patch":
-            jobs = [job for job in waiting if job["kind"] == "patch"]
-            return ("patch", jobs[:1]) if jobs else None
+        if lane == "patch":  # patch generation and commit-message drafts share the GPU
+            jobs = [job for job in waiting if job["kind"] in {"patch", "commit"}]
+            return (jobs[0]["kind"], jobs[:1]) if jobs else None
         jobs = [job for job in waiting if job["kind"] in ("after", "localize")]
         if not jobs:
             return None
@@ -148,6 +148,53 @@ class WorkspaceApp:
         with self._cv:
             self._queue = [item for item in self._queue if item is not job]
             self._cv.notify_all()
+        if job.get("delete"):
+            try:
+                self.pipeline.delete_ticket(job["key"])
+            except KeyError:
+                pass
+        elif job.get("stop"):
+            self._mark_stopped(job["key"])
+
+    STOPPED_MESSAGE = "已手動停止。按「從頭重新執行」可以重新開始。"
+
+    def _mark_stopped(self, key: str) -> None:
+        """A ticket taken out of the queue half-way: show it as stopped instead of 'processing'."""
+
+        def mutate(rec: dict[str, Any]) -> None:
+            if rec.get("status") in {"running", "ready_to_continue"}:
+                rec["status"], rec["error"] = "failed", self.STOPPED_MESSAGE
+                rec.setdefault("events", []).append({"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "message": "手動停止處理"})
+
+        try:
+            self.pipeline.store.update(key, mutate)
+        except KeyError:
+            pass
+
+    def stop(self, key: str, *, delete: bool = False) -> str:
+        """Stop a ticket's processing.  A job still waiting is taken out of the queue at once
+        ("removed"); a job that is running finishes the step it is in (a model call cannot be cut
+        off) and then stops ("stopping").  With ``delete`` the ticket is deleted at that point."""
+
+        with self._cv:
+            job = next((item for item in self._queue if item["key"] == key), None)
+            if job is None:
+                return "idle"
+            if job["active"]:
+                job["stop"] = True
+                job["delete"] = bool(job.get("delete") or delete)
+                return "stopping"
+            self._queue = [item for item in self._queue if item is not job]
+            self._cv.notify_all()
+        if delete:
+            self.pipeline.delete_ticket(key)
+        else:
+            self._mark_stopped(key)
+        return "removed"
+
+    def stopping(self, key: str) -> bool:
+        with self._cv:
+            return any(item["key"] == key and item.get("stop") for item in self._queue)
 
     def _worker(self, lane: str) -> None:
         while True:
@@ -165,8 +212,15 @@ class WorkspaceApp:
                 if phase == "review":
                     job = batch[0]
                     record = pipeline.run_until_review(job["key"])
+                    if job.get("automatic") and record["status"] == "awaiting_duplicate_review":
+                        record = pipeline.decide_duplicate(
+                            job["key"],
+                            "not_duplicate",
+                            note="全自動模式：模糊候選不阻塞流程",
+                            by="workspace:auto",
+                        )
                     self._record("review", time.time() - job["started_at"])
-                    if record["status"] == "ready_to_continue":
+                    if record["status"] == "ready_to_continue" and not job.get("stop"):
                         with self._cv:  # hand over to the after worker, keeping its place in the queue
                             job.update(kind="after", active=False, phase="waiting", ready_at=time.time())
                             self._cv.notify_all()
@@ -182,17 +236,49 @@ class WorkspaceApp:
                     for job in batch:
                         with self._cv:
                             job.update(phase="after", started_at=time.time())
+                        if job.get("stop"):  # stopped while the batch priority ran
+                            self._finish(job)
+                            continue
                         try:
                             if pipeline.get(job["key"])["status"] == "ready_to_continue":
-                                pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
+                                record = pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
+                                if job.get("automatic"):
+                                    record = pipeline.accept_localization_for_automatic(job["key"])
+                                    choice = pipeline.automatic_assignee_choice(job["key"])
+                                    if choice:
+                                        record = pipeline.confirm_assignee(
+                                            job["key"],
+                                            choice["assignee"],
+                                            decision="automatic",
+                                            reviewer="workspace:auto",
+                                            note=choice["reason"],
+                                        )
                         except Exception:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
+                        if job.get("automatic") and not job.get("stop"):
+                            try:
+                                pipeline.patch_precheck(job["key"])
+                            except ValueError as exc:  # e.g. no code for this project: not a failure of the ticket
+                                pipeline.skip_patch(job["key"], str(exc))
+                            except Exception as exc:
+                                pipeline.skip_patch(job["key"], f"{type(exc).__name__}: {exc}")
+                            else:
+                                self._submit(job["key"], "patch", automatic=True)
                 elif phase == "patch":
                     job = batch[0]
-                    pipeline.generate_patch(job["key"])
+                    automatic = bool(job.get("automatic"))
+                    record = pipeline.generate_patch(job["key"], automatic=automatic)
+                    output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
+                    if automatic and not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
+                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1)
                     self._record("patch", time.time() - job["started_at"])
+                    self._finish(job)
+                elif phase == "commit":
+                    job = batch[0]
+                    pipeline.draft_commit_message(job["key"], job.get("source", "current"))
+                    self._record("commit", time.time() - job["started_at"])
                     self._finish(job)
                 else:
                     job = batch[0]
@@ -210,6 +296,16 @@ class WorkspaceApp:
         resumed = []
         for record in self.pipeline.store.list():
             key, status = record["key"], record.get("status")
+            def running_drafts(rec: dict[str, Any]) -> list[dict[str, Any]]:
+                drafts = list((rec.get("commit_messages") or {}).values())
+                drafts.append(((rec.get("stages") or {}).get("patch") or {}).get("output", {}).get("commit_message") or {})
+                return [item for item in drafts if item.get("status") == "running"]
+
+            if running_drafts(record):
+                def stop_drafts(rec: dict[str, Any]) -> None:
+                    for item in running_drafts(rec):
+                        item.update(status="failed", error="伺服器在產生提交訊息時停止，請重新產生。")
+                self.pipeline.store.update(key, stop_drafts)
             decision = (record.get("decisions") or {}).get("duplicate") or {}
             if status == "running" and record.get("current_stage") == "patch":
                 def stop_patch(rec: dict[str, Any]) -> None:  # the earlier steps were already finished
@@ -247,13 +343,14 @@ class WorkspaceApp:
                 return max(5.0, avg.get(item["phase"], 10.0) - (now - item["started_at"]))
 
             if job["active"]:
-                return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1), "eta_seconds": _coarse(remaining(job))}
-            if job["kind"] == "patch":
-                running = [item for item in self._queue if item["active"] and item["phase"] == "patch"]
-                waiting = [item for item in self._queue if item["kind"] == "patch" and not item["active"]]
+                return {"state": "running", "phase": job["phase"], "ahead": 0, "batch_size": job.get("batch_size", 1),
+                        "eta_seconds": _coarse(remaining(job)), "stopping": bool(job.get("stop")), "deleting": bool(job.get("delete"))}
+            if job["kind"] in {"patch", "commit"}:
+                running = [item for item in self._queue if item["active"] and item["phase"] in {"patch", "commit"}]
+                waiting = [item for item in self._queue if item["kind"] in {"patch", "commit"} and not item["active"]]
                 index = waiting.index(job)
-                eta = sum(remaining(item) for item in running) + (index + 1) * avg["patch"]
-                return {"state": "waiting", "phase": "patch", "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
+                eta = sum(remaining(item) for item in running) + sum(avg[item["kind"]] for item in waiting[: index + 1])
+                return {"state": "waiting", "phase": job["kind"], "ahead": len(running) + index, "eta_seconds": _coarse(eta)}
             if job["kind"] == "full":
                 running = [item for item in self._queue if item["active"] and item["phase"] == "review"]
                 waiting = [item for item in self._queue if item["kind"] == "full" and not item["active"]]
@@ -303,9 +400,15 @@ class WorkspaceApp:
     def delete_project(self, name: str, *, tickets: bool, history: bool, config: bool) -> dict[str, Any]:
         project = "" if name == self.NO_PROJECT else name
         usage = self.project_usage(name)
-        if usage["busy"]:
-            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。")
-        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history)
+        deferred, cancelled = [], []
+        if tickets:  # waiting tickets leave the queue now; running ones are deleted when their step ends
+            for key in usage["busy"]:
+                (deferred if self.stop(key, delete=True) == "stopping" else cancelled).append(key)
+        elif usage["busy"] and history:
+            raise ValueError(f"這個專案還有 {len(usage['busy'])} 張 Ticket 正在處理；只刪比對歷史時請先停止它們。")
+        result = self.pipeline.delete_project_data(project, tickets=tickets, history=history, keep=set(deferred))
+        result["tickets_removed"] = cancelled + result["tickets_removed"]
+        result["deferred"] = deferred
         result["config_removed"] = self.remove_project_from_config(project) if config and project else False
         return result
 
@@ -328,9 +431,9 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return True
 
-    def start(self, key: str) -> bool:
+    def start(self, key: str, *, automatic: bool = False) -> bool:
         self.maybe_reload_config()
-        return self._submit(key, "full")
+        return self._submit(key, "full", automatic=automatic)
 
     def continue_after_duplicate(self, key: str) -> bool:
         self.maybe_reload_config()
@@ -371,6 +474,11 @@ class WorkspaceApp:
             return {"base_commit": base_commit, "files": patched_code(project, base_commit, str(patch))}
         except PatchUnavailable as exc:
             raise ValueError(str(exc)) from exc
+
+    def draft_commit_message(self, key: str, source: str) -> bool:
+        self.maybe_reload_config()
+        self.pipeline.commit_message_precheck(key, source)
+        return self._submit(key, "commit", source=source)
 
     def build_index(self, project_name: str) -> dict[str, Any]:
         project = self.config.project(project_name)
@@ -572,7 +680,8 @@ class Handler(SimpleHTTPRequestHandler):
             body = self._body()
             app = self.app
             if parts == ["api", "import"]:
-                records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""))
+                records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""),
+                                               limit=MAX_HISTORY_RECORDS if body.get("as_history") else MAX_RECORDS)
                 if body.get("ticket"):
                     records = [body["ticket"]]
                 if not records:
@@ -583,33 +692,44 @@ class Handler(SimpleHTTPRequestHandler):
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):
                     for record in created:
-                        app.start(record["key"])
+                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic")
                 return self._json({"created": [record["key"] for record in created]})
             if parts == ["api", "delete-tickets"]:
-                deleted, skipped = [], []
+                deleted, deferred, skipped = [], [], []
                 for key in [str(item) for item in body.get("keys") or []]:
-                    if app.busy(key):
-                        skipped.append(key)
-                        continue
                     try:
-                        app.pipeline.delete_ticket(key)
+                        state = app.stop(key, delete=True)
+                        if state == "stopping":
+                            deferred.append(key)  # deleted once the running step ends
+                            continue
+                        if state == "idle":
+                            app.pipeline.delete_ticket(key)
                         deleted.append(key)
                     except KeyError:
                         skipped.append(key)
-                return self._json({"deleted": deleted, "skipped": skipped})
+                return self._json({"deleted": deleted, "deferred": deferred, "skipped": skipped})
+            if parts == ["api", "stop-tickets"]:
+                result = {"removed": [], "stopping": []}
+                for key in [str(item) for item in body.get("keys") or []]:
+                    state = app.stop(key)
+                    if state in result:
+                        result[state].append(key)
+                return self._json(result)
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "delete":
                 return self._json(app.delete_project(
                     parts[2], tickets=bool(body.get("tickets", True)), history=bool(body.get("history", False)), config=bool(body.get("config", False))
                 ))
             if len(parts) == 4 and parts[:2] == ["api", "tickets"]:
                 key, action = parts[2], parts[3]
+                if action == "stop":
+                    return self._json({"state": app.stop(key)})
                 if action == "pin":  # display-only, allowed while the ticket is being processed
                     record = app.pipeline.set_pinned(key, bool(body.get("pinned", True)))
                     return self._json({"pinned": record["pinned"]})
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":
-                    app.start(key)
+                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic")
                     return self._json({"started": True})
                 if action == "duplicate":
                     record = app.pipeline.decide_duplicate(
@@ -641,6 +761,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if action == "patch":
                     app.generate_patch(key)
                     return self._json({"started": True})
+                if action == "commit-message":
+                    app.draft_commit_message(key, str(body.get("source") or "current"))
+                    return self._json({"started": True})
                 if action == "localize":
                     project = body.get("project")
                     app.relocalize(key, str(project) if project else None)
@@ -660,9 +783,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parts = self._parts()
         if len(parts) == 3 and parts[:2] == ["api", "tickets"]:
-            if self.app.busy(parts[2]):
-                return self._error("這張 Ticket 正在處理中，請稍候。", 409)
             try:
+                state = self.app.stop(parts[2], delete=True)
+                if state == "stopping":
+                    return self._json({"deleted": "", "deferred": parts[2]})
+                if state == "removed":
+                    return self._json({"deleted": parts[2], "history_rows_removed": 0})
                 return self._json(self.app.pipeline.delete_ticket(parts[2]))
             except KeyError:
                 return self._error("找不到這張 Ticket。", 404)

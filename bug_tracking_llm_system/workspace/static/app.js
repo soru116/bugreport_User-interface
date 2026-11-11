@@ -7,9 +7,11 @@ const STAGES = [
   ["assignee", "分派負責人"],
   ["localization", "錯誤定位"],
   ["patch", "補丁生成"],
+  ["commit", "提交訊息"],
 ];
-/* Patch generation only runs when an engineer asks for it, so progress counts the first five steps. */
-const MAIN_STAGES = STAGES.filter(([key]) => key !== "patch");
+/* Patch/commit only run when an engineer asks, so progress counts the first five automatic steps. */
+const MAIN_STAGES = STAGES.filter(([key]) => !["patch", "commit"].includes(key));
+const STATUS_STAGES = STAGES.filter(([key]) => key !== "commit");
 const STATUS_TEXT = {
   pending: "尚未執行",
   running: "執行中…",
@@ -170,7 +172,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi" };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -202,6 +204,44 @@ function post(path, body = {}) {
   return api(path, { method: "POST", body: JSON.stringify(body) });
 }
 
+/* ---------------------------------------------------------- operation mode */
+const MODE_KEY = "ticket-workspace-automation-mode";
+
+function applyAutomationMode(mode) {
+  state.automationMode = mode === "automatic" ? "automatic" : "semi";
+  try { localStorage.setItem(MODE_KEY, state.automationMode); } catch { /* private browsing */ }
+  const button = $("#settingsButton");
+  if (button) button.dataset.mode = state.automationMode;
+  const label = $("#modeButtonText");
+  if (label) label.textContent = state.automationMode === "automatic" ? "全自動" : "半自動";
+}
+
+function openSettings() {
+  const selected = document.querySelector(`input[name="automationMode"][value="${state.automationMode}"]`);
+  if (selected) selected.checked = true;
+  renderModeNotice();
+  $("#settingsDialog").showModal();
+}
+
+function renderModeNotice() {
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  const mode = selected ? selected.value : state.automationMode;
+  const notice = $("#modeNotice");
+  notice.dataset.mode = mode;
+  notice.textContent = mode === "automatic"
+    ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。模型或程式失敗時仍會停止。"
+    : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
+}
+
+function saveSettings(event) {
+  if (event.submitter && event.submitter.value === "cancel") return;
+  event.preventDefault();
+  const selected = document.querySelector('input[name="automationMode"]:checked');
+  applyAutomationMode(selected ? selected.value : "semi");
+  $("#settingsDialog").close();
+  toast(`已切換為${state.automationMode === "automatic" ? "全自動" : "半自動"}模式`);
+}
+
 /* ------------------------------------------------------------------ inbox */
 function bucket(t) {
   if (t.busy || t.status === "running" || t.status === "ready_to_continue") return "running";
@@ -222,17 +262,21 @@ const QUEUE_PHASE = {
   after: "分派負責人與錯誤定位",
   localize: "錯誤定位",
   patch: "產生補丁",
+  commit: "產生提交訊息",
 };
 function queueText(q, { short = false } = {}) {
   if (!q) return "";
+  if (q.state === "running" && q.stopping) {
+    return short ? (q.deleting ? "這一步結束後刪除" : "這一步結束後停止") : `正在執行目前這一步，模型呼叫無法中途打斷；這一步結束後會${q.deleting ? "刪除這張 Ticket" : "停止"}（${fmtEta(q.eta_seconds)}）。`;
+  }
   if (q.state === "running") {
-    const what = q.phase === "priority_batch" && q.batch_size > 1 ? `優先級判定（${q.batch_size} 張一起算）` : QUEUE_PHASE[q.phase] || "處理";
+    const what = QUEUE_PHASE[q.phase] || "處理";
     return short ? `${what}，${fmtEta(q.eta_seconds)}` : `正在執行「${what}」，預計還要${fmtEta(q.eta_seconds)}，完成後會自動更新。`;
   }
   const next = QUEUE_PHASE[q.phase] || "處理";
   return short
     ? `前面還有 ${q.ahead} 張，${fmtEta(q.eta_seconds)}`
-    : `排隊中：前面還有 ${q.ahead} 張，預計${fmtEta(q.eta_seconds)}後完成「${next}」。${q.phase === "priority_batch" && q.batch_size > 1 ? `等待中的 ${q.batch_size} 張會一起計算優先級。` : ""}`;
+    : `排隊中：前面還有 ${q.ahead} 張，預計${fmtEta(q.eta_seconds)}後完成「${next}」。`;
 }
 
 /* Search: every word must appear somewhere in the ticket's id, title, project, component, assignee, ... */
@@ -429,8 +473,7 @@ async function loadTickets() {
   if (pill) {
     const running = (q.running || []).length;
     pill.hidden = !running && !q.waiting;
-    const batch = q.priority_batch || 0;
-    pill.innerHTML = `<i></i>${running ? `處理中 ${running} 張${batch > 1 ? `（${batch} 張一起算優先級）` : ""}` : ""}${q.waiting ? `${running ? "，" : ""}排隊 ${q.waiting} 張` : ""}`;
+    pill.innerHTML = `<i></i>${running ? `處理中 ${running} 張` : ""}${q.waiting ? `${running ? "，" : ""}排隊 ${q.waiting} 張` : ""}`;
   }
   renderInbox();
   if (state.selected && !state.tickets.some((t) => t.key === state.selected)) {
@@ -505,19 +548,39 @@ function renderPickBar() {
   $("#pickCount").textContent = state.picked.size;
   $("[data-pick-delete]").disabled = state.picked.size === 0;
   $("[data-pick-rerun]").disabled = state.picked.size === 0;
+  $("[data-pick-stop]").disabled = state.picked.size === 0;
 }
 
 async function rerunPicked() {
   const keys = [...state.picked];
   if (!keys.length) return;
-  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n每張都會重新跑五個步驟，原本的處理結果會被新的結果取代。`)) return;
+  const automatic = state.automationMode === "automatic";
+  const scope = automatic
+    ? "每張會執行完整七個階段，包含補丁與提交訊息；補丁會依序使用 GPU，數量多時需要較長時間。"
+    : "每張會重新跑前五個步驟，並在人工確認點停下來。";
+  if (!confirm(`把選取的 ${keys.length} 張 Ticket 從頭重新執行？\n\n${scope}\n原本的處理結果會被新的結果取代。`)) return;
   let started = 0, skipped = 0;
   for (const key of keys) {
-    try { await post(`/api/tickets/${encodeURIComponent(key)}/run`); started += 1; } catch { skipped += 1; }
+    try {
+      await post(`/api/tickets/${encodeURIComponent(key)}/run`, { automation_mode: state.automationMode });
+      started += 1;
+    } catch { skipped += 1; }
   }
-  toast(`已開始重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
+  toast(`已開始${automatic ? "全自動" : "半自動"}重新執行 ${started} 張${skipped ? `；${skipped} 張正在處理，略過` : ""}`);
   setSelecting(false);
   await refresh();
+}
+
+async function stopPicked() {
+  const keys = [...state.picked];
+  if (!keys.length) return;
+  try {
+    const result = await post("/api/stop-tickets", { keys });
+    const parts = [result.removed.length ? `已取消 ${result.removed.length} 張` : "", result.stopping.length ? `${result.stopping.length} 張會在目前這一步結束後停止` : ""].filter(Boolean);
+    toast(parts.join("；") || "選取的 Ticket 都沒有在處理");
+    setSelecting(false);
+    await refresh();
+  } catch (err) { toast(err.message); }
 }
 
 async function deletePicked() {
@@ -528,7 +591,7 @@ async function deletePicked() {
   if (!confirm(`刪除 ${preview}？\n\n這些 Ticket 的處理結果會一起刪除，無法復原。`)) return;
   try {
     const result = await post("/api/delete-tickets", { keys });
-    toast(`已刪除 ${result.deleted.length} 張${result.skipped.length ? `；${result.skipped.length} 張正在處理，沒有刪除` : ""}`);
+    toast(`已刪除 ${result.deleted.length} 張${result.deferred.length ? `；${result.deferred.length} 張正在執行，這一步結束後刪除` : ""}${result.skipped.length ? `；${result.skipped.length} 張找不到` : ""}`);
     setSelecting(false);
     await refresh();
   } catch (err) { toast(err.message); }
@@ -547,9 +610,9 @@ async function openDeleteProject() {
     ${option("tickets", usage.tickets > 0, usage.tickets === 0, `刪除這個專案的 <b>${usage.tickets}</b> 張 Ticket（含處理結果）`)}
     ${name === NO_PROJECT ? "" : option("history", usage.history_rows > 0, usage.history_rows === 0, `刪除這個專案的 <b>${usage.history_rows}</b> 筆比對歷史（重複偵測與負責人推薦用的資料）`)}
     ${usage.configured ? option("config", true, false, `從設定檔移除這個專案（程式碼與版本快照不會刪除；設定檔會先備份成 <code>.bak</code>）`) : ""}
-    ${usage.busy.length ? `<p class="form-error">有 ${usage.busy.length} 張 Ticket 正在處理或排隊，請等它們處理完再刪除。</p>` : ""}
+    ${usage.busy.length ? `<p class="hint">有 ${usage.busy.length} 張 Ticket 正在處理或排隊：排隊中的會直接取消並刪除，正在執行的會在目前這一步結束後刪除。</p>` : ""}
     ${!usage.configured && name !== NO_PROJECT ? `<p class="hint">這個專案不在設定檔裡；Ticket 和比對歷史都刪除後，資料夾就會消失。</p>` : ""}`;
-  $("#deleteProjectConfirm").disabled = usage.busy.length > 0;
+  $("#deleteProjectConfirm").disabled = false;
   $("#deleteProjectDialog").showModal();
 }
 
@@ -567,6 +630,7 @@ async function confirmDeleteProject() {
       result.tickets_removed.length ? `${result.tickets_removed.length} 張 Ticket` : "",
       result.history_rows_removed ? `${result.history_rows_removed} 筆比對歷史` : "",
     ].filter(Boolean);
+    if ((result.deferred || []).length) parts.push(`另外 ${result.deferred.length} 張正在執行，這一步結束後刪除`);
     const removedConfig = result.config_removed ? `已從設定檔移除「${projectName(name)}」` : "";
     toast([parts.length ? `已刪除 ${parts.join("、")}` : "", removedConfig].filter(Boolean).join("，") || "沒有需要刪除的內容");
     goHome();
@@ -641,12 +705,18 @@ function stageStatus(record, key) {
   return stage.status || "pending";
 }
 
+function flowStageState(r, key) {
+  if (key === "patch") return patchTabState(r);
+  if (key === "commit") return commitTabState(r);
+  return stageStatus(r, key);
+}
+
 /* The tab that needs attention: the open gate, the running stage, or the last finished stage. */
 function suggestedTab(r) {
   if (r.status === "awaiting_duplicate_review" || r.status === "duplicate") return "duplicate";
   if ((r.busy || r.status === "running" || r.status === "failed") && r.current_stage) return r.current_stage;
   if (r.status === "new") return "extraction";
-  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "running"].includes(stageStatus(r, k)));
+  const finished = STAGES.map(([k]) => k).filter((k) => !["pending", "ready", "running"].includes(flowStageState(r, k)));
   return finished.length ? finished[finished.length - 1] : "extraction";
 }
 
@@ -661,6 +731,7 @@ function selectTab(tab, { pinned = true } = {}) {
 
 function renderDetail() {
   PATCH_TEXTS.clear();
+  COMMIT_TEXTS.clear();
   const body = $("#detailBody");
   const r = state.detail;
   if (!state.selected || !r) { body.innerHTML = ""; return; }
@@ -669,20 +740,24 @@ function renderDetail() {
   const tab = state.tab || "extraction";
   const doneCount = MAIN_STAGES.filter(([key]) => ["done", "fallback", "skipped"].includes(stageStatus(r, key))).length;
   const tabs = STAGES.map(([key, name]) => {
-    const s = key === "patch" ? patchTabState(r) : stageStatus(r, key);
+    const s = flowStageState(r, key);
     const gate = key === "duplicate" && awaiting ? ' data-gate="open"' : "";
     const selected = key === tab;
-    return `<li data-s="${s}"${gate}${key === "patch" ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
-      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(key === "patch" ? PATCH_TAB_TEXT[s] || STATUS_TEXT[s] || s : STATUS_TEXT[s] || s)}</span></button></li>`;
+    const text = key === "patch" ? PATCH_TAB_TEXT[s] : key === "commit" ? COMMIT_TAB_TEXT[s] : STATUS_TEXT[s];
+    return `<li data-s="${s}"${gate}${["patch", "commit"].includes(key) ? " data-optional" : ""}><button type="button" role="tab" id="tab-${key}" aria-controls="tabPanel" aria-selected="${selected}" class="${selected ? "is-active" : ""}" data-tab="${key}">
+      <span class="node"></span><span class="label">${name}</span><span class="state">${esc(text || s)}</span></button></li>`;
   }).join("");
   const logSelected = tab === "log";
   const projectOptions = state.projects.map((p) => `<option value="${esc(p.project)}" ${p.project === r.project ? "selected" : ""}>${esc(p.project)}</option>`).join("");
 
   let hint = "";
   if (awaiting && tab !== "duplicate") hint = `<div class="pin-hint pin-gate"><span>重複偵測正在等你確認，確認後才會繼續後面的步驟。</span><button class="btn btn-gate btn-small" data-tab="duplicate">前往確認</button></div>`;
-  else if (r.status === "failed") hint = `<div class="pin-hint pin-failed"><span>流程在「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", r.current_stage])[1])}」停止：${esc(r.error)}</span></div>`;
+  else if (r.status === "failed") {
+    const where = (STAGES.find((x) => x[0] === r.current_stage) || ["", r.current_stage])[1];
+    hint = `<div class="pin-hint pin-failed"><span>${where ? `流程在「${esc(where)}」停止` : "流程已停止"}：${esc(r.error)}</span></div>`;
+  }
   else if (r.status === "duplicate") hint = `<div class="pin-hint pin-info"><span>已判定為 <b class="mono">${esc((r.decisions.duplicate || {}).duplicate_of || "")}</b> 的重複，流程結束。</span></div>`;
-  else if (r.queue) hint = `<div class="pin-hint pin-info"><span>${esc(queueText(r.queue))}</span></div>`;
+  else if (r.queue) hint = `<div class="pin-hint pin-info"><span>${esc(queueText(r.queue))}</span>${r.queue.stopping ? "" : `<button class="btn btn-quiet btn-small" data-action="stop">${r.queue.state === "running" ? "停止" : "取消排隊"}</button>`}</div>`;
   else if (r.busy || r.status === "running") hint = `<div class="pin-hint pin-info"><span>正在執行「${esc((STAGES.find((x) => x[0] === r.current_stage) || ["", "處理"])[1])}」，完成後會自動更新。</span></div>`;
 
   let panel;
@@ -727,7 +802,7 @@ function renderDetail() {
               <p>匯入 <b>${esc(fmtTime(r.created_at))}</b></p>
               <a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/ticket.json">下載完整結果 JSON</a>
               <button class="btn btn-quiet btn-small" data-action="rerun" ${r.busy ? "disabled" : ""}>${r.status === "new" ? "開始處理" : "從頭重新執行"}</button>
-              <button class="btn btn-quiet btn-small" data-action="delete" ${r.busy ? "disabled" : ""}>刪除這張 Ticket</button>
+              <button class="btn btn-quiet btn-small" data-action="delete">刪除這張 Ticket</button>
             </div>
           </details>
         </div>
@@ -765,6 +840,7 @@ function stageFrame(r, key, name, n, inner) {
 
 function renderStage(r, key, name, n, projectOptions) {
   if (key === "patch") return renderPatchStage(r, n);
+  if (key === "commit") return renderCommitStage(r, n);
   const renderers = {
     extraction: (o, st) => renderExtraction(r, o, st),
     duplicate: (o) => renderDuplicate(r, o),
@@ -1069,6 +1145,12 @@ function openFactorHelp(target) {
   }
 }
 
+function historyNote(r) {
+  const d = ((r.stages || {}).assignee || {}).details || {};
+  if (!d.history_rows) return "";
+  return `<p class="hint" style="margin-bottom:10px">參考了 ${d.history_rows} 筆歷史紀錄${d.later_rows_skipped ? `（比這張晚建立的 ${d.later_rows_skipped} 筆不使用）` : ""}。</p>`;
+}
+
 function renderAssignee(r, o) {
   const details = o.candidate_details || [];
   const confirmed = (r.decisions || {}).assignee;
@@ -1084,6 +1166,7 @@ function renderAssignee(r, o) {
   const routing = { assigned: "已依模型分派", assigned_by_fallback: "以 fallback 規則分派", needs_manual_triage: "建議人工分派" }[o.routing_status] || o.routing_status || "";
   return `<p style="margin-bottom:10px">${esc(routing)}${o.suggested_assignee ? `：建議 <b>${esc(o.suggested_assignee)}</b>` : ""}${o.confidence != null ? `（信心 ${num(o.confidence, 2)}）` : ""}</p>
     ${o.reason ? `<p class="hint" style="margin-bottom:10px">${esc(o.reason)}</p>` : ""}
+    ${historyNote(r)}
     ${rows ? `<ol class="assignee-list">${rows}</ol>` : "<p class=\"hint\">沒有可推薦的候選人。</p>"}
     ${canConfirm ? `<div class="manual-assign"><input id="manualAssignee" placeholder="或輸入其他負責人的 email／帳號" aria-label="指定負責人"><button class="btn btn-quiet btn-small" data-action="assign-manual">指定這位負責人</button></div>` : ""}
     ${confirmed ? `<p class="confirmed-line">已確認負責人：<b>${esc(confirmed.assignee)}</b>（${esc(fmtTime(confirmed.at))}）</p>` : ""}`;
@@ -1136,7 +1219,8 @@ function renderLocalization(r, o, projectOptions) {
 }
 
 /* ------------------------------------------------------------------ patch */
-const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const COMMIT_TAB_TEXT = { pending: "等待補丁", running: "產生中…", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
   rewrite_no_change: "模型回傳原本的函式，沒有修改",
@@ -1157,6 +1241,30 @@ function patchTabState(r) {
   return o.patch_status === "generated" ? "generated" : "none";
 }
 
+/* The current patch's commit message: step 7 data, or a draft made by the earlier version (ui-card-wall). */
+function currentCommit(r) {
+  const own = (((r.stages || {}).patch || {}).output || {}).commit_message;
+  if (own) return own;
+  const legacy = (r.commit_messages || {}).current;
+  if (!legacy) return {};
+  return legacy.status === "done" ? { ...legacy, status: "generated" } : legacy;
+}
+
+function commitTabState(r) {
+  const patchState = patchTabState(r);
+  if (!["generated", "resolved"].includes(patchState)) {
+    if (patchState === "none") return "none";
+    if (patchState === "skipped") return "skipped";
+    return "pending";
+  }
+  const commit = currentCommit(r);
+  if (commit.status === "running" || (r.queue && r.queue.phase === "commit")) return "running";
+  if (commit.status === "generated" && commit.commit_message) return "generated";
+  if (commit.status === "failed") return "failed";
+  if (commit.status === "skipped") return "skipped";
+  return "pending";
+}
+
 function patchReason(reason) {
   if (!reason) return "";
   const [code, ...rest] = String(reason).split(":");
@@ -1166,6 +1274,59 @@ function patchReason(reason) {
 
 /* Patch texts shown on the page, so the copy/download buttons get the exact bytes (not the HTML). */
 const PATCH_TEXTS = new Map();
+const COMMIT_TEXTS = new Map();
+
+function commitEvidenceNote(commit) {
+  const evidence = commit.test_evidence || {};
+  if (evidence.official_swebench_harness === "resolved") return "這個補丁和官方測試判定修好的補丁完全相同，所以附上驗證紀錄。";
+  if (evidence.official_swebench_harness === "unresolved") return "這個補丁官方測試判定沒有修好；訊息只描述改了什麼。";
+  return "沒有測試證據，所以訊息只描述補丁改了什麼，不會說已經修好。";
+}
+
+function commitRegenerate(r, source, label = "重新產生提交訊息") {
+  return `<button type="button" class="btn btn-quiet btn-small" data-action="commit-message" data-source="${esc(source)}" ${r.busy ? "disabled" : ""}>${label}</button>`;
+}
+
+function commitMessageBox(r, commit, source) {
+  if (!commit || commit.status === "skipped") return "";
+  if (commit.status !== "generated" || !commit.commit_message) {
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source)}</div><p class="err">${esc(commit.error || "提交訊息生成失敗")}</p></div>`;
+  }
+  const text = String(commit.full_message || commit.commit_message);
+  const id = `c${COMMIT_TEXTS.size + 1}`;
+  COMMIT_TEXTS.set(id, text);
+  return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>
+      <span class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-commit="${id}">複製提交訊息</button>${commitRegenerate(r, source)}</span></div>
+    <pre class="commit-msg">${esc(text)}</pre>
+    <p class="hint">${esc(commitEvidenceNote(commit))} 由 <code>${esc(commit.model || "Code Llama-Instruct")}</code> 根據這份補丁產生，提交前請人工審查；工作台不會執行 git commit。</p></div>`;
+}
+
+function renderCommitStage(r, n) {
+  const patch = (r.stages.patch || {}).output || {};
+  const commit = currentCommit(r);
+  const state = commitTabState(r);
+  const chipCls = { generated: "chip-done", failed: "chip-failed", skipped: "chip-fallback", none: "chip-fallback" }[state] || "";
+  let content;
+  if (state === "generated") {
+    content = commitMessageBox(r, commit, "current");
+  } else if (state === "running") {
+    content = `<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p>`;
+  } else if (state === "failed") {
+    content = `<p class="err">${esc(commit.error || "提交訊息生成失敗")}</p><p class="hint">補丁仍然保留。</p><div class="loc-controls">${commitRegenerate(r, "current")}</div>`;
+  } else if (state === "skipped" && stageStatus(r, "patch") === "skipped") {
+    content = `<p class="stage-pending">補丁生成被略過，所以沒有提交訊息。</p>`;
+  } else if (state === "skipped") {
+    content = `<p class="stage-pending">提交訊息功能已停用；可在 integration_config.json 的 commit_message.enabled 開啟。</p>`;
+  } else if (state === "none") {
+    content = `<p class="stage-pending">沒有通過檢查的補丁，因此不會生成提交訊息。</p>`;
+  } else {
+    content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動使用 Code Llama-Instruct 生成一句提交訊息。</p>`;
+  }
+  return `<section class="stage" id="stage-commit">
+    <div class="stage-head"><h3><span class="num">${n}</span>提交訊息</h3><span class="chip ${chipCls}">${esc(COMMIT_TAB_TEXT[state] || state)}</span></div>
+    <div class="stage-body">${content}</div>
+  </section>`;
+}
 
 function patchTools(patch, filename, source) {
   const id = `p${PATCH_TEXTS.size + 1}`;
@@ -1210,6 +1371,19 @@ function diffFileName(r, suffix = "") {
   return `${String(r.ticket_id || r.key).replace(/[^\w.-]+/g, "_")}${suffix}.diff`;
 }
 
+function commitBox(r, source) {
+  const draft = (r.commit_messages || {})[source];
+  const queued = r.queue && r.queue.phase === "commit";
+  if (!draft && !queued) {
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source, "產生提交訊息")}</div>
+      <p class="hint">用 Code Llama 根據這個補丁和 Ticket 內容，寫一行 Conventional Commit 訊息，大約幾秒鐘。</p></div>`;
+  }
+  if (queued || draft.status === "running") {
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b></div><p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p></div>`;
+  }
+  return commitMessageBox(r, draft.status === "done" ? { ...draft, status: "generated" } : draft, source);
+}
+
 function diffHtml(patch) {
   const lines = String(patch || "").replace(/\n$/, "").split("\n").map((line) => {
     const cls = line.startsWith("+++") || line.startsWith("---") ? "d-file" : line.startsWith("@@") ? "d-hunk" : line.startsWith("+") ? "d-add" : line.startsWith("-") ? "d-del" : "";
@@ -1228,7 +1402,7 @@ function officialBox(official, { mine = true } = {}) {
     <span class="hint">判定紀錄 <code>${esc(official.run_id || "")}</code></span></div>`;
 }
 
-function experimentBox(exp, currentSha, filename) {
+function experimentBox(r, exp, currentSha, filename) {
   if (!exp) return "";
   const head = `<h4 class="sub-head">36 題實驗中的紀錄 <code>${esc(exp.experiment)}</code></h4>`;
   if (!exp.generated) return `<div class="exp-box">${head}<p class="hint">這張 Ticket 是 36 題開發集的一題，那一輪沒有產生通過檢查的補丁。</p></div>`;
@@ -1237,7 +1411,8 @@ function experimentBox(exp, currentSha, filename) {
   return `<div class="exp-box">${head}
     <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
     ${officialBox(exp.official, { mine: false })}
-    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details></div>`;
+    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details>
+    ${commitBox(r, "experiment")}</div>`;
 }
 
 function renderPatchStage(r, n) {
@@ -1261,6 +1436,9 @@ function renderPatchStage(r, n) {
       : `${method}<p class="stage-pending">要先完成錯誤定位，才能產生補丁。</p>`;
   } else if (s === "failed") {
     content = `<p class="err">${esc(stage.error || "")}</p>${method}<div class="loc-controls">${button(false)}</div>`;
+  } else if (s === "skipped") {
+    const why = (stage.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    content = `<ul class="warn-list">${why}</ul>${method}${locDone ? `<div class="loc-controls">${button(false)}</div>` : ""}`;
   } else {
     const o = stage.output || {};
     const warnings = (stage.warnings || []).length ? `<ul class="warn-list">${stage.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
@@ -1277,7 +1455,7 @@ function renderPatchStage(r, n) {
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">提交訊息草稿在第 7 步「提交訊息」。</p>`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
       .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
@@ -1286,7 +1464,7 @@ function renderPatchStage(r, n) {
       <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
       <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
   }
-  const exp = experimentBox(r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
+  const exp = experimentBox(r, r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
   const foot = stage.module && s !== "running" ? `<div class="stage-foot">
       <span>使用模組 <b>${esc(stage.module)}</b></span>
       <span>程式 <code>${esc(stage.implementation || "")}</code></span>
@@ -1308,6 +1486,12 @@ async function onDetailClick(event) {
   if (help && state.detail) { openFactorHelp(help.dataset.factorHelp); return; }
   const tabBtn = event.target.closest("[data-tab]");
   if (tabBtn && state.detail) { selectTab(tabBtn.dataset.tab); return; }
+  const commitBtn = event.target.closest("[data-copy-commit]");
+  if (commitBtn) {
+    const message = COMMIT_TEXTS.get(commitBtn.dataset.copyCommit);
+    if (message) toast(await copyText(message) ? "已複製提交訊息" : "複製失敗");
+    return;
+  }
   const codeBtn = event.target.closest("[data-copy-code]");
   if (codeBtn && state.detail) {
     const item = PATCH_TEXTS.get(codeBtn.dataset.copyCode);
@@ -1331,7 +1515,7 @@ async function onDetailClick(event) {
   const copyBtn = event.target.closest("[data-copy-patch]");
   if (copyBtn) {
     const item = PATCH_TEXTS.get(copyBtn.dataset.copyPatch);
-    if (item) toast(await copyText(item.patch) ? "已複製補丁" : "複製失敗，請改用「下載 .diff」");
+    if (item) toast(await copyText(item.patch) ? `已複製${item.label || "補丁"}` : "複製失敗");
     return;
   }
   const downloadBtn = event.target.closest("[data-download-patch]");
@@ -1351,8 +1535,8 @@ async function onDetailClick(event) {
     if (btn.dataset.action === "patch") state.tab = "patch";
     switch (btn.dataset.action) {
       case "rerun":
-        await post(`${path}/run`);
-        toast("已開始處理");
+        await post(`${path}/run`, { automation_mode: state.automationMode });
+        toast(state.automationMode === "automatic" ? "已開始全自動處理，將接續生成補丁與提交訊息" : "已開始處理");
         break;
       case "not-duplicate":
         await post(`${path}/duplicate`, { decision: "not_duplicate" });
@@ -1374,6 +1558,10 @@ async function onDetailClick(event) {
         toast(`負責人已確認為 ${who}`);
         break;
       }
+      case "commit-message":
+        await post(`${path}/commit-message`, { source: btn.dataset.source });
+        toast("已開始產生提交訊息草稿");
+        break;
       case "patch":
         if (btn.dataset.again && !confirm("重新產生會用同樣的設定再跑一次，結果可能和這次不同（模型輸出不是逐位元可重現）。目前的補丁會被取代。確定嗎？")) { btn.disabled = false; return; }
         await post(`${path}/patch`);
@@ -1392,12 +1580,19 @@ async function onDetailClick(event) {
         toast(`已移到「${target}」並開始錯誤定位`);
         break;
       }
-      case "delete":
-        if (!confirm(`刪除 ${state.detail.ticket_id}？\n\n這張 Ticket 的處理結果會一起刪除，無法復原。`)) { btn.disabled = false; return; }
-        await api(path, { method: "DELETE" });
-        toast(`已刪除 ${state.detail.ticket_id}`);
+      case "stop": {
+        const result = await post(`${path}/stop`, {});
+        toast(result.state === "stopping" ? "目前這一步結束後就會停止" : "已停止處理");
+        break;
+      }
+      case "delete": {
+        const running = state.detail.queue && state.detail.queue.state === "running";
+        if (!confirm(`刪除 ${state.detail.ticket_id}？\n\n這張 Ticket 的處理結果會一起刪除，無法復原。${running ? "\n它正在執行一個步驟，會在這一步結束後刪除。" : ""}`)) { btn.disabled = false; return; }
+        const result = await api(path, { method: "DELETE" });
+        toast(result.deferred ? `${state.detail.ticket_id} 會在目前這一步結束後刪除` : `已刪除 ${state.detail.ticket_id}`);
         goHome(projectKey(state.detail));
         break;
+      }
     }
     await refresh();
   } catch (err) {
@@ -1500,7 +1695,7 @@ function setImportMode(mode) {
 async function submitImport(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
-  const body = { project: $("#importProject").value };
+  const body = { project: $("#importProject").value, automation_mode: state.automationMode };
   if (importMode === "file") {
     if (!importFile) { $("#importError").textContent = "請先選擇檔案。"; return; }
     body.content = await importFile.text();
@@ -1523,7 +1718,7 @@ async function submitImport(event) {
     if (result.history_imported != null) {
       toast(`已加入 ${result.history_imported} 張歷史 Ticket，資料庫共 ${result.history_total} 張`);
     } else {
-      toast(`已匯入 ${result.created.length} 張 Ticket，開始處理`);
+      toast(`已匯入 ${result.created.length} 張 Ticket，開始${state.automationMode === "automatic" ? "全自動" : "半自動"}處理`);
       if (result.created.length === 1) location.hash = `#/t/${encodeURIComponent(result.created[0])}`;
       else {
         const named = importMode === "file" && importFileProjects ? Object.keys(importFileProjects) : [];
@@ -1564,7 +1759,7 @@ async function openStatus() {
   $("#statusDialog").showModal();
   const [report, projects] = await Promise.all([api("/api/status"), api("/api/projects")]);
   $("#configPath").textContent = report.config.config_path || "（未指定設定檔，使用預設值）";
-  $("#statusBody").innerHTML = `<div class="status-grid">${STAGES.map(([key]) => {
+  $("#statusBody").innerHTML = `<div class="status-grid">${STATUS_STAGES.map(([key]) => {
     const s = report.stages[key];
     const chip = key === "patch" ? (s.ready ? "可以手動執行" : "目前無法使用") : (s.ready ? "可用訓練模型／資料" : "會使用備援或略過");
     return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4><ul>
@@ -1599,6 +1794,7 @@ async function onProjectClick(event) {
 
 /* ------------------------------------------------------------------ init */
 async function init() {
+  try { applyAutomationMode(localStorage.getItem(MODE_KEY) || "semi"); } catch { applyAutomationMode("semi"); }
   $("#homeView").addEventListener("click", (e) => {
     const pin = e.target.closest("[data-pin]");
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
@@ -1655,6 +1851,7 @@ async function init() {
     if (e.target.closest("[data-pick-cancel]")) setSelecting(false);
     else if (e.target.closest("[data-pick-delete]")) deletePicked();
     else if (e.target.closest("[data-pick-rerun]")) rerunPicked();
+    else if (e.target.closest("[data-pick-stop]")) stopPicked();
     else if (e.target.closest("[data-pick-all]")) {
       $$("#homeView .tile").forEach((tile) => state.picked.add(tile.dataset.key));
       state.homeSignature = null;
@@ -1681,6 +1878,9 @@ async function init() {
     if (target) target.focus();
   });
   $("#importButton").addEventListener("click", openImport);
+  $("#settingsButton").addEventListener("click", openSettings);
+  $("#settingsForm").addEventListener("submit", saveSettings);
+  $$('#settingsForm input[name="automationMode"]').forEach((input) => input.addEventListener("change", renderModeNotice));
   $("#statusButton").addEventListener("click", openStatus);
   $("#projectBody").addEventListener("click", onProjectClick);
   $$(".seg").forEach((b) => b.addEventListener("click", () => setImportMode(b.dataset.mode)));

@@ -12,6 +12,7 @@ from typing import Any
 from config import PipelineConfig
 from integration.common import stage_result
 from integration.config import IntegrationConfig
+from integration.duplicate import parse_time, row_time
 from modules.assignee_triager import AssigneeTriager
 
 
@@ -36,29 +37,37 @@ class TeamAssigneeRecommender:
         self._project_triagers: dict[str, tuple[Path, AssigneeTriager]] = {}
 
     def _ensure_history_source(self) -> None:
-        """Use the workspace's imported history only when no configured history file exists."""
+        """Keep configured history as the general fallback, but enable project-scoped workspace
+        history whenever it exists.  Imported project history is more relevant than a configured
+        cross-project corpus (for example Astropy tickets versus the BMO training history)."""
 
         configured = self.pipeline_config.assignee_dataset_path
-        if configured is not None and Path(configured).exists():
-            return
         if self.extra_history_path is not None and self.extra_history_path.exists():
-            if self.pipeline_config.assignee_dataset_path != self.extra_history_path:
+            self.uses_workspace_history = True
+            if configured is None or not Path(configured).exists():
                 self.pipeline_config.assignee_dataset_path = self.extra_history_path
                 self.triager = AssigneeTriager(config=self.pipeline_config)
-            self.uses_workspace_history = True
 
-    def _project_history(self, project: str) -> tuple[Path, AssigneeTriager] | None:
+    MAX_CUTOFF_FILES = 8
+
+    def _project_history(self, project: str, cutoff: Any = None) -> tuple[Path, AssigneeTriager, int] | None:
         """Workspace history limited to one project (plus rows without a project), so a ticket is
-        only routed to people who handled that project's tickets. The filtered copy is rebuilt when
-        the workspace history changes; AssigneeTriager itself is unchanged."""
+        only routed to people who handled that project's tickets.  With a ``cutoff`` (the ticket's
+        ``created_at``) only rows created before it are kept, the same rule as duplicate detection:
+        a 2017 ticket is not routed with what happened in 2022.  The filtered copy is rebuilt when the
+        workspace history changes; AssigneeTriager itself is unchanged.  Returns the path, the triager
+        and how many later rows were left out."""
 
         source = self.extra_history_path
         if not project or source is None or not source.exists():
             return None
-        target = source.parent / "by_project" / (re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._") or "project")
-        target = target.with_suffix(".jsonl")
+        query_time = parse_time(cutoff)
+        base = re.sub(r"[^A-Za-z0-9_.-]+", "_", project).strip("._") or "project"
+        suffix = f"__before_{query_time.strftime('%Y%m%dT%H%M%S')}" if query_time else ""
+        target = source.parent / "by_project" / f"{base}{suffix}.jsonl"
+        meta = target.with_suffix(".later")
         if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
-            rows, tagged = [], False
+            rows, matched_project, later = [], False, 0
             with source.open("r", encoding="utf-8") as handle:
                 for line in handle:
                     line = line.strip()
@@ -69,32 +78,50 @@ class TeamAssigneeRecommender:
                     except json.JSONDecodeError:
                         continue
                     row_project = str(row.get("project") or "").strip()
-                    tagged = tagged or bool(row_project)
-                    if not row_project or row_project == project:
-                        rows.append(line)
-            if not tagged:
-                return None  # nothing in the history is labelled with a project: keep the shared history
+                    if row_project and row_project != project:
+                        continue
+                    matched_project = matched_project or row_project == project
+                    created = row_time(row) if query_time else None
+                    if created is not None and created >= query_time:
+                        later += 1
+                        continue
+                    rows.append(line)
+            if not matched_project:
+                return None  # no imported history for this project: keep the configured/shared fallback
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_name(f".{target.name}.tmp")
             tmp.write_text("".join(row + "\n" for row in rows), encoding="utf-8")
             os.replace(tmp, target)
-        cached = self._project_triagers.get(project)
-        if cached is None or cached[0] != target:
+            meta.write_text(str(later), encoding="utf-8")
+            if suffix:  # keep only the most recent per-ticket copies
+                copies = sorted(target.parent.glob(f"{base}__before_*.jsonl"), key=lambda path: path.stat().st_mtime)
+                for old in copies[: max(0, len(copies) - self.MAX_CUTOFF_FILES)]:
+                    old.unlink(missing_ok=True)
+                    old.with_suffix(".later").unlink(missing_ok=True)
+                    self._project_triagers.pop(str(old), None)
+        try:
+            later = int(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            later = 0
+        cached = self._project_triagers.get(str(target))
+        if cached is None:
             overrides = {key: value for key, value in self.config.assignee.items() if key in ASSIGNEE_CONFIG_KEYS}
             config = PipelineConfig(**overrides)
             config.assignee_dataset_path = target
             cached = (target, AssigneeTriager(config=config))
-            self._project_triagers[project] = cached
-        return cached
+            self._project_triagers[str(target)] = cached
+        return cached[0], cached[1], later
 
     def recommend(self, structured_ticket: dict[str, Any], priority_output: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         self._ensure_history_source()
         triager, history_path = self.triager, self.pipeline_config.assignee_dataset_path
         project = str(structured_ticket.get("project") or "").strip()
-        scoped = self._project_history(project) if self.uses_workspace_history else None
+        cutoff = structured_ticket.get("created_at") or structured_ticket.get("creation_time")
+        scoped = self._project_history(project, cutoff) if self.uses_workspace_history else None
+        later_rows = 0
         if scoped is not None:
-            history_path, triager = scoped
+            history_path, triager, later_rows = scoped
         result = triager.assign(structured_ticket, priority_output)
         history_rows = int((result.get("profile_stats") or {}).get("history_rows", 0))
         warnings = []
@@ -117,7 +144,8 @@ class TeamAssigneeRecommender:
             details={
                 "history_path": str(history_path or ""),
                 "history_rows": history_rows,
-                "history_source": (f"工作台匯入的歷史資料（只用「{project}」及未標專案的紀錄）" if scoped is not None
+                "later_rows_skipped": later_rows,
+                "history_source": (f"工作台匯入的歷史資料（只用「{project}」及未標專案、比這張早建立的紀錄）" if scoped is not None
                                    else "工作台匯入的歷史資料" if self.uses_workspace_history else "設定檔指定的歷史資料"),
             },
             started=started,
