@@ -369,6 +369,41 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertNotIn("later-dev@example.com", assignee["output"]["ranked_candidates"])
         self.assertEqual(assignee["details"]["later_rows_skipped"], 1)
 
+    def test_project_workspace_assignee_history_overrides_existing_configured_corpus(self) -> None:
+        configured = self.root / "configured_history.jsonl"
+        configured.write_text(
+            json.dumps({"ticket_id": "GLOBAL", "title": "Unrelated", "assignee": "global@example.com",
+                        "created_at": "2022-01-01T00:00:00Z"}) + "\n",
+            encoding="utf-8",
+        )
+        config = config_from_mapping(
+            {
+                "workspace_root": str(WORKSPACE_ROOT),
+                "store_dir": str(self.root / "project_history_store"),
+                "assignee": {"assignee_dataset_path": str(configured)},
+                "priority": {"model_path": str(self.root / "missing.joblib")},
+                "projects": {"astropy/astropy": {"repo_path": str(SMOKE_REPO)}},
+                "default_project": "astropy/astropy",
+            }
+        )
+        pipeline = IntegratedPipeline(config, extractor=ToJsonExtractor(config, llm_call=fake_code_llama))
+        pipeline.import_history([
+            {"ticket_id": "AST-OLD", "project": "astropy/astropy", "title": "Coordinate distance failure",
+             "description": "Negative distance fails", "component": "coordinates", "assignee": "astropy-owner",
+             "created_at": "2019-01-01T00:00:00Z"},
+        ])
+        raw = {**self.raw_ticket(), "ticket_id": "AST-NEW", "component": "coordinates",
+               "created_at": "2020-01-01T00:00:00Z"}
+        [record] = pipeline.import_raw([raw], source="test", project="astropy/astropy")
+        record = pipeline.run_until_review(record["key"])
+        pipeline.decide_duplicate(record["key"], "not_duplicate")
+        record = pipeline.run_after_duplicate(record["key"])
+        assignee = record["stages"]["assignee"]
+        self.assertGreater(assignee["details"]["history_rows"], 0)
+        self.assertIn("astropy-owner", assignee["output"]["ranked_candidates"])
+        self.assertNotIn("global@example.com", assignee["output"]["ranked_candidates"])
+        self.assertIn("astropy/astropy", assignee["details"]["history_source"])
+
     def test_workspace_queue_batches_priority_and_reports_position(self) -> None:
         import importlib.util
         import threading
@@ -492,7 +527,11 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(app.start(record["key"], automatic=True))
 
         deadline = _time.time() + 30
-        while not app.idle() and _time.time() < deadline:
+        while _time.time() < deadline:
+            current = app.pipeline.get(record["key"])
+            patch_output = ((current.get("stages") or {}).get("patch") or {}).get("output") or {}
+            if app.idle() and patch_output.get("commit_message", {}).get("status") == "generated":
+                break
             _time.sleep(0.05)
         self.assertTrue(app.idle())
 
@@ -503,6 +542,189 @@ class IntegrationWorkflowTests(unittest.TestCase):
         commit = record["stages"]["patch"]["output"]["commit_message"]
         self.assertEqual(commit["commit_message"], "fix(auth): handle missing token")
         self.assertFalse(app.pipeline.store.feedback_path.exists(), "automatic routing is not human feedback")
+
+    def test_workspace_automatic_mode_retries_no_valid_patch_once(self) -> None:
+        import importlib.util
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server_auto_retry", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        class RetryingPatcher:
+            def __init__(self):
+                self.calls = 0
+                self.kwargs = []
+
+            def generate(self, record, project, raw, *, output_dir, **kwargs):
+                self.calls += 1
+                self.kwargs.append(kwargs)
+                if self.calls == 1:
+                    return {
+                        "stage": "patch", "status": "done", "module": "fake-patch", "implementation": "test",
+                        "output": {
+                            "patch_status": "no_valid_candidate", "patch": "", "modified_files": [],
+                            "candidates": [
+                                {"candidate_id": index, "seed": 41 + index, "status": "rejected", "reason": "no_op"}
+                                for index in range(1, 4)
+                            ],
+                        },
+                    }
+                return {
+                    "stage": "patch", "status": "done", "module": "fake-patch", "implementation": "test",
+                    "output": {
+                        "patch_status": "generated",
+                        "patch": "--- a/src/auth/validator.py\n+++ b/src/auth/validator.py\n@@ -1 +1,2 @@\n+fixed = True\n",
+                        "modified_files": ["src/auth/validator.py"],
+                    },
+                }
+
+        class FakeCommitMessenger:
+            def generate(self, record, patch, *, official=None):
+                return {"status": "generated", "commit_message": "fix(auth): handle missing token", "model": "fake"}
+
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        patcher = RetryingPatcher()
+        app.pipeline.patcher = patcher
+        app.pipeline.commit_messenger = FakeCommitMessenger()
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        self.assertTrue(app.start(record["key"], automatic=True))
+
+        deadline = _time.time() + 30
+        while _time.time() < deadline:
+            current = app.pipeline.get(record["key"])
+            patch_output = ((current.get("stages") or {}).get("patch") or {}).get("output") or {}
+            if app.idle() and patch_output.get("commit_message", {}).get("status") == "generated":
+                break
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+
+        record = app.pipeline.get(record["key"])
+        output = record["stages"]["patch"]["output"]
+        self.assertEqual(patcher.calls, 2)
+        self.assertEqual(output["patch_status"], "generated")
+        self.assertEqual(output["automatic_retry_count"], 1)
+        self.assertEqual(output["automatic_retry_reason"], "no_valid_candidate")
+        self.assertEqual(output["automatic_retry_seed"], 45)
+        self.assertEqual(patcher.kwargs[0], {})
+        self.assertEqual(patcher.kwargs[1]["seed_override"], 45)
+        self.assertIn("no_op (3)", patcher.kwargs[1]["retry_feedback"])
+        self.assertIn("Do not repeat the original function unchanged", patcher.kwargs[1]["retry_feedback"])
+        self.assertEqual(output["commit_message"]["status"], "generated")
+        self.assertTrue(any("自動重試 1 次" in item for item in record["stages"]["patch"]["warnings"]))
+
+    def test_automatic_assignee_uses_closest_same_domain_history_when_model_abstains(self) -> None:
+        pipeline = IntegratedPipeline(self.config)
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test", project="smoke")
+        key = record["key"]
+
+        def prepare(rec: dict) -> None:
+            rec["stages"]["assignee"] = {
+                "status": "done",
+                "output": {
+                    "suggested_assignee": "",
+                    "ranked_candidates": ["manual_triage"],
+                    "needs_manual_triage": True,
+                },
+            }
+            rec["stages"]["duplicate"] = {
+                "status": "done",
+                "output": {"top_k_candidates": [
+                    {"ticket_id": "H-1", "assignee": "auth-team@example.com", "rank": 1},
+                    {"ticket_id": "H-2", "assignee": "mail-team@example.com", "rank": 2},
+                ]},
+            }
+            rec["attention"] = ["負責人需人工分派"]
+
+        pipeline.store.update(key, prepare)
+        choice = pipeline.automatic_assignee_choice(key)
+        self.assertEqual(choice["assignee"], "auth-team@example.com")
+        self.assertEqual(choice["source"], "same_domain_history")
+        updated = pipeline.confirm_assignee(
+            key, choice["assignee"], decision="automatic", reviewer="workspace:auto", note=choice["reason"])
+        self.assertEqual(updated["decisions"]["assignee"]["assignee"], "auth-team@example.com")
+        self.assertNotIn("負責人需人工分派", updated["attention"])
+        self.assertFalse(pipeline.store.feedback_path.exists(), "automatic routing is not human feedback")
+
+    def test_automatic_assignee_fallback_does_not_use_future_owners(self) -> None:
+        pipeline = IntegratedPipeline(self.config)
+        pipeline.store.upsert_history([
+            {"ticket_id": "OLD", "project": "smoke", "component": "authentication",
+             "assignee": "earlier-owner@example.com", "created_at": "2020-01-01T00:00:00Z"},
+            {"ticket_id": "FUTURE", "project": "smoke", "component": "authentication",
+             "assignee": "future-owner@example.com", "created_at": "2022-01-01T00:00:00Z"},
+        ])
+        [record] = pipeline.import_raw([self.raw_ticket()], source="test", project="smoke")
+        key = record["key"]
+
+        def prepare(rec: dict) -> None:
+            rec["structured_ticket"] = {
+                "ticket_id": "T-1", "project": "smoke", "component": "authentication",
+                "created_at": "2021-01-01T00:00:00Z",
+            }
+            rec["stages"]["assignee"] = {
+                "status": "done",
+                "output": {"suggested_assignee": "", "ranked_candidates": ["manual_triage"]},
+            }
+            rec["stages"]["duplicate"] = {"status": "done", "output": {"top_k_candidates": []}}
+
+        pipeline.store.update(key, prepare)
+        choice = pipeline.automatic_assignee_choice(key)
+        self.assertEqual(choice["assignee"], "earlier-owner@example.com")
+        self.assertNotEqual(choice["assignee"], "future-owner@example.com")
+
+    def test_automatic_mode_overrides_localization_gate_but_keeps_evidence(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("workspace_server_auto_gate", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+        app = server.WorkspaceApp(self.config)
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        key = record["key"]
+
+        def low_confidence(rec):
+            rec["attention"] = ["定位結果需人工確認"]
+            rec["stages"]["localization"] = {
+                "stage": "localization",
+                "status": "done",
+                "warnings": ["定位信心未達自動化門檻，請工程師以候選清單為參考人工確認。"],
+                "output": {
+                    "confidence_level": "low",
+                    "confidence": {"confidence_score": 0.2},
+                    "should_manual_review": True,
+                    "recommend_patch_generation": False,
+                    "summary": {"message": "Manual review is required."},
+                },
+            }
+
+        app.pipeline.store.update(key, low_confidence)
+        record = app.pipeline.accept_localization_for_automatic(key)
+        localization = record["stages"]["localization"]
+        output = localization["output"]
+        self.assertFalse(output["should_manual_review"])
+        self.assertTrue(output["recommend_patch_generation"])
+        self.assertEqual(output["confidence"]["confidence_score"], 0.2)
+        self.assertTrue(output["automation_gate_override"]["original_should_manual_review"])
+        self.assertFalse(output["automation_gate_override"]["original_recommend_patch_generation"])
+        self.assertNotIn("定位結果需人工確認", record["attention"])
+        self.assertFalse(localization["warnings"])
+
+        class NoCandidatePatcher:
+            def generate(self, record, project, raw, *, output_dir):
+                return {
+                    "stage": "patch", "status": "done", "module": "fake-patch", "implementation": "test",
+                    "warnings": ["錯誤定位信心為「低」，正式流程不會自動產生補丁。"],
+                    "output": {"patch_status": "no_valid_candidate", "patch": "", "modified_files": []},
+                }
+
+        app.pipeline.patcher = NoCandidatePatcher()
+        app.pipeline.store.write_artifact(key, "bug_location_raw.json", {"confidence_level": "low"})
+        record = app.pipeline.generate_patch(key, automatic=True)
+        warnings = record["stages"]["patch"]["warnings"]
+        self.assertFalse(any(item.startswith("錯誤定位信心為") for item in warnings))
+        self.assertTrue(any("已略過錯誤定位信心門檻" in item for item in warnings))
 
     def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
         import shutil as _shutil
@@ -713,6 +935,33 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual((reused, reused_commit), (repo, commit))
         self.assertFalse((source / ".git").exists(), "the public source-only fixture must stay untouched")
 
+    def test_patch_public_context_includes_helpers_but_excludes_tests(self) -> None:
+        from integration.patch import TeamPatchGenerator
+
+        snapshot = self.root / "public_context_snapshot"
+        (snapshot / "shop").mkdir(parents=True)
+        (snapshot / "tests").mkdir()
+        (snapshot / "shop" / "orders.py").write_text(
+            "def quote_order(lines):\n    return sum(lines)\n", encoding="utf-8")
+        (snapshot / "shop" / "shipping.py").write_text(
+            "def shipping_fee(subtotal, destination):\n"
+            "    return 0 if subtotal >= 50 else 7.5\n", encoding="utf-8")
+        (snapshot / "tests" / "test_orders.py").write_text(
+            "def test_discounted_shipping_threshold():\n    assert False\n", encoding="utf-8")
+        localization = {"stage3_ranked_symbols": [
+            {"file_path": "shop/orders.py", "symbol_qualified_name": "quote_order", "start_line": 1},
+            {"file_path": "shop/shipping.py", "symbol_qualified_name": "shipping_fee", "start_line": 1},
+            {"file_path": "tests/test_orders.py", "symbol_qualified_name": "test_discounted_shipping_threshold", "start_line": 1},
+        ]}
+
+        context, audit = TeamPatchGenerator.public_code_context(localization, snapshot)
+
+        self.assertIn("def shipping_fee", context)
+        self.assertNotIn("def quote_order", context)
+        self.assertNotIn("test_discounted_shipping_threshold", context)
+        self.assertEqual([(item["file_path"], item["symbol"]) for item in audit],
+                         [("shop/shipping.py", "shipping_fee")])
+
     def test_patch_generation_on_demand_with_the_vendored_rewrite_generator(self) -> None:
         """Workspace localization -> vendored fim_patch (5cdb2be) -> diff.  Only the gemma4 HTTP call is
         replaced; target selection, prompt, gates and git apply are the team's real code."""
@@ -789,6 +1038,25 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual(record["status"], "processed")  # the status before the patch run is restored
         self.assertTrue((Path(output["run_dir"]) / "selected.diff").is_file())
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
+
+        # Automatic retry changes the seed range and adds only failure feedback, never hidden answers.
+        retry_fake = FakeGemma()
+        retry_patcher = TeamPatchGenerator(self.config, backend_factory=lambda: retry_fake)
+        raw_location = json.loads(pipeline.store.artifact_path(key, "bug_location_raw.json").read_text(encoding="utf-8"))
+        retry_stage = retry_patcher.generate(
+            record,
+            self.config.project("demo"),
+            raw_location,
+            output_dir=self.root / "retry_patch_out",
+            seed_override=45,
+            retry_feedback="Previous candidates were no_op (3). Do not repeat the original function unchanged.",
+        )
+        retry_output = retry_stage["output"]
+        self.assertEqual(retry_output["settings"]["seed"], 45)
+        self.assertEqual([item["seed"] for item in retry_output["candidates"]], [45, 46, 47])
+        self.assertTrue(retry_output["retry_feedback_applied"])
+        self.assertIn("Previous candidates were no_op (3)", retry_fake.prompts[0])
+        self.assertNotIn("SECRET", retry_fake.prompts[0])
 
         # The draft carries the evidence footer, and can be regenerated without a new patch run.
         commit = output["commit_message"]

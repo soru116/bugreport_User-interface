@@ -37,16 +37,16 @@ class TeamAssigneeRecommender:
         self._project_triagers: dict[str, tuple[Path, AssigneeTriager]] = {}
 
     def _ensure_history_source(self) -> None:
-        """Use the workspace's imported history only when no configured history file exists."""
+        """Keep configured history as the general fallback, but enable project-scoped workspace
+        history whenever it exists.  Imported project history is more relevant than a configured
+        cross-project corpus (for example Astropy tickets versus the BMO training history)."""
 
         configured = self.pipeline_config.assignee_dataset_path
-        if configured is not None and Path(configured).exists():
-            return
         if self.extra_history_path is not None and self.extra_history_path.exists():
-            if self.pipeline_config.assignee_dataset_path != self.extra_history_path:
+            self.uses_workspace_history = True
+            if configured is None or not Path(configured).exists():
                 self.pipeline_config.assignee_dataset_path = self.extra_history_path
                 self.triager = AssigneeTriager(config=self.pipeline_config)
-            self.uses_workspace_history = True
 
     MAX_CUTOFF_FILES = 8
 
@@ -67,7 +67,7 @@ class TeamAssigneeRecommender:
         target = source.parent / "by_project" / f"{base}{suffix}.jsonl"
         meta = target.with_suffix(".later")
         if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
-            rows, tagged, later = [], False, 0
+            rows, matched_project, later = [], False, 0
             with source.open("r", encoding="utf-8") as handle:
                 for line in handle:
                     line = line.strip()
@@ -78,16 +78,16 @@ class TeamAssigneeRecommender:
                     except json.JSONDecodeError:
                         continue
                     row_project = str(row.get("project") or "").strip()
-                    tagged = tagged or bool(row_project)
                     if row_project and row_project != project:
                         continue
+                    matched_project = matched_project or row_project == project
                     created = row_time(row) if query_time else None
                     if created is not None and created >= query_time:
                         later += 1
                         continue
                     rows.append(line)
-            if not tagged:
-                return None  # nothing in the history is labelled with a project: keep the shared history
+            if not matched_project:
+                return None  # no imported history for this project: keep the configured/shared fallback
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_name(f".{target.name}.tmp")
             tmp.write_text("".join(row + "\n" for row in rows), encoding="utf-8")

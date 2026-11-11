@@ -171,10 +171,17 @@ class TeamCommitMessageGenerator:
             subject = " ".join(str(draft["subject"]).split()).rstrip(".")
             if kind not in COMMIT_TYPES:
                 raise CommitMessageError(f"不支援的提交類型：{kind}")
-            if not subject or len(subject) > 80:
+            if not subject:
                 raise CommitMessageError("subject 必須為 1–80 個字元")
+            shortened = len(subject) > 80
+            if shortened:
+                # A useful model draft should not block an otherwise complete automatic
+                # workflow solely because it is verbose. Keep whole words where possible;
+                # the commit type/scope and all patch validation remain unchanged.
+                subject = subject[:80].rsplit(" ", 1)[0] or subject[:80]
             return {"status": "generated", "commit_message": f"{kind}({_scope(patch)}): {subject}",
-                    "model": settings.model, "generation_method": "code_llama_instruct_zero_shot", "error": ""}
+                    "model": settings.model, "generation_method": "code_llama_instruct_zero_shot", "error": "",
+                    **({"normalization": "subject_truncated_to_80_chars"} if shortened else {})}
         except (CommitMessageError, json.JSONDecodeError, TypeError, ValueError) as exc:
             return {"status": "failed", "commit_message": "", "model": settings.model,
                     "generation_method": "code_llama_instruct_zero_shot", "error": str(exc)}

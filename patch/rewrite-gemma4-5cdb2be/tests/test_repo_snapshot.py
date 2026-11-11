@@ -116,6 +116,31 @@ class MaterializeCommitSnapshotTests(unittest.TestCase):
             )
             self.assertEqual(first, second)
 
+    def test_shared_snapshot_inherits_partial_clone_promisor_remote(self) -> None:
+        with TemporaryDirectory() as tmp:
+            source_repo = Path(tmp) / "source"
+            commit = _init_repo_with_one_commit(source_repo)
+            upstream = "https://example.invalid/owner/project.git"
+            _run(["remote", "add", "origin", upstream], cwd=source_repo)
+            _run(["config", "remote.origin.promisor", "true"], cwd=source_repo)
+            _run(["config", "remote.origin.partialclonefilter", "blob:none"], cwd=source_repo)
+
+            snapshot = materialize_commit_snapshot(
+                source_repo, repo="owner/project", base_commit=commit,
+                snapshot_cache_dir=Path(tmp) / "snapshots",
+            )
+
+            remote = subprocess.run(
+                ["git", "remote", "get-url", "origin"], cwd=str(snapshot),
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            promisor = subprocess.run(
+                ["git", "config", "--get", "remote.origin.promisor"], cwd=str(snapshot),
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            self.assertEqual(remote, upstream)
+            self.assertEqual(promisor, "true")
+
     def test_short_commit_prefix_resolves_via_rev_parse(self) -> None:
         with TemporaryDirectory() as tmp:
             source_repo = Path(tmp) / "source"

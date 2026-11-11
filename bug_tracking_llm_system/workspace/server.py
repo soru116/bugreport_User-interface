@@ -243,14 +243,15 @@ class WorkspaceApp:
                             if pipeline.get(job["key"])["status"] == "ready_to_continue":
                                 record = pipeline.run_after_duplicate(job["key"], priority_result=results.get(job["key"]))
                                 if job.get("automatic"):
-                                    suggested = ((record.get("stages", {}).get("assignee") or {}).get("output") or {}).get("suggested_assignee")
-                                    if suggested:
+                                    record = pipeline.accept_localization_for_automatic(job["key"])
+                                    choice = pipeline.automatic_assignee_choice(job["key"])
+                                    if choice:
                                         record = pipeline.confirm_assignee(
                                             job["key"],
-                                            str(suggested),
+                                            choice["assignee"],
                                             decision="automatic",
                                             reviewer="workspace:auto",
-                                            note="全自動模式採用系統建議",
+                                            note=choice["reason"],
                                         )
                         except Exception:
                             traceback.print_exc()
@@ -267,7 +268,11 @@ class WorkspaceApp:
                                 self._submit(job["key"], "patch", automatic=True)
                 elif phase == "patch":
                     job = batch[0]
-                    pipeline.generate_patch(job["key"])
+                    automatic = bool(job.get("automatic"))
+                    record = pipeline.generate_patch(job["key"], automatic=automatic)
+                    output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
+                    if automatic and not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
+                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1)
                     self._record("patch", time.time() - job["started_at"])
                     self._finish(job)
                 elif phase == "commit":

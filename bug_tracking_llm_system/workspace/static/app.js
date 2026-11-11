@@ -270,13 +270,13 @@ function queueText(q, { short = false } = {}) {
     return short ? (q.deleting ? "這一步結束後刪除" : "這一步結束後停止") : `正在執行目前這一步，模型呼叫無法中途打斷；這一步結束後會${q.deleting ? "刪除這張 Ticket" : "停止"}（${fmtEta(q.eta_seconds)}）。`;
   }
   if (q.state === "running") {
-    const what = q.phase === "priority_batch" && q.batch_size > 1 ? `優先級判定（${q.batch_size} 張一起算）` : QUEUE_PHASE[q.phase] || "處理";
+    const what = QUEUE_PHASE[q.phase] || "處理";
     return short ? `${what}，${fmtEta(q.eta_seconds)}` : `正在執行「${what}」，預計還要${fmtEta(q.eta_seconds)}，完成後會自動更新。`;
   }
   const next = QUEUE_PHASE[q.phase] || "處理";
   return short
     ? `前面還有 ${q.ahead} 張，${fmtEta(q.eta_seconds)}`
-    : `排隊中：前面還有 ${q.ahead} 張，預計${fmtEta(q.eta_seconds)}後完成「${next}」。${q.phase === "priority_batch" && q.batch_size > 1 ? `等待中的 ${q.batch_size} 張會一起計算優先級。` : ""}`;
+    : `排隊中：前面還有 ${q.ahead} 張，預計${fmtEta(q.eta_seconds)}後完成「${next}」。`;
 }
 
 /* Search: every word must appear somewhere in the ticket's id, title, project, component, assignee, ... */
@@ -473,8 +473,7 @@ async function loadTickets() {
   if (pill) {
     const running = (q.running || []).length;
     pill.hidden = !running && !q.waiting;
-    const batch = q.priority_batch || 0;
-    pill.innerHTML = `<i></i>${running ? `處理中 ${running} 張${batch > 1 ? `（${batch} 張一起算優先級）` : ""}` : ""}${q.waiting ? `${running ? "，" : ""}排隊 ${q.waiting} 張` : ""}`;
+    pill.innerHTML = `<i></i>${running ? `處理中 ${running} 張` : ""}${q.waiting ? `${running ? "，" : ""}排隊 ${q.waiting} 張` : ""}`;
   }
   renderInbox();
   if (state.selected && !state.tickets.some((t) => t.key === state.selected)) {

@@ -87,6 +87,20 @@ class CommitMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(commit["status"], "generated")
         self.assertEqual(commit["commit_message"], "fix(names): return an empty string for None input")
         self.assertNotIn("\n", commit["commit_message"])
+
+    def test_overlong_model_subject_is_shortened_instead_of_blocking_automatic_flow(self) -> None:
+        generator = TeamCommitMessageGenerator(
+            self.config,
+            llm_call=lambda _prompt: json.dumps({"type": "fix", "subject": "handle " + "verbose words " * 12}),
+        )
+        result = generator.generate(
+            {"ticket_id": "PATCH-2", "raw": {"title": "Verbose draft"}},
+            "--- a/pkg/names.py\n+++ b/pkg/names.py\n@@ -1 +1 @@\n-old\n+new\n",
+        )
+        self.assertEqual(result["status"], "generated")
+        subject = result["commit_message"].split(": ", 1)[1]
+        self.assertLessEqual(len(subject), 80)
+        self.assertEqual(result["normalization"], "subject_truncated_to_80_chars")
         prompt = build_prompt(self.record, PATCH)
         self.assertIn("ADDED:     if value is None:", prompt)
         self.assertNotIn("SECRET GOLD PATCH", prompt)
