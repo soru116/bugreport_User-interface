@@ -724,7 +724,7 @@ class IntegrationWorkflowTests(unittest.TestCase):
         record = app.pipeline.generate_patch(key, automatic=True)
         warnings = record["stages"]["patch"]["warnings"]
         self.assertFalse(any(item.startswith("錯誤定位信心為") for item in warnings))
-        self.assertTrue(any("已略過錯誤定位信心門檻" in item for item in warnings))
+        self.assertTrue(any("已繼續產生補丁" in item for item in warnings))
 
     def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
         import shutil as _shutil
@@ -851,7 +851,7 @@ class IntegrationWorkflowTests(unittest.TestCase):
         result, _ = localizer.localize({**issue_ticket, "created_at": "2099-01-01T00:00:00Z"}, config.project("demo/lib"))
         self.assertEqual(result["status"], "done", result.get("error"))
         self.assertIn(result["output"]["base_commit"], {first, second})
-        self.assertTrue(any("clone 裡最新的一個版本" in warning for warning in result["warnings"]))
+        self.assertTrue(any("使用回報日期" in warning for warning in result["warnings"]))
         too_early, _ = localizer.localize({**issue_ticket, "created_at": "2000-01-01T00:00:00Z"}, config.project("demo/lib"))
         self.assertEqual(too_early["status"], "failed")
         self.assertIn("回報日期", too_early["error"])
@@ -1032,7 +1032,7 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertIn("ADDED:     if value is None:", commit_prompts[0])
         self.assertNotIn("SECRET GOLD PATCH", commit_prompts[0])
         self.assertIsNone(output["official"])
-        self.assertTrue(any("不等於「修好」" in warning for warning in stage["warnings"]))
+        self.assertTrue(any("尚未執行完整測試" in warning for warning in stage["warnings"]))
         self.assertTrue(all("SECRET" not in prompt for prompt in fake.prompts), "ground truth must not reach the prompt")
         self.assertIn("def clean(value):", fake.prompts[0])
         self.assertEqual(record["status"], "processed")  # the status before the patch run is restored

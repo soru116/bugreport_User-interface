@@ -351,7 +351,7 @@ class TeamDuplicateDetector:
             title_scores, content_scores = tfidf_title, tfidf_content
             combine = settings.tfidf_combine
             method = "tfidf"
-            warnings.append(f"未載入 SBERT 模型，改用 DUP 的 TF-IDF baseline。原因：{self._sbert_error}")
+            warnings.append("進階比對資源目前不可用，系統已改用基本文字相似度完成比對；請人工確認候選結果。")
 
         model_scores = combine_similarity_scores(title_scores, content_scores, combine)
         steps = [f"{method} {combine}"]
@@ -422,7 +422,7 @@ class TeamDuplicateDetector:
             )
         else:
             needs_review = bool(best)
-            decision_policy = "半自動模式（DUP README 建議）：Top-k 候選一律交由工程師確認"
+            decision_policy = "系統已列出最相似的歷史 Ticket，請確認是否為同一問題"
 
         output = {
             "is_duplicate": is_duplicate,

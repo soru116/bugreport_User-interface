@@ -312,7 +312,7 @@ mark { background: #ffe5a0; color: inherit; border-radius: 4px; padding: 0 1px; 
 .track li[data-s="fallback"] .node::before { content: "!"; }
 .track li[data-s="failed"] .node { background: var(--failed); border-color: var(--failed); color: #fff; }
 .track li[data-s="failed"] .node::before { content: "×"; }
-.track li[data-s="skipped"] .node { border-style: dashed; }
+.track li[data-s="skipped"] .node { border-style: solid; }
 .track li[data-s="skipped"] .node::before { content: "–"; }
 .track li[data-s="running"] .node { border-color: var(--primary); color: var(--primary); animation: pulse 1s ease-in-out infinite alternate; }
 .track .label { font-weight: 800; font-size: 14px; }
@@ -356,7 +356,7 @@ mark { background: #ffe5a0; color: inherit; border-radius: 4px; padding: 0 1px; 
 .fields dt { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
 .fields dd { margin: 0; overflow-wrap: anywhere; }
 .fields .wide { grid-column: 1 / -1; }
-.fields .from-model dt::after { content: "模型抽取"; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 0 7px; }
+.fields .from-model dt::after { content: "系統辨識"; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 0 7px; }
 .text-block { white-space: pre-wrap; max-width: 80ch; }
 details.raw { margin-top: 12px; }
 details.raw summary { cursor: pointer; color: var(--primary); font-size: 13.5px; font-weight: 700; }
@@ -400,10 +400,12 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 
 /* assignee */
 .assignee-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.assignee-row { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 12px; align-items: center; border: 1.5px solid var(--line); border-radius: var(--radius-m); padding: 9px 14px; }
+.assignee-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(210px, 250px) max-content; gap: 12px; align-items: center; border: 1.5px solid var(--line); border-radius: var(--radius-m); padding: 9px 14px; }
 .assignee-row .rank { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-2); font-weight: 800; font-size: 13px; }
 .assignee-row .who { font-weight: 700; overflow-wrap: anywhere; }
 .assignee-row .sig { font-size: 12.5px; color: var(--ink-3); }
+.assignee-score { min-width: 0; }
+.assignee-score .score { grid-template-columns: 40px minmax(80px, 1fr) 42px; width: 100%; }
 .assignee-row.is-confirmed { border-color: transparent; background: var(--done-soft); }
 .manual-assign { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .manual-assign input { border: 1.5px solid var(--line-strong); border-radius: 999px; padding: 6px 14px; min-width: 240px; background: var(--surface); }
@@ -571,6 +573,8 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
   .span-2 { grid-column: auto; }
   .score { grid-template-columns: 60px 1fr 40px; }
   .assignee-row { grid-template-columns: 26px 1fr; }
+  .assignee-score { grid-column: 2; width: 100%; }
+  .assignee-row > .btn { grid-column: 2; justify-self: start; }
   .cand { grid-template-columns: 1fr; }
   .compare-grid { grid-template-columns: 1fr 1fr; }
   .compare-grid > .c-label { grid-column: 1 / -1; padding-bottom: 2px; border-top: 1px solid var(--line); }
@@ -793,9 +797,13 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .tag-patch { background: var(--primary-soft); color: var(--primary); }
 .tag-patch.is-resolved { background: var(--done-soft); color: var(--done); }
 
-/* The patch step is optional: dashed connector and node until it has run. */
-.track li:has(+ li[data-optional])::after { background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 11px); }
-.track li[data-optional][data-s="pending"] .node, .track li[data-optional][data-s="ready"] .node { border-style: dashed; }
+/* Keep one continuous visual path even when later steps are optional. */
+.track li:has(+ li[data-optional])::after { background: var(--line); }
+.track li[data-s="done"]:has(+ li[data-optional])::after,
+.track li[data-s="fallback"]:has(+ li[data-optional])::after,
+.track li[data-s="generated"]:has(+ li[data-optional])::after,
+.track li[data-s="resolved"]:has(+ li[data-optional])::after { background: #c9e9da; }
+.track li[data-optional][data-s="pending"] .node, .track li[data-optional][data-s="ready"] .node { border-style: solid; }
 .track li[data-optional][data-s="ready"] .node { border-color: var(--primary); color: var(--primary); }
 .track li[data-optional][data-s="generated"] .node, .track li[data-optional][data-s="resolved"] .node { background: var(--done); border-color: var(--done); color: #fff; }
 .track li[data-optional][data-s="generated"] .node::before, .track li[data-optional][data-s="resolved"] .node::before { content: "✓"; }

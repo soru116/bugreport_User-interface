@@ -210,9 +210,8 @@ class ProjectLocalizer:
                     None,
                 )
             day = reported[:10] if parse_time(reported) else ""
-            which = "當時的程式碼" if on_branch else "以前、這份 clone 裡最新的一個版本"
-            version_note = (f"這張 Ticket 沒有指定程式碼版本，改用回報日期 {day} {which}（commit {base_commit[:12]}）。"
-                            if day else f"這張 Ticket 沒有指定程式碼版本，也沒有回報日期，改用這份 clone 最新的版本（commit {base_commit[:12]}）。")
+            version_note = (f"這張 Ticket 沒有指定程式碼版本，系統已使用回報日期 {day} 當時的程式碼進行分析。"
+                            if day else "這張 Ticket 沒有指定程式碼版本與回報日期，系統已使用目前可用的最新程式碼進行分析。")
         if project.snapshots_dir and base_commit:
             snapshot = self.snapshot_project(project, base_commit)
             if isinstance(snapshot, str):
@@ -280,7 +279,7 @@ class ProjectLocalizer:
         }
         warnings = ([version_note] if version_note else []) + list(user_facing.get("warnings") or [])
         if raw.get("should_manual_review"):
-            warnings.append("定位信心未達自動化門檻，請工程師以候選清單為參考人工確認。")
+            warnings.append("定位信心較低，請先人工確認候選位置再進行修改。")
         return (
             stage_result(
                 stage="localization",

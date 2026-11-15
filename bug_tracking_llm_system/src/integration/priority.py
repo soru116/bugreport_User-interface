@@ -325,7 +325,7 @@ class TeamPriorityPredictor:
             module="主系統 DRONE/GRAY 固定權重 baseline（備援）",
             implementation="bug_tracking_llm_system/src/modules/priority_classifier.py",
             output=baseline,
-            warnings=["PRI 訓練模型未載入，改用主系統固定權重公式；此結果不是訓練模型的預測。"],
+            warnings=["歷史預測資源目前不可用，系統已改用固定評分規則；請將結果視為初步建議。"],
             fallback_reason=reason,
             started=started,
         )

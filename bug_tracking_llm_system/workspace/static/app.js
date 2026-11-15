@@ -16,9 +16,17 @@ const STATUS_TEXT = {
   pending: "尚未執行",
   running: "執行中…",
   done: "完成",
-  fallback: "完成，使用備援",
+  fallback: "完成，資料有限",
   skipped: "略過",
   failed: "失敗",
+};
+const STAGE_PURPOSE = {
+  extraction: "將回報內容整理成一致欄位，供後續流程使用。",
+  duplicate: "比對歷史 Ticket，協助判斷是否為同一問題。",
+  priority: "綜合回報內容與歷史資料，評估處理順序。",
+  assignee: "依問題領域與過往處理紀錄，推薦適合的負責人。",
+  localization: "從專案程式碼中找出最可能需要檢查的位置。",
+  patch: "根據定位結果產生修正方案，並完成基本安全檢查。",
 };
 const TICKET_STATUS = {
   new: ["尚未開始", ""],
@@ -32,11 +40,12 @@ const TICKET_STATUS = {
 const SIGNAL_TEXT = {
   component_history: "同元件處理紀錄",
   product_component_history: "同產品＋元件紀錄",
+  product_history: "同產品處理紀錄",
   text_similarity: "內容相似紀錄",
   component_owner_mapping: "元件負責人對照",
   global_prior: "整體處理量",
   file_ownership: "檔案負責人",
-  component_ownership: "元件 ownership",
+  component_ownership: "元件負責範圍",
 };
 const FACTOR_TEXT = {
   textual: "文本因子",
@@ -58,21 +67,21 @@ const FACTOR_TEXT = {
 const SEVERITY_TEXT = {
   blocker: "阻斷", critical: "嚴重", major: "重大", normal: "一般", minor: "輕微", trivial: "細微", enhancement: "功能需求", unknown: "未填",
 };
-const OLD_HISTORY_NOTE = "這一項只看這張 Ticket 建立時間往前推的一段期間。參考的歷史資料（設定檔的 priority.history_csv）如果比這張 Ticket 早很多，這段期間內就找不到任何回報，數值會是 0。組內目前的 Eclipse 歷史資料是 2001–2005 年的回報，新 Ticket 的建立時間是現在，所以通常是 0。這不是程式錯誤，但代表這一項沒有提供資訊。";
+const OLD_HISTORY_NOTE = "這一項只看這張 Ticket 建立時間往前推的一段期間。如果可用的歷史資料較早，這段期間可能找不到回報，數值便會是 0。這不是程式錯誤，但代表這一項沒有提供足夠資訊。";
 const NO_DATA_NOTE = "0 代表沒有資料，不是「P0」。優先級的數字是 P1 = 1 到 P5 = 5。";
 const FACTOR_GROUP_HELP = {
-  textual: ["從回報的文字判斷緊急程度", "文本因子看的是回報寫了什麼。PRI 把標題和描述轉成 TF-IDF 字詞特徵（單字與相鄰兩字），也會偵測 crash、hang、data loss、security、regression 等代表嚴重問題的關鍵字，以及 typo、enhancement 等通常比較不急的字詞。"],
+  textual: ["從回報的文字判斷緊急程度", "系統會分析標題與描述中的重要詞語，辨識當機、資料遺失、安全問題、功能退步等可能需要優先處理的情況。"],
   temporal: ["最近一段時間整體的回報量", "時間因子看的是這張 Ticket 建立前，整個專案最近有多少回報。短時間內大量回報，常代表新版本出問題或有問題大量爆發，同時也會影響工程師能分配給每張 Ticket 的時間。"],
   author: ["回報者過去的回報紀錄", "作者因子看的是同一位回報者以前回報過多少張、那些回報平均被排成什麼優先級。經驗多的回報者，或過去常回報緊急問題的人，回報的優先級往往有一定的傾向。"],
-  related_report: ["最像的歷史回報被排成什麼優先級", "相關報告因子先用 REP- 相似度找出和這張最像的歷史回報，再看它們被排成什麼優先級。REP- 比對標題與描述的字詞（BM25F，單字與相鄰兩字），並加上同產品、同元件的加權。內容很像的問題，優先級通常也接近。"],
+  related_report: ["最像的歷史回報被排成什麼優先級", "系統會比較標題、描述、產品與元件，找出內容最接近的歷史回報，再參考它們過去的處理順序。"],
   severity: ["回報者填寫的嚴重度", "嚴重度是「影響有多大」，優先級是「要多快處理」，兩者相關但不相同。例如 blocker 通常很急，但也可能因為只影響少數人而排在後面。"],
   product_component: ["同產品、同元件最近的狀況", "產品／元件因子看的是同一個產品或元件最近有多少回報、被排成什麼優先級。有些元件（例如核心模組）的問題通常比較急，最近問題很多的元件也值得注意。"],
 };
 const FACTOR_HELP = {
   summary_terms: {
     label: "標題清洗結果", group: "textual",
-    short: "標題清洗後的文字，模型用它算字詞特徵",
-    detail: "PRI 先把標題轉成小寫，把網址、Email、十六進位碼換成 <URL>、<EMAIL>、<HEX>，移除過長的 log 殘段與重複符號。之後模型再去掉 the、and 這類停用詞、做簡單的詞幹化（例如 crashes 變成 crash），把字詞轉成 TF-IDF 特徵。這裡顯示的是清洗後、轉成特徵前的文字。",
+    short: "系統整理後用來判斷優先級的標題文字",
+    detail: "系統會統一大小寫，將網址、Email 與識別碼改成通用標記，並移除過長的紀錄片段與重複符號。這裡顯示整理後、用於判斷優先級的文字。",
   },
   past_7d_count: {
     label: "過去 7 天的回報數", group: "temporal",
@@ -124,7 +133,7 @@ const FACTOR_HELP = {
   severity: {
     label: "嚴重度", group: "severity",
     short: "回報者填寫的嚴重度（blocker 到 enhancement）",
-    detail: "回報者填寫，或由轉換 JSON 步驟從內容抽取的嚴重度。等級由高到低是 blocker（阻斷）、critical（嚴重）、major（重大）、normal（一般）、minor（輕微）、trivial（細微）、enhancement（功能需求）。unknown 表示沒有填，模型會把它當成一個獨立的類別。",
+    detail: "回報者填寫，或由轉換 JSON 步驟從內容辨識的嚴重度。等級由高到低是 blocker（阻斷）、critical（嚴重）、major（重大）、normal（一般）、minor（輕微）、trivial（細微）、enhancement（功能需求）。unknown 表示沒有填，系統會將它視為一個獨立類別。",
   },
   product_past_30d_count: {
     label: "同產品過去 30 天的回報數", group: "product_component",
@@ -229,7 +238,7 @@ function renderModeNotice() {
   const notice = $("#modeNotice");
   notice.dataset.mode = mode;
   notice.textContent = mode === "automatic"
-    ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。模型或程式失敗時仍會停止。"
+    ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。處理失敗時仍會停止並顯示原因。"
     : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
 }
 
@@ -267,7 +276,7 @@ const QUEUE_PHASE = {
 function queueText(q, { short = false } = {}) {
   if (!q) return "";
   if (q.state === "running" && q.stopping) {
-    return short ? (q.deleting ? "這一步結束後刪除" : "這一步結束後停止") : `正在執行目前這一步，模型呼叫無法中途打斷；這一步結束後會${q.deleting ? "刪除這張 Ticket" : "停止"}（${fmtEta(q.eta_seconds)}）。`;
+    return short ? (q.deleting ? "這一步結束後刪除" : "這一步結束後停止") : `正在執行目前這一步，暫時無法中途停止；完成後會${q.deleting ? "刪除這張 Ticket" : "停止"}（${fmtEta(q.eta_seconds)}）。`;
   }
   if (q.state === "running") {
     const what = QUEUE_PHASE[q.phase] || "處理";
@@ -326,7 +335,7 @@ function tile(t, terms, showProject = false) {
     t.component ? `<span class="tag">${markTerms(t.component, terms)}</span>` : "",
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
-    t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="補丁和官方測試判定修好的補丁完全相同">官方修好</span>`
+    t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="已有完整測試通過紀錄">測試通過</span>`
       : t.patch && t.patch.patch_status === "generated" ? `<span class="tag tag-patch" title="已產生補丁，待人工審查">有補丁</span>` : "",
   ].join("");
   const picked = state.selecting && state.picked.has(t.key);
@@ -371,8 +380,8 @@ function folderList() {
 
 function folderCard(f) {
   const name = projectName(f.key);
-  const desc = f.key === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。"
-    : f.config ? (f.config.description || f.config.repo_path || "") : "設定檔沒有這個專案的 Repository，這些 Ticket 會略過錯誤定位。";
+  const desc = f.key === NO_PROJECT ? "匯入時沒有選擇專案，因此無法分析程式碼位置。"
+    : f.config ? (f.config.description || "已連結專案程式碼") : "此專案尚未連結程式碼，因此無法分析程式碼位置。";
   // Up to three papers peek out of the folder, coloured by the status of the most recent tickets.
   const papers = f.tickets.slice(0, 3).map((t, i) => `<i data-tone="${coverTone(t)}" style="--i:${i}"></i>`).join("");
   const stats = [
@@ -426,7 +435,7 @@ function renderInbox() {
     if (showFolders) return;
   } else {
     const config = state.projects.find((p) => p.project === state.folder);
-    const desc = state.folder === NO_PROJECT ? "匯入時沒有選專案，這些 Ticket 會略過錯誤定位。" : config ? [config.description, config.repo_path].filter(Boolean).join("　") : "設定檔沒有這個專案的 Repository，這些 Ticket 會略過錯誤定位。";
+    const desc = state.folder === NO_PROJECT ? "匯入時沒有選擇專案，因此無法分析程式碼位置。" : config ? (config.description || "已連結專案程式碼") : "此專案尚未連結程式碼，因此無法分析程式碼位置。";
     $("#homeHead").innerHTML = `<div class="folder-head">
         <a class="back-link" href="#/" title="回到所有專案" aria-label="回到所有專案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 8.5 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <div class="folder-head-text"><p class="crumb"><a href="#/">所有專案</a></p><h1 class="home-title">${esc(projectName(state.folder))}</h1>${desc ? `<p class="home-sub">${esc(desc)}</p>` : ""}</div>
@@ -816,22 +825,38 @@ function renderDetail() {
     <div class="tab-panel" id="tabPanel" role="tabpanel" tabindex="-1" aria-labelledby="tab-${esc(tab)}">${panel}</div>`;
 }
 
+function publicStageMessage(key, value, fallback = "處理失敗，請稍後重試；若持續發生，請聯絡系統管理員。") {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  const internal = /Ollama|Code Llama|gemma|codellama|repo_path|integration_config|git checkout|git repository|snapshot|base_commit|sha256|\bcommit\s+[0-9a-f]{7,40}\b|\bclone\b|\bAST\b|git apply|\bseed\b|TF-IDF|SBERT|BM25|\bPRI\b|routing gate|component-owner|SWE-bench|harness|模型\s*\S*\s*@/i;
+  if (!internal.test(text)) return text;
+  if (key === "localization" && /回報日期/.test(text)) {
+    const day = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    return `這張 Ticket 沒有指定程式碼版本，系統已使用${day ? `回報日期 ${day} ` : "回報日期"}當時的程式碼進行分析。`;
+  }
+  const messages = {
+    extraction: "Ticket 內容轉換服務目前無法使用，系統已改用基本資料繼續處理。",
+    duplicate: "部分歷史比對資料目前無法使用，系統已依現有資料完成判斷。",
+    priority: "優先級判定所需的部分資料目前無法使用，系統已依現有資訊完成判斷。",
+    assignee: "目前的分派依據不足，請確認建議負責人或改由人工分派。",
+    localization: "此專案的程式碼尚未準備完成，請聯絡系統管理員後重試。",
+    patch: "補丁生成所需的程式碼版本或服務尚未準備完成，請聯絡系統管理員後重試。",
+    commit: "提交訊息產生失敗，請重新產生；若持續發生，請聯絡系統管理員。",
+  };
+  return messages[key] || fallback;
+}
+
 function stageFrame(r, key, name, n, inner) {
   const stage = r.stages[key] || {};
   const s = stageStatus(r, key);
   const chipCls = { done: "chip-done", fallback: "chip-fallback", failed: "chip-failed", running: "chip-running" }[s] || "";
-  const warnings = (stage.warnings || []).length ? `<ul class="warn-list">${stage.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
-  const foot = stage.module ? `<div class="stage-foot">
-      <span>使用模組 <b>${esc(stage.module)}</b></span>
-      <span>程式 <code>${esc(stage.implementation)}</code></span>
-      ${stage.duration_ms != null ? `<span>耗時 ${(stage.duration_ms / 1000).toFixed(1)} 秒</span>` : ""}
-      ${stage.fallback_reason ? `<span>備援原因：${esc(stage.fallback_reason)}</span>` : ""}
-      ${stage.details && stage.details.reference_metrics ? `<span>參考成績：${esc(stage.details.reference_metrics)}</span>` : ""}
-    </div>` : "";
+  const stageWarnings = key === "assignee" && (r.decisions || {}).assignee ? [] : (stage.warnings || []);
+  const warnings = stageWarnings.length ? `<ul class="warn-list">${stageWarnings.map((w) => `<li>${esc(publicStageMessage(key, w, "部分資料目前無法使用，系統已依現有資訊繼續處理。"))}</li>`).join("")}</ul>` : "";
+  const foot = STAGE_PURPOSE[key] ? `<div class="stage-foot"><span>${esc(STAGE_PURPOSE[key])}</span></div>` : "";
   let content;
   if (s === "pending") content = `<p class="stage-pending">${key === "localization" || key === "priority" || key === "assignee" ? "等前面的步驟完成後執行。" : "尚未執行。"}</p>`;
   else if (s === "running") content = `<p class="stage-pending">正在執行，完成後會自動更新。</p>`;
-  else if (s === "failed") content = `<p class="err">${esc(stage.error)}</p>`;
+  else if (s === "failed") content = `<p class="err">${esc(publicStageMessage(key, stage.error))}</p>`;
   else content = warnings + inner(stage.output || {}, stage);
   return `<section class="stage" id="stage-${key}">
     <div class="stage-head"><h3><span class="num">${n}</span>${name}</h3><span class="chip ${chipCls}">${esc(STATUS_TEXT[s] || s)}</span></div>
@@ -866,9 +891,8 @@ function renderExtraction(r, o, st) {
     const fromModel = llm && (raw[k] == null || raw[k] === "" || (Array.isArray(raw[k]) && !raw[k].length));
     return `<div class="${cls.replace("mono", "")} ${fromModel ? "from-model" : ""}"><dt>${label}</dt><dd class="${cls.includes("mono") ? "mono" : ""} ${cls.includes("wide") ? "text-block" : ""}">${esc(v)}</dd></div>`;
   }).join("");
-  const rawOutput = st.details && st.details.llm_raw_output ? `<details class="raw"><summary>Code Llama 原始輸出</summary><pre>${esc(st.details.llm_raw_output)}</pre></details>` : "";
   return `<dl class="fields">${cells}</dl>
-    <details class="raw"><summary>原始匯入內容</summary><pre>${esc(JSON.stringify(raw, null, 2))}</pre></details>${rawOutput}`;
+    <details class="raw"><summary>查看原始匯入內容</summary><pre>${esc(JSON.stringify(raw, null, 2))}</pre></details>`;
 }
 
 function scoreRow(label, value) {
@@ -883,7 +907,7 @@ function renderDuplicate(r, o) {
   const marks = r.review_marks || {};
   const decisionLine = decision ? `<p class="confirmed-line">${decision.decision === "duplicate"
       ? `已確認為 <b class="mono">${esc(decision.duplicate_of || "")}</b> 的重複`
-      : "已確認不是重複"}（${esc({ engineer: "工程師確認", auto_threshold: "超過自動門檻", no_candidates: "沒有可比對的歷史資料", below_review_threshold: "低於複核門檻" }[decision.by] || decision.by)}，${esc(fmtTime(decision.at))}）</p>` : "";
+      : "已確認不是重複"}（${esc({ engineer: "工程師確認", "workspace:auto": "系統自動確認", auto_threshold: "系統自動確認", no_candidates: "沒有可比對的歷史資料", below_review_threshold: "系統自動確認" }[decision.by] || "系統確認")}，${esc(fmtTime(decision.at))}）</p>` : "";
   if (!cands.length) return `<p>${esc(o.decision_policy || "沒有找到相似的歷史 Ticket。")}</p>${decisionLine}`;
   const item = (c, index) => {
     const matches = Object.entries(c.metadata_match || {}).filter(([, v]) => v).map(([k]) => ({ product: "同產品", component: "同元件", severity: "同嚴重度" }[k]));
@@ -908,7 +932,7 @@ function renderDuplicate(r, o) {
   const summary = possible.length
     ? `<p class="marked-summary">你標註為可能重複的：${possible.map((c) => `<b class="mono">${esc(c.ticket_id)}</b>`).join("、")}。打開並排比對後，可以在視窗裡確認是哪一張。</p>` : "";
   const hint = awaiting ? "點任一張候選，會並排顯示新 Ticket 和那張歷史 Ticket 的完整內容。" : "";
-  return `<p class="hint">${esc(o.decision_policy || "")}；比對了 ${o.history_size ?? "?"} 張${o.project_scope ? `「${esc(o.project_scope)}」及未標專案的` : ""}歷史 Ticket${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `比這張晚建立的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).length ? `（已略過${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `比這張晚建立的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).join("、")}）` : ""}。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
+  return `<p class="hint">系統已比對 ${o.history_size ?? "?"} 張${o.project_scope ? `「${esc(o.project_scope)}」及未標專案的` : ""}歷史 Ticket${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `比這張晚建立的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).length ? `（未使用${[o.other_project_rows_skipped ? `其他專案 ${o.other_project_rows_skipped} 張` : "", o.later_rows_skipped ? `建立時間較晚的 ${o.later_rows_skipped} 張` : ""].filter(Boolean).join("、")}）` : ""}。${hint}</p>${summary}<ol class="cands" style="margin-top:10px">${head}</ol>${more}${decisionLine}`;
 }
 
 /* ---------------------------------------------------- compare dialog */
@@ -995,7 +1019,7 @@ function renderCompare() {
 
   $("#comparePos").textContent = `候選 ${compare.index + 1} / ${cands.length}　第 ${c.rank} 名`;
   $("#compareTitle").innerHTML = `<span class="mono">${esc(r.ticket_id)}</span> 對照 <span class="mono">${esc(c.ticket_id)}</span>`;
-  $("#compareScores").innerHTML = `<span>相似度 <b>${num(c.similarity)}</b></span><span>標題 <b>${num(c.title_similarity)}</b></span><span>內容 <b>${num(c.content_similarity)}</b></span><span>TF-IDF <b>${num(c.tfidf_similarity)}</b></span><span>共同字詞 <b>${shared.size}</b> 個</span>${hist.__partial ? "<span>（找不到完整的歷史資料，只顯示候選摘要）</span>" : ""}`;
+  $("#compareScores").innerHTML = `<span>整體相似度 <b>${num(c.similarity)}</b></span><span>標題 <b>${num(c.title_similarity)}</b></span><span>內容 <b>${num(c.content_similarity)}</b></span><span>共同字詞 <b>${shared.size}</b> 個</span>${hist.__partial ? "<span>（找不到完整的歷史資料，只顯示候選摘要）</span>" : ""}`;
 
   const cell = (value, kind, cls, same) => {
     if (!value) return `<div class="${cls} c-empty${same ? " is-same" : ""}" role="cell">未提供</div>`;
@@ -1076,7 +1100,7 @@ function renderPriority(o) {
       }
       return `<div class="factor">${head}<dl>${Object.entries(vals).map(([k, v]) => {
         const h = FACTOR_HELP[k];
-        const label = h ? `${esc(h.label)}<small>${esc(k)}</small>` : esc(k);
+        const label = h ? esc(h.label) : "其他參考資訊";
         return `<dt><button type="button" class="fx" data-factor-help="${esc(k)}" data-tip="${esc(h ? h.short : "點一下看說明")}">${label}</button></dt><dd>${esc(factorValueText(k, v))}</dd>`;
       }).join("")}</dl></div>`;
     }).join("");
@@ -1106,14 +1130,14 @@ function openFactorHelp(target) {
       if (!historyNoteShown) { historyNoteShown = true; return text; }
       return "原因和前面相同：參考的歷史資料比這張 Ticket 早很多，這段期間內找不到任何回報。" + text.slice(OLD_HISTORY_NOTE.length);
     };
-    html = `<p class="fx-intro">這些數字是 PRI 模型的<b>輸入特徵</b>：模型從 Eclipse 歷史資料學會怎麼組合它們來判斷優先級，所以單看某一項的大小，不能直接看出它把結果推向哪一級，也不是各因子的貢獻比例。畫面只列出幾項代表性的特徵，模型實際用到的更多，例如過去 1／3 天的回報數、各優先級所占比例、錯誤關鍵字。</p>` +
+    html = `<p class="fx-intro">這些資料是系統判斷優先級時的參考依據。單一數值不代表最後結果，也不是各項因素的貢獻比例；系統會綜合文字內容、時間、回報者紀錄與相似歷史問題後判定。</p>` +
       Object.entries(o.factor_values).map(([name, vals]) => {
         const [, groupDetail] = FACTOR_GROUP_HELP[name] || ["", ""];
         const items = Object.entries(vals).map(([k, v]) => {
           const h = FACTOR_HELP[k] || { label: k, detail: "這一項沒有說明。" };
           const isZero = v === 0 || v === "0";
           return `<article class="fx-item" data-help-key="${esc(k)}">
-            <header><h4>${esc(h.label)}</h4><code>${esc(k)}</code><span class="fx-value">${k === "summary_terms" ? "見下方" : `這張：<b>${esc(factorValueText(k, v))}</b>`}</span></header>
+            <header><h4>${esc(h.label)}</h4><span class="fx-value">${k === "summary_terms" ? "見下方" : `這張：<b>${esc(factorValueText(k, v))}</b>`}</span></header>
             <p>${esc(h.detail)}</p>
             ${k === "summary_terms" ? `<p class="fx-sample">${esc(v || "（空白）")}</p>` : ""}
             ${isZero && h.zero ? `<p class="fx-zero"><b>為什麼是 0？</b>${esc(zeroNote(h.zero))}</p>` : ""}
@@ -1122,11 +1146,11 @@ function openFactorHelp(target) {
         return `<section class="fx-group" data-help-key="group:${esc(name)}"><h3>${esc(FACTOR_TEXT[name] || name)}</h3><p class="fx-group-desc">${esc(groupDetail)}</p>${items}</section>`;
       }).join("");
   } else if (o.factor_scores) {
-    html = `<p class="fx-intro">這張 Ticket 的優先級是用<b>備援公式</b>算的（主系統的 PriorityClassifier），不是 PRI 訓練好的模型。六個因子各算出 0 到 1 的分數，越接近 1 越緊急，再依下面的權重加總：0.85 以上是 P1，0.65 以上是 P2，0.40 以上是 P3，以此類推。</p>` +
+    html = `<p class="fx-intro">目前可用的歷史資料有限，因此系統改用固定評分規則。六項因素各產生 0 到 1 的分數，越接近 1 代表越需要優先處理，再依權重合併為最後等級。</p>` +
       Object.entries(o.factor_scores).map(([k, v]) => {
         const [weight, short, detail] = FALLBACK_FACTOR_HELP[k] || ["—", k, "這一項沒有說明。"];
         return `<article class="fx-item" data-help-key="score:${esc(k)}">
-          <header><h4>${esc(FACTOR_TEXT[k] || k)}</h4><code>${esc(k)}</code><span class="fx-value">權重 <b>${esc(weight)}</b>，這張 <b>${esc(num(v, 2))}</b></span></header>
+          <header><h4>${esc(FACTOR_TEXT[k] || "其他參考資訊")}</h4><span class="fx-value">影響比重 <b>${esc(weight)}</b>，這張 <b>${esc(num(v, 2))}</b></span></header>
           <p><b>${esc(short)}。</b>${esc(detail)}</p></article>`;
       }).join("");
   } else {
@@ -1160,12 +1184,18 @@ function renderAssignee(r, o) {
   const rows = details.map((d, i) => `<li class="assignee-row ${confirmed && confirmed.assignee === d.assignee ? "is-confirmed" : ""}">
       <span class="rank">${i + 1}</span>
       <div><div class="who">${esc(d.assignee)}</div><div class="sig">${(d.signals || []).map((s) => esc(SIGNAL_TEXT[s] || s)).join("、")}</div></div>
-      <div style="width:140px">${scoreRow("分數", (d.score || 0) / top).replace(/<b>.*<\/b>/, `<b>${num(d.score, 2)}</b>`)}</div>
+      <div class="assignee-score">${scoreRow("分數", (d.score || 0) / top).replace(/<b>.*<\/b>/, `<b>${num(d.score, 2)}</b>`)}</div>
       ${canConfirm ? `<button class="btn btn-quiet btn-small" data-action="assign" data-who="${esc(d.assignee)}" data-decision="${i === 0 ? "accept" : "override"}">${i === 0 ? "採用建議" : "改派給他"}</button>` : "<span></span>"}
     </li>`).join("");
-  const routing = { assigned: "已依模型分派", assigned_by_fallback: "以 fallback 規則分派", needs_manual_triage: "建議人工分派" }[o.routing_status] || o.routing_status || "";
-  return `<p style="margin-bottom:10px">${esc(routing)}${o.suggested_assignee ? `：建議 <b>${esc(o.suggested_assignee)}</b>` : ""}${o.confidence != null ? `（信心 ${num(o.confidence, 2)}）` : ""}</p>
-    ${o.reason ? `<p class="hint" style="margin-bottom:10px">${esc(o.reason)}</p>` : ""}
+  const routing = confirmed ? "已指定負責人" : ({ assigned: "已自動選出負責人", assigned_by_fallback: "已依領域與處理紀錄選出負責人", needs_manual_triage: "需要人工指定負責人" }[o.routing_status] || "負責人建議");
+  const reason = confirmed
+    ? "負責人已確認；候選名單保留供需要改派時參考。"
+    : o.routing_status === "needs_manual_triage"
+    ? "目前資料不足以自動確認，請從候選名單選擇或手動指定。"
+    : "候選順序綜合問題領域、過往處理紀錄與內容相似度。";
+  const displayedAssignee = confirmed ? confirmed.assignee : o.suggested_assignee;
+  return `<p style="margin-bottom:10px">${esc(routing)}${displayedAssignee ? `：<b>${esc(displayedAssignee)}</b>` : ""}${!confirmed && o.confidence != null ? `（信心 ${num(o.confidence, 2)}）` : ""}</p>
+    <p class="hint" style="margin-bottom:10px">${esc(reason)}</p>
     ${historyNote(r)}
     ${rows ? `<ol class="assignee-list">${rows}</ol>` : "<p class=\"hint\">沒有可推薦的候選人。</p>"}
     ${canConfirm ? `<div class="manual-assign"><input id="manualAssignee" placeholder="或輸入其他負責人的 email／帳號" aria-label="指定負責人"><button class="btn btn-quiet btn-small" data-action="assign-manual">指定這位負責人</button></div>` : ""}
@@ -1176,13 +1206,13 @@ function renderAssignee(r, o) {
    deliberate, confirmed move: the ticket changes folder, and it only makes sense when the ticket
    really belongs to that project. */
 function locControls(r) {
-  if (!state.projects.length) return `<p class="hint" style="margin-top:10px">設定檔裡還沒有任何專案，請在 integration_config.json 的 projects 加入 repo_path。</p>`;
+  if (!state.projects.length) return `<p class="hint" style="margin-top:10px">尚未連結任何專案程式碼，請聯絡系統管理員完成設定。</p>`;
   const current = r.project || "";
   const hasCode = state.projects.some((p) => p.project === current);
   const others = state.projects.filter((p) => p.project !== current);
   const rerun = hasCode
     ? `<div class="loc-controls"><button class="btn btn-quiet btn-small" data-action="localize" data-project="${esc(current)}">${r.stages.localization.status === "done" ? "重新定位" : "執行錯誤定位"}</button><span class="hint">使用「${esc(current)}」的程式碼</span></div>`
-    : `<p class="loc-note">${current ? `要定位這張 Ticket，請在設定檔 projects 加入「${esc(current)}」的 repo_path，再按「執行錯誤定位」。` : "要定位這張 Ticket，請先指定它屬於哪個專案。"}如果它其實屬於下面某個專案，也可以手動改過去。</p>`;
+    : `<p class="loc-note">${current ? `「${esc(current)}」尚未連結程式碼，請聯絡系統管理員完成設定後再試。` : "要分析程式碼位置，請先指定這張 Ticket 所屬的專案。"}如果它屬於下面某個專案，也可以手動改過去。</p>`;
   const options = `<option value="">請選擇專案</option>` + others.map((p) => `<option value="${esc(p.project)}">${esc(p.project)}</option>`).join("");
   const other = others.length ? `<details class="loc-other">
       <summary>${hasCode ? "改用其他專案的程式碼定位…" : "手動指定專案…"}</summary>
@@ -1199,38 +1229,42 @@ function renderLocalization(r, o, projectOptions) {
   const level = { high: "高", medium: "中", low: "低" }[o.confidence_level] || o.confidence_level || "—";
   const symbols = (o.ranked_symbols || []).map((s) => {
     const lines = String(s.code || "").split("\n").map((line) => `<span>${esc(line)}</span>`).join("");
+    const why = String(s.reason || "").toLowerCase();
+    const reason = why.includes("stack") ? "符合錯誤紀錄中的檔案或行號"
+      : why.includes("identifier") ? "符合回報中的函式或類別名稱"
+      : "與回報內容及程式碼線索相符";
     return `<li><details class="symbol" ${s.rank === 1 ? "open" : ""}><summary>
         <span class="rank">${s.rank}</span>
         <span class="path">${esc(s.file_path)} <b>${esc(s.symbol_qualified_name || "")}</b></span>
         <span class="lines">第 ${s.start_line}–${s.end_line} 行，分數 ${num(s.score)}</span>
-        <span class="why">${esc(s.reason || "")}</span></summary>
+        <span class="why">${esc(reason)}</span></summary>
         <pre class="code" style="--start:${Math.max(0, (s.start_line || 1) - 1)}">${lines}</pre></details></li>`;
   }).join("");
   return `<div class="loc-summary">
       <span>定位信心 <span class="chip ${o.confidence_level === "high" ? "chip-done" : o.confidence_level === "low" ? "chip-failed" : "chip-fallback"}">${esc(level)}</span></span>
       <span>分數 <b class="mono">${num((o.confidence || {}).confidence_score)}</b></span>
       <span>${o.should_manual_review ? "需要人工確認" : "可直接參考"}</span>
-      <span>Repository <b>${esc(o.repository || o.project)}</b> <code>${esc(String(o.base_commit || "").slice(0, 10))}</code></span>
+      <span>分析專案 <b>${esc(o.repository || o.project)}</b></span>
     </div>
-    ${summary.message ? `<p class="hint" style="margin-bottom:10px">${esc(summary.message)}</p>` : ""}
+    <p class="hint" style="margin-bottom:10px">${o.confidence_level === "high" ? "定位結果較明確，請優先檢查排名最前的程式位置。" : "定位結果仍有不確定性，請比較候選位置後再決定修改範圍。"}</p>
     ${symbols ? `<ol class="symbols">${symbols}</ol>` : `<p>沒有找到候選位置。</p>`}
-    ${(o.engineering_guidance || []).length ? `<ul class="guidance">${o.engineering_guidance.map((g) => `<li>${esc(g)}</li>`).join("")}</ul>` : ""}
+    ${symbols ? `<ul class="guidance"><li>請先檢查排名最前的程式位置，並將修改範圍控制在必要區域。</li></ul>` : ""}
     ${r.busy ? "" : locControls(r, projectOptions)}`;
 }
 
 /* ------------------------------------------------------------------ patch */
-const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "官方修好" };
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "測試通過" };
 const COMMIT_TAB_TEXT = { pending: "等待補丁", running: "產生中…", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
-  rewrite_no_change: "模型回傳原本的函式，沒有修改",
+  rewrite_no_change: "方案沒有包含實際修改",
   duplicate: "和前一個候選完全相同",
   signature_changed: "改動了函式的參數（簽名），不允許",
-  rewrite_contract_violation: "輸出格式不符規定（例如多了 Markdown 標記）",
+  rewrite_contract_violation: "輸出格式不符合要求",
   undefined_name: "用到不存在的名稱",
-  context_budget_exceeded: "函式太長，超過模型一次能讀的長度",
+  context_budget_exceeded: "函式內容過長，無法在單次處理中完成",
   truncated_or_incomplete: "輸出被截斷，函式沒寫完",
-  no_executable_change: "只改了註解或 docstring",
+  no_executable_change: "只修改了說明文字，沒有程式行為變更",
 };
 
 function patchTabState(r) {
@@ -1278,9 +1312,9 @@ const COMMIT_TEXTS = new Map();
 
 function commitEvidenceNote(commit) {
   const evidence = commit.test_evidence || {};
-  if (evidence.official_swebench_harness === "resolved") return "這個補丁和官方測試判定修好的補丁完全相同，所以附上驗證紀錄。";
-  if (evidence.official_swebench_harness === "unresolved") return "這個補丁官方測試判定沒有修好；訊息只描述改了什麼。";
-  return "沒有測試證據，所以訊息只描述補丁改了什麼，不會說已經修好。";
+  if (evidence.official_swebench_harness === "resolved") return "已有完整測試通過紀錄，因此提交訊息包含驗證資訊。";
+  if (evidence.official_swebench_harness === "unresolved") return "完整測試未通過，因此提交訊息只描述程式變更。";
+  return "尚未執行完整測試，因此提交訊息只描述程式變更。";
 }
 
 function commitRegenerate(r, source, label = "重新產生提交訊息") {
@@ -1290,7 +1324,7 @@ function commitRegenerate(r, source, label = "重新產生提交訊息") {
 function commitMessageBox(r, commit, source) {
   if (!commit || commit.status === "skipped") return "";
   if (commit.status !== "generated" || !commit.commit_message) {
-    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source)}</div><p class="err">${esc(commit.error || "提交訊息生成失敗")}</p></div>`;
+    return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source)}</div><p class="err">${esc(publicStageMessage("commit", commit.error, "提交訊息產生失敗，請重新產生。"))}</p></div>`;
   }
   const text = String(commit.full_message || commit.commit_message);
   const id = `c${COMMIT_TEXTS.size + 1}`;
@@ -1298,7 +1332,7 @@ function commitMessageBox(r, commit, source) {
   return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>
       <span class="patch-tools"><button type="button" class="btn btn-primary btn-small" data-copy-commit="${id}">複製提交訊息</button>${commitRegenerate(r, source)}</span></div>
     <pre class="commit-msg">${esc(text)}</pre>
-    <p class="hint">${esc(commitEvidenceNote(commit))} 由 <code>${esc(commit.model || "Code Llama-Instruct")}</code> 根據這份補丁產生，提交前請人工審查；工作台不會執行 git commit。</p></div>`;
+    <p class="hint">${esc(commitEvidenceNote(commit))} 此內容依 Ticket 與補丁自動產生，提交前請人工審查；工作台不會自動提交變更。</p></div>`;
 }
 
 function renderCommitStage(r, n) {
@@ -1312,15 +1346,15 @@ function renderCommitStage(r, n) {
   } else if (state === "running") {
     content = `<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p>`;
   } else if (state === "failed") {
-    content = `<p class="err">${esc(commit.error || "提交訊息生成失敗")}</p><p class="hint">補丁仍然保留。</p><div class="loc-controls">${commitRegenerate(r, "current")}</div>`;
+    content = `<p class="err">${esc(publicStageMessage("commit", commit.error, "提交訊息產生失敗，請重新產生。"))}</p><p class="hint">補丁仍然保留。</p><div class="loc-controls">${commitRegenerate(r, "current")}</div>`;
   } else if (state === "skipped" && stageStatus(r, "patch") === "skipped") {
     content = `<p class="stage-pending">補丁生成被略過，所以沒有提交訊息。</p>`;
   } else if (state === "skipped") {
-    content = `<p class="stage-pending">提交訊息功能已停用；可在 integration_config.json 的 commit_message.enabled 開啟。</p>`;
+    content = `<p class="stage-pending">提交訊息功能目前未啟用，請聯絡系統管理員。</p>`;
   } else if (state === "none") {
     content = `<p class="stage-pending">沒有通過檢查的補丁，因此不會生成提交訊息。</p>`;
   } else {
-    content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動使用 Code Llama-Instruct 生成一句提交訊息。</p>`;
+    content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動產生提交訊息草稿。</p>`;
   }
   return `<section class="stage" id="stage-commit">
     <div class="stage-head"><h3><span class="num">${n}</span>提交訊息</h3><span class="chip ${chipCls}">${esc(COMMIT_TAB_TEXT[state] || state)}</span></div>
@@ -1333,7 +1367,7 @@ function patchTools(patch, filename, source) {
   PATCH_TEXTS.set(id, { patch: String(patch || ""), filename, source });
   return `<div class="patch-tools">
       <button type="button" class="btn btn-primary btn-small" data-copy-code="${id}" title="套用補丁後的完整函式，可以直接貼上">複製修改後的程式碼</button>
-      <button type="button" class="btn btn-quiet btn-small" data-copy-patch="${id}" title="unified diff，可用 git apply 套用">複製補丁</button>
+      <button type="button" class="btn btn-quiet btn-small" data-copy-patch="${id}" title="複製可套用的程式差異">複製補丁</button>
       <button type="button" class="btn btn-quiet btn-small" data-download-patch="${id}">下載 .diff</button>
     </div>`;
 }
@@ -1376,7 +1410,7 @@ function commitBox(r, source) {
   const queued = r.queue && r.queue.phase === "commit";
   if (!draft && !queued) {
     return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, source, "產生提交訊息")}</div>
-      <p class="hint">用 Code Llama 根據這個補丁和 Ticket 內容，寫一行 Conventional Commit 訊息，大約幾秒鐘。</p></div>`;
+      <p class="hint">系統會根據 Ticket 與補丁內容產生一行提交訊息草稿，通常只需幾秒鐘。</p></div>`;
   }
   if (queued || draft.status === "running") {
     return `<div class="commit-box"><div class="commit-head"><b>提交訊息</b></div><p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生提交訊息…"}</p></div>`;
@@ -1394,25 +1428,11 @@ function diffHtml(patch) {
 
 function officialBox(official, { mine = true } = {}) {
   if (!official) {
-    return mine ? `<div class="verdict verdict-none"><b>沒有官方判定</b><span>這個補丁沒有送過官方 SWE-bench 測試，只通過了語法、AST 與 git apply 檢查。</span></div>` : "";
+    return mine ? `<div class="verdict verdict-none"><b>尚未執行完整測試</b><span>目前已完成程式結構與補丁套用檢查，合併前仍需執行功能與回歸測試。</span></div>` : "";
   }
   const ok = official.official_resolved === true;
-  return `<div class="verdict ${ok ? "verdict-ok" : "verdict-ng"}"><b>官方 SWE-bench 測試：${ok ? "修好了" : "沒有修好"}</b>
-    <span>${ok ? "FAIL_TO_PASS 全部通過，PASS_TO_PASS 沒有退步。" : "官方測試沒有全部通過。"}${mine ? "這個補丁和送測的補丁 sha256 完全相同，所以可以引用這個判定。" : ""}</span>
-    <span class="hint">判定紀錄 <code>${esc(official.run_id || "")}</code></span></div>`;
-}
-
-function experimentBox(r, exp, currentSha, filename) {
-  if (!exp) return "";
-  const head = `<h4 class="sub-head">36 題實驗中的紀錄 <code>${esc(exp.experiment)}</code></h4>`;
-  if (!exp.generated) return `<div class="exp-box">${head}<p class="hint">這張 Ticket 是 36 題開發集的一題，那一輪沒有產生通過檢查的補丁。</p></div>`;
-  const same = currentSha && exp.patch_sha256 === currentSha;
-  const relation = currentSha ? (same ? "和這次產生的補丁<b>完全相同</b>。" : "和這次產生的補丁<b>不同</b>：同樣的設定重跑，模型輸出不一定一樣。") : "";
-  return `<div class="exp-box">${head}
-    <p class="hint">這是官方修好 6/36 那一輪對這張 Ticket 產生的補丁。${relation}</p>
-    ${officialBox(exp.official, { mine: false })}
-    <details class="raw"><summary>那一輪的補丁（sha256 ${esc(exp.patch_sha256.slice(0, 12))}）</summary>${patchTools(exp.patch, filename, "experiment")}${diffHtml(exp.patch)}</details>
-    ${commitBox(r, "experiment")}</div>`;
+  return `<div class="verdict ${ok ? "verdict-ok" : "verdict-ng"}"><b>完整測試：${ok ? "通過" : "未通過"}</b>
+    <span>${ok ? "問題驗證與既有功能測試均通過。" : "測試尚未全部通過，請先修正再合併。"}</span></div>`;
 }
 
 function renderPatchStage(r, n) {
@@ -1423,57 +1443,52 @@ function renderPatchStage(r, n) {
   const loc = (r.stages.localization || {}).output || {};
   const chipCls = { resolved: "chip-done", generated: "chip-done", none: "chip-fallback", failed: "chip-failed", running: "chip-running" }[tabState] || "";
   const level = { high: "高", medium: "中", low: "低" }[loc.confidence_level] || loc.confidence_level || "—";
-  const method = `<p class="patch-method">用錯誤定位排名最前、可以改寫的函式，請 <b>gemma4:12b</b> 重寫整個函式，產生 <b>3 個候選</b>；通過語法、AST 與 git apply 檢查的候選中，取改動最少的一個。設定和官方修好 6/36 題的那一輪相同（fixed-patch <code>5cdb2be</code>）。</p>`;
+  const method = `<p class="patch-method">系統會依錯誤定位結果產生多個修正方案，完成程式結構與套用檢查後，選擇改動範圍最小的方案。</p>`;
   const button = (again) => `<button class="btn ${again ? "btn-quiet" : "btn-primary"} btn-small" data-action="patch" ${again ? 'data-again="1"' : ""} ${r.busy || !locDone ? "disabled" : ""}>${again ? "重新產生" : "產生補丁"}</button>`;
   let content;
   if (s === "running" || (r.queue && r.queue.phase === "patch")) {
     content = `${method}<p class="stage-pending">${r.queue ? esc(queueText(r.queue)) : "正在產生補丁，完成後會自動更新。"}</p>`;
   } else if (s === "pending") {
     const lowNote = locDone && loc.confidence_level !== "high"
-      ? `<p class="loc-note">這張 Ticket 的錯誤定位信心是「${esc(level)}」。正式流程只在高信心時才產生補丁；這裡照 6/36 實驗的研究模式也會產生，但結果一定要人工審查。</p>` : "";
+      ? `<p class="loc-note">這張 Ticket 的定位信心是「${esc(level)}」，產生的補丁需要人工審查。</p>` : "";
     content = locDone
-      ? `${method}${lowNote}<div class="loc-controls">${button(false)}<span class="hint">一張大約幾分鐘，需要這台電腦的 Ollama 已安裝 gemma4:12b。</span></div>`
+      ? `${method}${lowNote}<div class="loc-controls">${button(false)}<span class="hint">通常需要幾分鐘，完成後會自動更新。</span></div>`
       : `${method}<p class="stage-pending">要先完成錯誤定位，才能產生補丁。</p>`;
   } else if (s === "failed") {
-    content = `<p class="err">${esc(stage.error || "")}</p>${method}<div class="loc-controls">${button(false)}</div>`;
+    content = `<p class="err">${esc(publicStageMessage("patch", stage.error))}</p>${method}<div class="loc-controls">${button(false)}</div>`;
   } else if (s === "skipped") {
-    const why = (stage.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    const why = (stage.warnings || []).map((w) => `<li>${esc(publicStageMessage("patch", w, "補丁未產生，請確認前一步結果後重試。"))}</li>`).join("");
     content = `<ul class="warn-list">${why}</ul>${method}${locDone ? `<div class="loc-controls">${button(false)}</div>` : ""}`;
   } else {
     const o = stage.output || {};
-    const warnings = (stage.warnings || []).length ? `<ul class="warn-list">${stage.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
+    const patchWarnings = (stage.warnings || []).filter((w) => !/\bAST\b|git apply|沒有跑過測試|不等於「修好」|尚未執行完整測試|SWE-bench|harness|官方測試/i.test(String(w)));
+    const warnings = patchWarnings.length ? `<ul class="warn-list">${patchWarnings.map((w) => `<li>${esc(publicStageMessage("patch", w, "部分檢查尚未完成，請在合併前人工審查。"))}</li>`).join("")}</ul>` : "";
     const target = o.bug_location || {};
     const generated = (o.candidates || []).filter((c) => c.status === "generated").length;
-    const candRows = (o.candidates || []).map((c) => `<tr class="${c.candidate_id === o.selected_candidate_id ? "is-selected" : ""}">
-        <td>${esc(c.candidate_id)}</td><td class="mono">${esc(c.seed)}</td>
-        <td>${c.status === "generated" ? (c.candidate_id === o.selected_candidate_id ? "<b>選用</b>" : "通過檢查") : "被擋下"}</td>
+    const candRows = (o.candidates || []).map((c, index) => `<tr class="${c.candidate_id === o.selected_candidate_id ? "is-selected" : ""}">
+        <td>${index + 1}</td>
+        <td>${c.status === "generated" ? (c.candidate_id === o.selected_candidate_id ? "<b>已選用</b>" : "基本檢查通過") : "未通過檢查"}</td>
         <td>${esc(patchReason(c.reason)) || (c.modified_files || []).map(esc).join("、")}</td></tr>`).join("");
     const summary = `<div class="loc-summary">
         <span>結果 <span class="chip ${chipCls}">${esc(PATCH_TAB_TEXT[tabState] || tabState)}</span></span>
         <span>改寫目標 <b class="mono">${esc(target.file || "—")}</b> <b>${esc(target.function || "")}</b>${o.target_rank ? `（定位第 ${esc(o.target_rank)} 名${o.target_fallback_used ? "，前面的候選不能改寫" : ""}）` : ""}</span>
-        <span>候選 ${generated} / ${(o.candidates || []).length} 個通過檢查</span>
+        <span>${generated} / ${(o.candidates || []).length} 個修正方案通過基本檢查</span>
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
     const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">sha256 ${esc(String(o.patch_sha256 || "").slice(0, 12))}，修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">提交訊息草稿在第 7 步「提交訊息」。</p>`
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">提交訊息草稿在第 7 步「提交訊息」。</p>`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
-      .map((c) => `<details class="raw"><summary>候選 ${esc(c.candidate_id)} 的補丁（也通過檢查，但改動較多）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
+      .map((c, index) => `<details class="raw"><summary>其他可用方案 ${index + 1}（改動範圍較大）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
     content = `${warnings}${summary}${diff}
-      <h4 class="sub-head">${(o.candidates || []).length} 個候選</h4>
-      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>seed</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
+      <h4 class="sub-head">修正方案檢查結果</h4>
+      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
       <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
   }
-  const exp = experimentBox(r, r.patch_experiment, s === "done" ? ((stage.output || {}).patch_sha256 || "") : "", diffFileName(r, "-experiment"));
-  const foot = stage.module && s !== "running" ? `<div class="stage-foot">
-      <span>使用模組 <b>${esc(stage.module)}</b></span>
-      <span>程式 <code>${esc(stage.implementation || "")}</code></span>
-      ${stage.duration_ms != null ? `<span>耗時 ${(stage.duration_ms / 1000).toFixed(1)} 秒</span>` : ""}
-      ${(stage.output || {}).model && stage.output.model.model ? `<span>模型 <code>${esc(stage.output.model.model)}</code></span>` : ""}
-    </div>` : "";
+  const foot = s !== "running" ? `<div class="stage-foot"><span>${esc(STAGE_PURPOSE.patch)}</span></div>` : "";
   return `<section class="stage" id="stage-patch">
     <div class="stage-head"><h3><span class="num">${n}</span>補丁生成</h3><span class="chip ${chipCls}">${esc(PATCH_TAB_TEXT[tabState] || STATUS_TEXT[tabState] || tabState)}</span></div>
-    <div class="stage-body">${content}${exp}</div>${foot}</section>`;
+    <div class="stage-body">${content}</div>${foot}</section>`;
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -1563,7 +1578,7 @@ async function onDetailClick(event) {
         toast("已開始產生提交訊息草稿");
         break;
       case "patch":
-        if (btn.dataset.again && !confirm("重新產生會用同樣的設定再跑一次，結果可能和這次不同（模型輸出不是逐位元可重現）。目前的補丁會被取代。確定嗎？")) { btn.disabled = false; return; }
+        if (btn.dataset.again && !confirm("重新產生可能得到不同結果，且會取代目前的補丁。確定嗎？")) { btn.disabled = false; return; }
         await post(`${path}/patch`);
         toast("已開始產生補丁，完成後會自動更新");
         break;
@@ -1640,7 +1655,7 @@ function importProjectOptions(history) {
   const previous = select.dataset.history ? select.value : null;
   const preferred = previous ?? (state.folder && state.folder !== NO_PROJECT ? state.folder : state.folder === NO_PROJECT ? "" : state.defaultProject);
   const none = history ? "不指定（和所有專案的 Ticket 比對）" : state.projects.length ? "不指定專案（略過錯誤定位）" : "（設定檔沒有專案，將略過錯誤定位）";
-  const options = state.projects.map((p) => [p.project, history ? p.project : `${p.project}　${p.repo_path}`]);
+  const options = state.projects.map((p) => [p.project, p.project]);
   if (history || !state.projects.length || preferred === "") options.push(["", none]);
   select.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join("");
   select.value = options.some(([value]) => value === preferred) ? preferred : options[0][0];
@@ -1657,9 +1672,9 @@ function renderImportProjectNote() {
   const named = counts ? Object.entries(counts).filter(([p]) => p) : [];
   const unnamed = counts ? counts[""] || 0 : 0;
   $(".project-field").hidden = named.length > 0 && !unnamed;
-  const base = history ? "這批歷史 Ticket 屬於哪個專案（只會和這個專案的 Ticket 比對）" : "錯誤定位要用的專案（Repository）";
+  const base = history ? "這批歷史 Ticket 屬於哪個專案（只會和這個專案的 Ticket 比對）" : "這批 Ticket 屬於哪個專案";
   $("#importProjectLabel").textContent = named.length && unnamed
-    ? `其餘 ${unnamed} 張沒寫專案的${history ? "歷史 Ticket 屬於哪個專案" : " Ticket，錯誤定位要用的專案（Repository）"}`
+    ? `其餘 ${unnamed} 張沒寫專案的${history ? "歷史 Ticket 屬於哪個專案" : " Ticket 屬於哪個專案"}`
     : base;
   if (!named.length) { note.hidden = true; note.innerHTML = ""; return; }
   const known = new Set(state.projects.map((p) => p.project));
@@ -1758,13 +1773,15 @@ async function openStatus() {
   $("#statusBody").innerHTML = "<p class=\"hint\">讀取中…</p>";
   $("#statusDialog").showModal();
   const [report, projects] = await Promise.all([api("/api/status"), api("/api/projects")]);
-  $("#configPath").textContent = report.config.config_path || "（未指定設定檔，使用預設值）";
   $("#statusBody").innerHTML = `<div class="status-grid">${STATUS_STAGES.map(([key]) => {
     const s = report.stages[key];
-    const chip = key === "patch" ? (s.ready ? "可以手動執行" : "目前無法使用") : (s.ready ? "可用訓練模型／資料" : "會使用備援或略過");
-    return `<div class="status-card"><h4>${esc(s.title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4><ul>
-      ${s.checks.map((c) => `<li><span class="${c.ok ? "ok" : c.required ? "ng" : "opt"}">${c.ok ? "✓" : c.required ? "✗" : "○"}</span><span>${esc(c.label)}</span>${c.detail ? `<span class="d">${esc(c.detail)}</span>` : ""}</li>`).join("")}
-    </ul></div>`;
+    const title = (STAGES.find(([stageKey]) => stageKey === key) || [key, key])[1];
+    const chip = s.ready ? "可用" : "需要設定";
+    return `<div class="status-card"><h4>${esc(title)}<span class="chip ${s.ready ? "chip-done" : "chip-fallback"}">${chip}</span></h4>
+      <p class="hint">${s.ready ? "此步驟已準備完成。" : "此步驟缺少必要資源，請由系統管理員檢查。"}</p>
+      <details class="raw"><summary>查看管理資訊</summary><ul>
+        ${s.checks.map((c) => `<li><span class="${c.ok ? "ok" : c.required ? "ng" : "opt"}">${c.ok ? "✓" : c.required ? "✗" : "○"}</span><span>${esc(c.label)}</span>${c.detail ? `<span class="d">${esc(c.detail)}</span>` : ""}</li>`).join("")}
+      </ul></details></div>`;
   }).join("")}</div>`;
   renderProjects(projects.projects);
 }
@@ -1772,9 +1789,9 @@ async function openStatus() {
 function renderProjects(projects) {
   $("#projectBody").innerHTML = projects.length ? projects.map((p) => {
     const job = p.index_job || {};
-    const jobText = job.status === "running" ? "建立中…" : job.status === "failed" ? `失敗：${job.error}` : job.status === "done" ? `已建立（${job.files} 個檔案，${(job.duration_ms / 1000).toFixed(1)} 秒）` : "";
-    return `<div class="project-row"><div><b>${esc(p.project)}</b> <code>${esc(p.repo_path)}</code><br>
-      <span class="hint">${p.index_exists ? `索引更新於 ${esc(p.index_updated_at)}（${p.index_size_kb} KB）` : p.code_index_path ? "尚未建立索引；第一次定位時會即時建立" : "未設定 code_index_path，每次啟動後第一次定位會即時建立索引"} ${esc(jobText)}</span></div>
+    const jobText = job.status === "running" ? "建立中…" : job.status === "failed" ? "建立失敗，請聯絡系統管理員。" : job.status === "done" ? `已建立（${job.files} 個檔案，${(job.duration_ms / 1000).toFixed(1)} 秒）` : "";
+    return `<div class="project-row"><div><b>${esc(p.project)}</b><br>
+      <span class="hint">${p.repo_exists ? "專案程式碼已連結。" : "尚未連結專案程式碼。"} ${p.index_exists ? `搜尋資料更新於 ${esc(p.index_updated_at)}` : "第一次分析程式碼位置時會自動準備搜尋資料。"} ${esc(jobText)}</span></div>
       ${p.code_index_path ? `<button class="btn btn-quiet btn-small" data-index="${esc(p.project)}" ${job.status === "running" ? "disabled" : ""}>${p.index_exists ? "更新索引" : "建立索引"}</button>` : ""}</div>`;
   }).join("") : `<p class="hint">設定檔裡沒有專案。</p>`;
 }

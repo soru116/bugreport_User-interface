@@ -575,12 +575,12 @@ class TeamPatchGenerator:
         warnings = []
         if output.get("localization_confidence") != "high" or not output.get("recommend_patch_generation"):
             level = {"medium": "中", "low": "低"}.get(str(output.get("localization_confidence")), str(output.get("localization_confidence") or "未知"))
-            warnings.append(f"錯誤定位信心為「{level}」，正式流程不會自動產生補丁；這裡照 6/36 實驗的研究模式產生，補丁一定要人工審查。")
+            warnings.append(f"錯誤定位信心為「{level}」，產生的補丁需要人工審查。")
         official = output.get("official")
         if output.get("patch_status") == "generated" and not official:
-            warnings.append("這個補丁只通過語法、AST 與 git apply 檢查，沒有跑過測試。「產生補丁」不等於「修好」。")
+            warnings.append("補丁已通過基本結構與套用檢查，但尚未執行完整測試；請在合併前完成功能與回歸測試。")
         if official and official.get("official_resolved") is False:
-            warnings.append("這個補丁和一個已經送過官方測試的補丁完全相同，官方判定：沒有修好。")
+            warnings.append("既有完整測試紀錄顯示此補丁未通過，請勿直接合併。")
         return warnings
 
 

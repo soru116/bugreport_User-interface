@@ -29,7 +29,7 @@
       <button class="btn btn-mode" id="settingsButton" type="button" aria-label="開啟操作模式設定">
         <span class="mode-dot" aria-hidden="true"></span><span id="modeButtonText">半自動</span>
       </button>
-      <button class="btn btn-quiet" id="statusButton" type="button">模型與資料狀態</button>
+      <button class="btn btn-quiet" id="statusButton" type="button">系統狀態</button>
       <button class="btn btn-primary" id="importButton" type="button">匯入 Ticket</button>
     </div>
   </header>
@@ -97,7 +97,7 @@
         <label class="drop" id="dropZone">
           <input type="file" id="fileInput" accept=".json,.jsonl,.csv,.txt" hidden>
           <strong>拖放檔案到這裡，或點一下選擇檔案</strong>
-          <span>支援 JSON、JSONL、CSV。也可以直接匯入 ToJson 的 unlabeled.jsonl 或 predicted.jsonl。</span>
+          <span>支援 JSON、JSONL 與 CSV 格式。</span>
           <span class="drop-file" id="dropFile"></span>
         </label>
         <label class="check">
@@ -119,10 +119,10 @@
           <label class="field">發生環境<input name="environment" placeholder="例如 Windows 11 / v4.2.0"></label>
           <label class="field">產品<input name="product" placeholder="選填"></label>
         </div>
-        <p class="hint">只填你知道的欄位；其餘欄位由 ToJson 的 Code Llama 抽取。</p>
+        <p class="hint">只需填寫已知欄位；系統會自動整理其餘內容。</p>
       </div>
 
-      <label class="field project-field"><span id="importProjectLabel">錯誤定位要用的專案（Repository）</span>
+      <label class="field project-field"><span id="importProjectLabel">這張 Ticket 所屬的專案</span>
         <select id="importProject"></select>
       </label>
       <div class="import-project-note" id="importProjectNote" hidden></div>
@@ -137,10 +137,10 @@
   <dialog class="sheet sheet-wide" id="statusDialog" aria-labelledby="statusTitle">
     <div class="sheet-inner">
       <header class="sheet-head">
-        <h2 id="statusTitle">模型與資料狀態</h2>
+        <h2 id="statusTitle">系統狀態</h2>
         <form method="dialog"><button class="icon-btn" aria-label="關閉">×</button></form>
       </header>
-      <p class="hint">這裡列出每個步驟會呼叫的子專案程式，以及這台電腦上是否找得到訓練好的模型與資料。設定位置：<code id="configPath"></code></p>
+      <p class="hint">確認各處理步驟與專案程式碼是否已準備完成。技術設定僅供系統管理員排查問題。</p>
       <div id="statusBody"></div>
       <h3 class="sub">專案程式碼索引</h3>
       <div id="projectBody"></div>
