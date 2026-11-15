@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261116-2">
 </head>
 <body>
   <header class="topbar">
@@ -26,8 +26,8 @@
       <kbd class="search-key" aria-hidden="true">/</kbd>
     </div>
     <div class="topbar-actions">
-      <button class="btn btn-mode" id="settingsButton" type="button" aria-label="開啟操作模式設定">
-        <span class="mode-dot" aria-hidden="true"></span><span id="modeButtonText">半自動</span>
+      <button class="btn btn-mode" id="settingsButton" type="button" aria-label="開啟設定">
+        <svg class="settings-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.2 13.1c.1-.7.1-1.5 0-2.2l2-1.5-2-3.4-2.5 1a8.3 8.3 0 0 0-1.9-1.1L14.5 3h-4l-.4 2.9A8.3 8.3 0 0 0 8.2 7L5.7 6 3.8 9.4l2 1.5a8.4 8.4 0 0 0 0 2.2l-2 1.5 2 3.4 2.4-1a8.3 8.3 0 0 0 2 1.1l.3 2.9h4l.4-2.9a8.3 8.3 0 0 0 1.9-1.1l2.5 1 1.9-3.4-2-1.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
       </button>
       <button class="btn btn-quiet" id="statusButton" type="button">系統狀態</button>
       <button class="btn btn-primary" id="importButton" type="button">匯入 Ticket</button>
@@ -151,12 +151,13 @@
     <form method="dialog" class="sheet-inner" id="settingsForm">
       <header class="sheet-head">
         <div>
-          <h2 id="settingsTitle">操作模式</h2>
-          <p class="hint">決定按下開始處理或匯入 Ticket 後，流程在哪裡停下來。</p>
+          <h2 id="settingsTitle">工作台設定</h2>
+          <p class="hint">調整處理方式與這台裝置上的顯示偏好。</p>
         </div>
         <button class="icon-btn" value="cancel" aria-label="關閉">×</button>
       </header>
 
+      <h3 class="settings-section-title">處理方式</h3>
       <fieldset class="mode-picker">
         <legend class="sr-only">選擇操作模式</legend>
         <label class="mode-card">
@@ -181,9 +182,47 @@
       </fieldset>
 
       <div class="mode-notice" id="modeNotice" role="status"></div>
+
+      <section class="preference-section" aria-labelledby="automaticTargetTitle">
+        <div class="preference-heading">
+          <h3 id="automaticTargetTitle">全自動執行到</h3>
+          <p>只影響之後以全自動模式開始的 Ticket。</p>
+        </div>
+        <fieldset class="choice-row choice-row-wide">
+          <legend class="sr-only">全自動執行範圍</legend>
+          <label><input type="radio" name="automaticTarget" value="localization"><span>錯誤定位</span></label>
+          <label><input type="radio" name="automaticTarget" value="patch"><span>補丁生成</span></label>
+          <label><input type="radio" name="automaticTarget" value="commit"><span>提交訊息</span></label>
+        </fieldset>
+      </section>
+
+      <section class="preference-section" aria-labelledby="notificationSettingsTitle">
+        <div class="preference-heading">
+          <h3 id="notificationSettingsTitle">處理通知</h3>
+          <p>Ticket 完成、失敗或需要你確認時顯示瀏覽器通知。</p>
+          <p class="notification-permission" id="notificationPermissionStatus"></p>
+        </div>
+        <div class="notification-controls">
+          <button class="btn btn-quiet btn-small" type="button" id="testNotificationButton">傳送測試通知</button>
+          <label class="switch-setting"><span class="sr-only">啟用處理通知</span><input type="checkbox" name="notificationsEnabled"><i aria-hidden="true"></i></label>
+        </div>
+      </section>
+
+      <section class="preference-section" aria-labelledby="appearanceSettingsTitle">
+        <div class="preference-heading">
+          <h3 id="appearanceSettingsTitle">外觀</h3>
+          <p>選擇適合目前環境的色彩。</p>
+        </div>
+        <fieldset class="choice-row">
+          <legend class="sr-only">色彩模式</legend>
+          <label><input type="radio" name="colorTheme" value="light"><span>淺色</span></label>
+          <label><input type="radio" name="colorTheme" value="dark"><span>深色</span></label>
+        </fieldset>
+      </section>
+
       <footer class="sheet-foot">
         <button class="btn btn-quiet" value="cancel">取消</button>
-        <button class="btn btn-primary" id="saveSettings" type="submit" value="default">儲存模式</button>
+        <button class="btn btn-primary" id="saveSettings" type="submit" value="default">儲存設定</button>
       </footer>
     </form>
   </dialog>
@@ -254,6 +293,6 @@
 
   <div class="queue-pill" id="queuePill" role="status" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261116-2"></script>
 </body>
 </html>

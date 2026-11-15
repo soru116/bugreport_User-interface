@@ -543,6 +543,32 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual(commit["commit_message"], "fix(auth): handle missing token")
         self.assertFalse(app.pipeline.store.feedback_path.exists(), "automatic routing is not human feedback")
 
+    def test_workspace_automatic_target_localization_does_not_start_patch(self) -> None:
+        import importlib.util
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server_auto_localization", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        class ForbiddenPatcher:
+            def generate(self, *_args, **_kwargs):
+                raise AssertionError("localization target must not generate a patch")
+
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        app.pipeline.patcher = ForbiddenPatcher()
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        self.assertTrue(app.start(record["key"], automatic=True, automatic_target="localization"))
+
+        deadline = _time.time() + 30
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+        record = app.pipeline.get(record["key"])
+        self.assertEqual(record["stages"]["localization"]["status"], "done")
+        self.assertNotIn("patch", record["stages"])
+
     def test_workspace_automatic_mode_retries_no_valid_patch_once(self) -> None:
         import importlib.util
         import time as _time

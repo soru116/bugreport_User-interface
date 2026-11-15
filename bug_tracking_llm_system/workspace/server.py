@@ -39,6 +39,11 @@ from integration.status import readiness_report  # noqa: E402
 
 MAX_BODY_BYTES = 20_000_000
 ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json", "patch_result.json"}
+AUTOMATIC_TARGETS = {"localization", "patch", "commit"}
+
+
+def _automatic_target(value: Any) -> str:
+    return str(value) if str(value) in AUTOMATIC_TARGETS else "commit"
 
 
 def _coarse(seconds: float) -> int:
@@ -257,7 +262,7 @@ class WorkspaceApp:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
-                        if job.get("automatic") and not job.get("stop"):
+                        if job.get("automatic") and not job.get("stop") and job.get("automatic_target", "commit") != "localization":
                             try:
                                 pipeline.patch_precheck(job["key"])
                             except ValueError as exc:  # e.g. no code for this project: not a failure of the ticket
@@ -265,14 +270,15 @@ class WorkspaceApp:
                             except Exception as exc:
                                 pipeline.skip_patch(job["key"], f"{type(exc).__name__}: {exc}")
                             else:
-                                self._submit(job["key"], "patch", automatic=True)
+                                self._submit(job["key"], "patch", automatic=True, automatic_target=job.get("automatic_target", "commit"))
                 elif phase == "patch":
                     job = batch[0]
                     automatic = bool(job.get("automatic"))
-                    record = pipeline.generate_patch(job["key"], automatic=automatic)
+                    include_commit = job.get("automatic_target", "commit") == "commit"
+                    record = pipeline.generate_patch(job["key"], automatic=automatic, generate_commit_message=include_commit)
                     output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
                     if automatic and not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
-                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1)
+                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1, generate_commit_message=include_commit)
                     self._record("patch", time.time() - job["started_at"])
                     self._finish(job)
                 elif phase == "commit":
@@ -431,9 +437,9 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return True
 
-    def start(self, key: str, *, automatic: bool = False) -> bool:
+    def start(self, key: str, *, automatic: bool = False, automatic_target: str = "commit") -> bool:
         self.maybe_reload_config()
-        return self._submit(key, "full", automatic=automatic)
+        return self._submit(key, "full", automatic=automatic, automatic_target=_automatic_target(automatic_target))
 
     def continue_after_duplicate(self, key: str) -> bool:
         self.maybe_reload_config()
@@ -692,7 +698,8 @@ class Handler(SimpleHTTPRequestHandler):
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):
                     for record in created:
-                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic")
+                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic",
+                                  automatic_target=_automatic_target(body.get("automatic_target")))
                 return self._json({"created": [record["key"] for record in created]})
             if parts == ["api", "delete-tickets"]:
                 deleted, deferred, skipped = [], [], []
@@ -729,7 +736,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":
-                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic")
+                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic",
+                              automatic_target=_automatic_target(body.get("automatic_target")))
                     return self._json({"started": True})
                 if action == "duplicate":
                     record = app.pipeline.decide_duplicate(

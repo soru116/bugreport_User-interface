@@ -181,7 +181,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi" };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi", automaticTarget: "commit", notificationsEnabled: false, notificationSnapshot: null, colorTheme: "light" };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -199,9 +199,17 @@ function num(value, digits = 3) {
 function toast(message) {
   const el = $("#toast");
   el.textContent = message;
+  clearTimeout(toast.holdTimer);
+  clearTimeout(toast.hideTimer);
   el.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (el.hidden = true), 3200);
+  el.classList.remove("is-leaving");
+  toast.holdTimer = setTimeout(() => {
+    el.classList.add("is-leaving");
+    toast.hideTimer = setTimeout(() => {
+      el.hidden = true;
+      el.classList.remove("is-leaving");
+    }, 1250);
+  }, 5000);
 }
 async function api(path, options = {}) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
@@ -215,21 +223,70 @@ function post(path, body = {}) {
 
 /* ---------------------------------------------------------- operation mode */
 const MODE_KEY = "ticket-workspace-automation-mode";
+const PREFERENCES_KEY = "ticket-workspace-preferences";
+
+function applyPreferences(preferences = {}) {
+  state.colorTheme = preferences.colorTheme === "dark" ? "dark" : "light";
+  state.automaticTarget = ["localization", "patch", "commit"].includes(preferences.automaticTarget) ? preferences.automaticTarget : "commit";
+  state.notificationsEnabled = Boolean(preferences.notificationsEnabled);
+  document.documentElement.dataset.theme = state.colorTheme;
+  try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ colorTheme: state.colorTheme, automaticTarget: state.automaticTarget, notificationsEnabled: state.notificationsEnabled })); } catch { /* private browsing */ }
+}
 
 function applyAutomationMode(mode) {
   state.automationMode = mode === "automatic" ? "automatic" : "semi";
   try { localStorage.setItem(MODE_KEY, state.automationMode); } catch { /* private browsing */ }
-  const button = $("#settingsButton");
-  if (button) button.dataset.mode = state.automationMode;
-  const label = $("#modeButtonText");
-  if (label) label.textContent = state.automationMode === "automatic" ? "全自動" : "半自動";
 }
 
 function openSettings() {
   const selected = document.querySelector(`input[name="automationMode"][value="${state.automationMode}"]`);
   if (selected) selected.checked = true;
+  const theme = document.querySelector(`input[name="colorTheme"][value="${state.colorTheme}"]`);
+  if (theme) theme.checked = true;
+  const target = document.querySelector(`input[name="automaticTarget"][value="${state.automaticTarget}"]`);
+  if (target) target.checked = true;
+  const notifications = document.querySelector('[name="notificationsEnabled"]');
+  if (notifications) notifications.checked = state.notificationsEnabled;
+  renderNotificationPermissionStatus();
   renderModeNotice();
   $("#settingsDialog").showModal();
+}
+
+function renderNotificationPermissionStatus() {
+  const status = $("#notificationPermissionStatus");
+  if (!status) return;
+  status.textContent = !("Notification" in window)
+    ? "這個瀏覽器不支援桌面通知"
+    : `瀏覽器權限：${{ granted: "已允許", denied: "已封鎖", default: "尚未決定" }[Notification.permission]}`;
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return false;
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") return false;
+  const granted = await Notification.requestPermission() === "granted";
+  renderNotificationPermissionStatus();
+  return granted;
+}
+
+function showDesktopNotification(title, options = {}) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  try {
+    const notice = new Notification(title, options);
+    return notice;
+  } catch {
+    return false;
+  }
+}
+
+async function sendTestNotification() {
+  const allowed = await requestNotificationPermission();
+  if (!allowed) {
+    toast("桌面通知未獲允許；網站內通知仍會顯示");
+    return;
+  }
+  const notice = showDesktopNotification("Ticket 工作台測試通知", { body: "通知功能已連線。", tag: "ticket-workspace-test" });
+  toast(notice ? "測試通知已送出" : "桌面通知送出失敗；網站內通知仍可使用");
 }
 
 function renderModeNotice() {
@@ -242,13 +299,28 @@ function renderModeNotice() {
     : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
 }
 
-function saveSettings(event) {
+async function saveSettings(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
   const selected = document.querySelector('input[name="automationMode"]:checked');
   applyAutomationMode(selected ? selected.value : "semi");
+  const theme = document.querySelector('input[name="colorTheme"]:checked');
+  const target = document.querySelector('input[name="automaticTarget"]:checked');
+  let notificationsEnabled = document.querySelector('[name="notificationsEnabled"]').checked;
+  let notificationDenied = false;
+  if (notificationsEnabled) notificationsEnabled = await requestNotificationPermission();
+  notificationDenied = document.querySelector('[name="notificationsEnabled"]').checked && !notificationsEnabled;
+  applyPreferences({
+    colorTheme: theme ? theme.value : "light",
+    automaticTarget: target ? target.value : "commit",
+    notificationsEnabled,
+  });
   $("#settingsDialog").close();
-  toast(`已切換為${state.automationMode === "automatic" ? "全自動" : "半自動"}模式`);
+  toast(notificationDenied ? "設定已儲存；瀏覽器未允許通知" : "設定已儲存");
+}
+
+function runPreferences() {
+  return { automation_mode: state.automationMode, automatic_target: state.automaticTarget };
 }
 
 /* ------------------------------------------------------------------ inbox */
@@ -257,6 +329,34 @@ function bucket(t) {
   if (t.status === "awaiting_duplicate_review" || (t.attention || []).some((a) => a.includes("負責人"))) return "review";
   if (t.status === "processed" || t.status === "duplicate") return "done";
   return "other";
+}
+
+function ticketNotificationState(ticket) {
+  if (ticket.status === "failed") return "failed";
+  if (bucket(ticket) === "review") return "review";
+  if (!ticket.busy && ["processed", "duplicate"].includes(ticket.status)) return "done";
+  return "";
+}
+
+function notifyTicketChanges(tickets) {
+  const next = new Map(tickets.map((ticket) => [ticket.key, ticketNotificationState(ticket)]));
+  const previous = state.notificationSnapshot;
+  state.notificationSnapshot = next;
+  if (!previous || !state.notificationsEnabled) return;
+  const copy = {
+    done: ["Ticket 處理完成", "已完成處理。"],
+    failed: ["Ticket 處理失敗", "處理已停止，請查看失敗原因。"],
+    review: ["Ticket 等你確認", "流程需要你的決定才能繼續。"],
+  };
+  tickets.forEach((ticket) => {
+    const status = next.get(ticket.key);
+    if (!status || status === previous.get(ticket.key)) return;
+    const [heading, message] = copy[status];
+    const body = `${ticket.ticket_id || ticket.key} · ${ticket.title || message}`;
+    toast(`${heading}：${ticket.ticket_id || ticket.key}`);
+    const notice = showDesktopNotification(heading, { body, tag: `ticket-${ticket.key}-${status}` });
+    if (notice) notice.onclick = () => { window.focus(); location.hash = `#/t/${encodeURIComponent(ticket.key)}`; notice.close(); };
+  });
 }
 
 /* Queue: where a busy ticket stands and roughly how long it still needs. */
@@ -476,6 +576,7 @@ function renderInbox() {
 
 async function loadTickets() {
   const data = await api("/api/tickets");
+  notifyTicketChanges(data.tickets);
   state.tickets = data.tickets;
   const q = data.queue || {};
   const pill = $("#queuePill");
@@ -571,7 +672,7 @@ async function rerunPicked() {
   let started = 0, skipped = 0;
   for (const key of keys) {
     try {
-      await post(`/api/tickets/${encodeURIComponent(key)}/run`, { automation_mode: state.automationMode });
+      await post(`/api/tickets/${encodeURIComponent(key)}/run`, runPreferences());
       started += 1;
     } catch { skipped += 1; }
   }
@@ -1550,7 +1651,7 @@ async function onDetailClick(event) {
     if (btn.dataset.action === "patch") state.tab = "patch";
     switch (btn.dataset.action) {
       case "rerun":
-        await post(`${path}/run`, { automation_mode: state.automationMode });
+        await post(`${path}/run`, runPreferences());
         toast(state.automationMode === "automatic" ? "已開始全自動處理，將接續生成補丁與提交訊息" : "已開始處理");
         break;
       case "not-duplicate":
@@ -1710,7 +1811,7 @@ function setImportMode(mode) {
 async function submitImport(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
-  const body = { project: $("#importProject").value, automation_mode: state.automationMode };
+  const body = { project: $("#importProject").value, ...runPreferences() };
   if (importMode === "file") {
     if (!importFile) { $("#importError").textContent = "請先選擇檔案。"; return; }
     body.content = await importFile.text();
@@ -1812,6 +1913,7 @@ async function onProjectClick(event) {
 /* ------------------------------------------------------------------ init */
 async function init() {
   try { applyAutomationMode(localStorage.getItem(MODE_KEY) || "semi"); } catch { applyAutomationMode("semi"); }
+  try { applyPreferences(JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}")); } catch { applyPreferences(); }
   $("#homeView").addEventListener("click", (e) => {
     const pin = e.target.closest("[data-pin]");
     if (pin) { e.preventDefault(); togglePin(pin.dataset.pin); return; }
@@ -1897,6 +1999,7 @@ async function init() {
   $("#importButton").addEventListener("click", openImport);
   $("#settingsButton").addEventListener("click", openSettings);
   $("#settingsForm").addEventListener("submit", saveSettings);
+  $("#testNotificationButton").addEventListener("click", sendTestNotification);
   $$('#settingsForm input[name="automationMode"]').forEach((input) => input.addEventListener("change", renderModeNotice));
   $("#statusButton").addEventListener("click", openStatus);
   $("#projectBody").addEventListener("click", onProjectClick);

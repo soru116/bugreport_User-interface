@@ -396,7 +396,8 @@ class IntegratedPipeline:
 
         return self.store.update(key, mutate)
 
-    def generate_patch(self, key: str, *, automatic: bool = False, automatic_retry: int = 0) -> dict[str, Any]:
+    def generate_patch(self, key: str, *, automatic: bool = False, automatic_retry: int = 0,
+                       generate_commit_message: bool = True) -> dict[str, Any]:
         with self._patch_lock:
             record = self.patch_precheck(key)
             previous = {"status": record["status"], "current_stage": record.get("current_stage", "")}
@@ -449,7 +450,7 @@ class IntegratedPipeline:
                     result.setdefault("warnings", []).append(
                         f"第一次未產生有效補丁，系統已根據失敗原因自動重試 {automatic_retry} 次。"
                     )
-                if result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
+                if generate_commit_message and result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
                     commit = self._commit_message(record, str(output["patch"]), output.get("official"))
                     output["commit_message"] = commit
                     if commit["status"] == "failed":
