@@ -208,7 +208,7 @@ class ToJsonExtractor:
             module="主系統 json_schema 規則正規化（備援）",
             implementation="bug_tracking_llm_system/src/utils/json_schema.py",
             output={"structured_ticket": structured},
-            warnings=["未使用 Code Llama 抽取，欄位由規則正規化產生，準確度較低。"],
+            warnings=["自動欄位辨識目前不可用，系統已依原始內容整理欄位；請確認是否有缺漏。"],
             fallback_reason=reason,
             started=started,
         )

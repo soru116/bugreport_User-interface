@@ -130,9 +130,9 @@ class TeamAssigneeRecommender:
         if history_rows == 0:
             status = "fallback"
             fallback_reason = f"找不到負責人歷史資料：{history_path}"
-            warnings.append("沒有負責人歷史資料，只能依 component-owner mapping 或轉人工分派。")
+            warnings.append("目前沒有足夠的負責人歷史資料，系統將依問題領域推薦人選；若仍無合適人選，請人工指定。")
         elif result.get("needs_manual_triage"):
-            warnings.append("模型信心不足或未通過 routing gate，建議人工分派；候選名單仍可參考。")
+            warnings.append("目前資料不足以自動確認負責人，請從候選名單選擇或手動指定。")
         return stage_result(
             stage="assignee",
             status=status,

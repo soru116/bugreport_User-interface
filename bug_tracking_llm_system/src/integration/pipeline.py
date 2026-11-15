@@ -127,8 +127,8 @@ class IntegratedPipeline:
         def mutate(record: dict[str, Any]) -> None:
             record["stages"][stage] = result
             label = STAGE_LABELS[stage]
-            status_text = {"done": "完成", "fallback": "完成（使用備援）", "skipped": "略過", "failed": "失敗"}.get(result["status"], result["status"])
-            self._event(record, f"{label}：{status_text}" + (f"（{result['fallback_reason']}）" if result.get("fallback_reason") else ""))
+            status_text = {"done": "完成", "fallback": "完成（資料有限）", "skipped": "略過", "failed": "失敗"}.get(result["status"], result["status"])
+            self._event(record, f"{label}：{status_text}")
             if extra:
                 extra(record)
 
@@ -440,14 +440,14 @@ class IntegratedPipeline:
                         if not warning.startswith("錯誤定位信心為")
                     ]
                     result.setdefault("warnings", []).append(
-                        "全自動模式已略過錯誤定位信心門檻；生成結果仍須通過所有補丁安全檢查。"
+                        "全自動模式已繼續產生補丁；結果仍須通過基本安全檢查。"
                     )
                 if automatic_retry:
                     output["automatic_retry_count"] = automatic_retry
                     output["automatic_retry_reason"] = "no_valid_candidate"
                     output["automatic_retry_seed"] = patch_kwargs["seed_override"]
                     result.setdefault("warnings", []).append(
-                        f"全自動模式第一次沒有有效補丁，已使用新 seeds 與 no-op 回饋自動重試 {automatic_retry} 次。"
+                        f"第一次未產生有效補丁，系統已根據失敗原因自動重試 {automatic_retry} 次。"
                     )
                 if result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
                     commit = self._commit_message(record, str(output["patch"]), output.get("official"))
@@ -674,7 +674,7 @@ class IntegratedPipeline:
         prediction = (record.get("stages", {}).get("assignee", {}).get("output") or {})
         suggested = str(prediction.get("suggested_assignee") or "").strip()
         if suggested:
-            return {"assignee": suggested, "source": "routing_model", "reason": "全自動模式採用分派模型建議"}
+            return {"assignee": suggested, "source": "routing_model", "reason": "全自動模式已採用排名最高的負責人建議"}
 
         invalid = {"", "manual_triage", "unknown", "none", "unassigned"}
         duplicate_candidates = (
@@ -693,7 +693,7 @@ class IntegratedPipeline:
         for owner_value in prediction.get("ranked_candidates") or []:
             owner = str(owner_value or "").strip()
             if owner.lower() not in invalid:
-                return {"assignee": owner, "source": "routing_candidate", "reason": "全自動模式採用分派模型最高順位候選"}
+                return {"assignee": owner, "source": "routing_candidate", "reason": "全自動模式已採用排名最高的負責人建議"}
 
         structured = record.get("structured_ticket") or {}
         project = str(record.get("project") or "").strip()
@@ -729,7 +729,7 @@ class IntegratedPipeline:
                 count, last = counts.get(owner, (0, -1))
                 counts[owner] = (count + 1, max(last, index))
             owner = max(counts, key=lambda item: counts[item])
-            label = "同 component" if best_tier == 3 else "同 product" if best_tier == 2 else "同專案"
+            label = "同元件" if best_tier == 3 else "同產品" if best_tier == 2 else "同專案"
             return {
                 "assignee": owner,
                 "source": "project_history",

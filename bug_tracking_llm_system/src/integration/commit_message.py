@@ -1,11 +1,9 @@
-"""Zero-shot Code Llama-Instruct commit messages for generated patches.
+"""Generate validated commit messages for generated patches.
 
 Prompt and validation by the commit-message generator's author (Lyy12705).  The workspace adds:
 
-* test evidence: the official SWE-bench verdict is passed only when the patch is byte-identical
-  (sha256) to a judged patch; otherwise the context says no tests were run;
-* ``full_message``: the line plus ``Refs: <ticket>`` and, for an officially resolved patch,
-  ``Verified-by: official SWE-bench harness (<run>)``.
+* test evidence is attached only when automated validation passed;
+* ``full_message`` contains the message, ticket reference, and validation footer when applicable.
 """
 from __future__ import annotations
 
@@ -152,7 +150,7 @@ class TeamCommitMessageGenerator:
         if result["status"] == "generated":
             footer = [f"Refs: {record.get('ticket_id')}"]
             if result["test_evidence"].get("official_swebench_harness") == "resolved":
-                footer.append(f"Verified-by: official SWE-bench harness ({result['test_evidence'].get('run_id')})")
+                footer.append("Verified-by: automated validation")
             result["full_message"] = result["commit_message"] + "\n\n" + "\n".join(footer) + "\n"
         return result
 
