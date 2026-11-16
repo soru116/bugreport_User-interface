@@ -33,7 +33,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from integration.config import IntegrationConfig, load_integration_config  # noqa: E402
 from integration.importers import MAX_HISTORY_RECORDS, MAX_RECORDS, parse_import_payload  # noqa: E402
-from integration.pipeline import STAGE_LABELS, STAGES, IntegratedPipeline  # noqa: E402
+from integration.pipeline import LEGACY_AUTOMATIC_PATCH_WARNING, STAGE_LABELS, STAGES, IntegratedPipeline, automatic_patch_warning  # noqa: E402
 from integration.status import readiness_report  # noqa: E402
 
 
@@ -543,7 +543,7 @@ class WorkspaceApp:
             "patch": {
                 "status": stages.get("patch", {}).get("status", ""),
                 "patch_status": (stages.get("patch", {}).get("output") or {}).get("patch_status", ""),
-                "official_resolved": ((stages.get("patch", {}).get("output") or {}).get("official") or {}).get("official_resolved"),
+                "official_resolved": (self._live_official(record) or {}).get("official_resolved"),
             },
             "created_at": record.get("created_at"),
             "updated_at": record.get("updated_at"),
@@ -551,8 +551,33 @@ class WorkspaceApp:
             "queue": self.queue_info(record["key"]),
         }
 
+    def _live_official(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        """Look the current patch up in the official-verdict index at read time.
+
+        The verdict stored at generation time goes stale when the same patch is evaluated later,
+        so the index (matched by patch sha256) is consulted every time the ticket is shown."""
+        output = ((record.get("stages") or {}).get("patch") or {}).get("output") or {}
+        patch = output.get("patch") or ""
+        if not patch:
+            return output.get("official")
+        try:
+            return self.pipeline.patcher.official_verdict(patch)
+        except Exception:
+            return output.get("official")
+
     def ticket_detail(self, key: str) -> dict[str, Any]:
         record = self.pipeline.get(key)
+        output = ((record.get("stages") or {}).get("patch") or {}).get("output")
+        if isinstance(output, dict) and output.get("patch"):
+            output["official"] = self._live_official(record)
+        patch_stage = (record.get("stages") or {}).get("patch") or {}
+        if LEGACY_AUTOMATIC_PATCH_WARNING in (patch_stage.get("warnings") or []):
+            loc = ((record.get("stages") or {}).get("localization") or {}).get("output") or {}
+            confidence = loc.get("confidence") or {}
+            reworded = automatic_patch_warning(loc.get("confidence_level") or confidence.get("confidence_level"),
+                                               confidence.get("confidence_score"))
+            patch_stage["warnings"] = [reworded if w == LEGACY_AUTOMATIC_PATCH_WARNING else w
+                                       for w in patch_stage["warnings"]]
         record["busy"] = self.busy(key)
         record["queue"] = self.queue_info(key)
         try:  # what the 6/36 patch run produced for this ticket, if it is one of the 36

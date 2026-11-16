@@ -435,7 +435,7 @@ function tile(t, terms, showProject = false) {
     t.component ? `<span class="tag">${markTerms(t.component, terms)}</span>` : "",
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
-    t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="已有完整測試通過紀錄">測試通過</span>`
+    t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="這個補丁有 SWE-bench 官方測試通過紀錄">官方測試通過</span>`
       : t.patch && t.patch.patch_status === "generated" ? `<span class="tag tag-patch" title="已產生補丁，待人工審查">有補丁</span>` : "",
   ].join("");
   const picked = state.selecting && state.picked.has(t.key);
@@ -1354,7 +1354,7 @@ function renderLocalization(r, o, projectOptions) {
 }
 
 /* ------------------------------------------------------------------ patch */
-const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "測試通過" };
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "官方測試通過" };
 const COMMIT_TAB_TEXT = { pending: "等待補丁", running: "產生中…", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
@@ -1413,9 +1413,9 @@ const COMMIT_TEXTS = new Map();
 
 function commitEvidenceNote(commit) {
   const evidence = commit.test_evidence || {};
-  if (evidence.official_swebench_harness === "resolved") return "已有完整測試通過紀錄，因此提交訊息包含驗證資訊。";
-  if (evidence.official_swebench_harness === "unresolved") return "完整測試未通過，因此提交訊息只描述程式變更。";
-  return "尚未執行完整測試，因此提交訊息只描述程式變更。";
+  if (evidence.official_swebench_harness === "resolved") return "已有 SWE-bench 官方測試通過紀錄，因此提交訊息包含驗證資訊。";
+  if (evidence.official_swebench_harness === "unresolved") return "SWE-bench 官方測試未通過，因此提交訊息只描述程式變更。";
+  return "尚未執行官方測試，因此提交訊息只描述程式變更。";
 }
 
 function commitRegenerate(r, source, label = "重新產生提交訊息") {
@@ -1529,11 +1529,17 @@ function diffHtml(patch) {
 
 function officialBox(official, { mine = true } = {}) {
   if (!official) {
-    return mine ? `<div class="verdict verdict-none"><b>尚未執行完整測試</b><span>目前已完成程式結構與補丁套用檢查，合併前仍需執行功能與回歸測試。</span></div>` : "";
+    return mine ? `<div class="verdict verdict-none"><b>尚未執行官方測試</b><span>這個補丁沒有官方測試紀錄（與先前送測過的補丁內容不完全相同）。目前只完成程式結構與補丁套用檢查，合併前仍需執行功能與回歸測試。</span></div>` : "";
   }
   const ok = official.official_resolved === true;
-  return `<div class="verdict ${ok ? "verdict-ok" : "verdict-ng"}"><b>完整測試：${ok ? "通過" : "未通過"}</b>
-    <span>${ok ? "問題驗證與既有功能測試均通過。" : "測試尚未全部通過，請先修正再合併。"}</span></div>`;
+  const sha = String(official.patch_sha256 || "").slice(0, 12);
+  const when = official.evaluated_at ? `${esc(official.evaluated_at)} ` : "";
+  const run = official.run_url
+    ? `<a href="${esc(official.run_url)}" target="_blank" rel="noopener">${esc(official.run_id || "查看測試紀錄")}</a>`
+    : esc(official.run_id || "");
+  const source = `<span class="hint">判定來源：${esc(official.evaluator || "SWE-bench 官方 harness")}；這個補丁與 ${when}送測的補丁完全相同（sha256 <code>${esc(sha)}</code>），沿用該次判定${run ? `：${run}` : ""}。</span>`;
+  return `<div class="verdict ${ok ? "verdict-ok" : "verdict-ng"}"><b>SWE-bench 官方測試：${ok ? "通過" : "未通過"}</b>
+    <span>${ok ? "問題重現測試（FAIL_TO_PASS）全部通過，既有功能測試（PASS_TO_PASS）沒有退步。" : "官方測試沒有全部通過，請勿直接合併。"}</span>${source}</div>`;
 }
 
 function renderPatchStage(r, n) {

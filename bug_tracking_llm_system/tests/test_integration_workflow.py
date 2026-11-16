@@ -749,8 +749,9 @@ class IntegrationWorkflowTests(unittest.TestCase):
         app.pipeline.store.write_artifact(key, "bug_location_raw.json", {"confidence_level": "low"})
         record = app.pipeline.generate_patch(key, automatic=True)
         warnings = record["stages"]["patch"]["warnings"]
-        self.assertFalse(any(item.startswith("錯誤定位信心為") for item in warnings))
-        self.assertTrue(any("已繼續產生補丁" in item for item in warnings))
+        self.assertFalse(any("正式流程不會自動產生補丁" in item for item in warnings))
+        self.assertTrue(any(item.startswith("錯誤定位信心為「低」") and "全自動模式執行，略過了這個確認" in item
+                            for item in warnings))
 
     def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
         import shutil as _shutil

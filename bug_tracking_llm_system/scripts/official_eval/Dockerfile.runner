@@ -1,0 +1,19 @@
+# Linux runner for the official SWE-bench harness.
+# The harness writes eval.sh / patch.diff with Path.write_text(); on native Windows
+# Python that produces CRLF files and breaks the evaluation, so it runs here instead.
+# It drives Docker Desktop through the mounted /var/run/docker.sock.
+FROM python:3.11-slim
+
+ENV PYTHONUTF8=1 \
+    NO_COLOR=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+
+# Same pinned version as .github/workflows/swebench-official-evaluation.yml
+RUN pip install "swebench==5.0.2"
+
+WORKDIR /repo

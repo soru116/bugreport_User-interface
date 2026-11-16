@@ -79,6 +79,18 @@ class PatchUnavailable(RuntimeError):
     """The patch stage cannot run for this ticket; the message is shown to the engineer."""
 
 
+OFFICIAL_EVALUATOR = "SWE-bench 官方 harness（GitHub Actions，swebench 5.0.2）"
+
+
+def _verdict_date(row: dict[str, Any]) -> str | None:
+    """YYYY-MM-DD from a run id / experiment name such as ...-20261108-145823 (older rows have no date field)."""
+    for text in (row.get("run_id"), row.get("experiment")):
+        match = re.search(r"(20\d{2})(\d{2})(\d{2})", str(text or ""))
+        if match:
+            return "-".join(match.groups())
+    return None
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -232,14 +244,30 @@ class TeamPatchGenerator:
                     "run_id": row.get("run_id"),
                     "experiment": row.get("experiment"),
                     "instance_id": row.get("instance_id"),
+                    "patch_sha256": sha,
+                    "evaluated_at": row.get("evaluated_at") or _verdict_date(row),
+                    "run_url": row.get("run_url"),
+                    "evaluator": row.get("evaluator") or OFFICIAL_EVALUATOR,
                 }
         return verdicts
+
+    def _refresh_verdicts(self) -> None:
+        """Re-read the verdict index when it changed, so verdicts added later need no server restart."""
+        try:
+            mtime = self.config.patch_verdicts_path().stat().st_mtime
+        except OSError:
+            return
+        if getattr(self, "_verdicts_mtime", None) != mtime:
+            self._verdicts_mtime = mtime
+            if self._experiment is not None:
+                self._experiment["verdicts"] = self._verdicts()
 
     def official_verdict(self, patch: str) -> dict[str, Any] | None:
         if not patch:
             return None
         if self._experiment is None:
             self.experiment_record("")
+        self._refresh_verdicts()
         return (self._experiment or {}).get("verdicts", {}).get(_sha256(patch.encode("utf-8")))
 
     # ----------------------------------------------------------- inputs

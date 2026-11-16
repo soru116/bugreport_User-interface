@@ -27,6 +27,21 @@ from modules.assignee_feedback import append_assignee_feedback, build_assignee_f
 
 
 STAGES = ("extraction", "duplicate", "priority", "assignee", "localization")
+# Text stored by earlier versions; ticket views replace it with automatic_patch_warning().
+LEGACY_AUTOMATIC_PATCH_WARNING = "全自動模式已繼續產生補丁；結果仍須通過基本安全檢查。"
+
+
+def automatic_patch_warning(level: Any, score: Any = None) -> str:
+    """Why an automatic run generated a patch although localization confidence was not high."""
+    text = {"medium": "中", "low": "低"}.get(str(level or "").lower(), str(level or "未知"))
+    try:
+        detail = f"（{float(score):.2f}）"
+    except (TypeError, ValueError):
+        detail = ""
+    return (f"錯誤定位信心為「{text}」{detail}。一般模式會先請工程師確認定位再產生補丁；"
+            "這張 Ticket 以全自動模式執行，略過了這個確認。")
+
+
 STAGE_LABELS = {
     "extraction": "轉換 JSON",
     "duplicate": "重複偵測",
@@ -441,7 +456,7 @@ class IntegratedPipeline:
                         if not warning.startswith("錯誤定位信心為")
                     ]
                     result.setdefault("warnings", []).append(
-                        "全自動模式已繼續產生補丁；結果仍須通過基本安全檢查。"
+                        automatic_patch_warning(raw.get("confidence_level"), (raw.get("confidence") or {}).get("confidence_score"))
                     )
                 if automatic_retry:
                     output["automatic_retry_count"] = automatic_retry
