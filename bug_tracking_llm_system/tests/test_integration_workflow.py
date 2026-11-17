@@ -240,6 +240,29 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(result["output"]["is_duplicate"])
         self.assertEqual(result["output"]["duplicate_of"], "H-1")
 
+    def test_workspace_settings_persist_duplicate_threshold(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("workspace_server_settings", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+        config_path = self.root / "settings.json"
+        config_path.write_text(json.dumps({
+            "workspace_root": str(WORKSPACE_ROOT),
+            "store_dir": str(self.root / "settings-store"),
+            "historical_tickets_paths": [str(self.history_path)],
+            "duplicate": {"auto_duplicate_threshold": 0.75},
+        }), encoding="utf-8")
+        app = server.WorkspaceApp(server.load_integration_config(config_path))
+
+        self.assertEqual(app.workspace_settings()["auto_duplicate_threshold"], 0.75)
+        updated = app.update_workspace_settings(auto_duplicate_threshold=0.72)
+        self.assertEqual(updated["auto_duplicate_threshold"], 0.72)
+        self.assertEqual(json.loads(config_path.read_text(encoding="utf-8"))["duplicate"]["auto_duplicate_threshold"], 0.72)
+        self.assertEqual(app.pipeline.config.duplicate.auto_duplicate_threshold, 0.72)
+        with self.assertRaisesRegex(ValueError, "0 和 1"):
+            app.update_workspace_settings(auto_duplicate_threshold=1.1)
+
     def test_priority_falls_back_without_pri_artifacts(self) -> None:
         self.config.priority.model_path = self.root / "missing.joblib"
         result = TeamPriorityPredictor(self.config).predict({"ticket_id": "T", "title": "crash"})

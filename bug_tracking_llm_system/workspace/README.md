@@ -24,7 +24,7 @@
                                                                          └─ 工程師可隨時確認／改派負責人
 ```
 
-- 重複偵測依 DUP README 的建議採「半自動」：預設 Top-k 候選一律交給工程師確認。若要自動判定，在設定檔填 `duplicate.auto_duplicate_threshold` 或 `review_threshold`（分數是 SBERT／TF-IDF 的原始相似度）。
+- 重複偵測的自動判定門檻預設為 `0.75`，可在工作台「設定 → 重複判定門檻」調整；最高原始 SBERT／TF-IDF 相似度達門檻時會標記為重複並停止後續流程。門檻只套用於新執行或重新執行的 Ticket。
 - 負責人確認不會擋住錯誤定位，這和主系統 orchestrator 的行為一致。確認結果會用主系統的 `build_assignee_feedback_record` 寫進 `data/workspace/feedback/assignee_feedback.jsonl`。
 - 處理完的 Ticket 會加入工作台歷史資料（`data/workspace/history/workspace_history.jsonl`），之後匯入的 Ticket 可以和它比對重複。
 - 重複偵測只比對同一個專案、而且建立時間比這張 Ticket 早的歷史資料（真實系統裡，歷史一定比新回報早）；略過了幾張會寫在重複偵測的說明裡。

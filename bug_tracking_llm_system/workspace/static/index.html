@@ -183,6 +183,19 @@
 
       <div class="mode-notice" id="modeNotice" role="status"></div>
 
+      <section class="preference-section threshold-section is-disabled" id="duplicateThresholdSection" aria-labelledby="duplicateThresholdTitle">
+        <div class="preference-heading">
+          <h3 id="duplicateThresholdTitle">重複判定門檻</h3>
+          <p id="duplicateThresholdHelp">最高相似度達到門檻時，標記為重複並停止後續流程。只影響新執行或重新執行的 Ticket。</p>
+          <p class="threshold-availability" id="duplicateThresholdAvailability">切換到全自動後可調整。</p>
+          <p class="field-error" id="duplicateThresholdError" role="alert"></p>
+        </div>
+        <label class="threshold-control" for="duplicateThreshold">
+          <span>相似度</span>
+          <input id="duplicateThreshold" name="duplicateThreshold" type="number" min="0" max="1" step="0.01" value="0.75" inputmode="decimal" aria-describedby="duplicateThresholdHelp duplicateThresholdAvailability duplicateThresholdError" disabled required>
+        </label>
+      </section>
+
       <section class="preference-section" aria-labelledby="automaticTargetTitle">
         <div class="preference-heading">
           <h3 id="automaticTargetTitle">全自動執行到</h3>

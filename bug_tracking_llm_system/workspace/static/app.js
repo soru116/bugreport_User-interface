@@ -181,7 +181,7 @@ const FIELD_LABELS = [
   ["actual_behavior", "實際結果", "wide"], ["logs", "Log", "wide mono"],
 ];
 
-const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi", automaticTarget: "commit", notificationsEnabled: false, notificationSnapshot: null, colorTheme: "light" };
+const state = { tickets: [], selected: null, detail: null, filter: "all", folder: null, selecting: false, picked: new Set(), query: "", homeSignature: null, projects: [], defaultProject: "", pollTimer: null, automationMode: "semi", automaticTarget: "commit", duplicateThreshold: 0.75, notificationsEnabled: false, notificationSnapshot: null, colorTheme: "light" };
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -238,7 +238,7 @@ function applyAutomationMode(mode) {
   try { localStorage.setItem(MODE_KEY, state.automationMode); } catch { /* private browsing */ }
 }
 
-function openSettings() {
+async function openSettings() {
   const selected = document.querySelector(`input[name="automationMode"][value="${state.automationMode}"]`);
   if (selected) selected.checked = true;
   const theme = document.querySelector(`input[name="colorTheme"][value="${state.colorTheme}"]`);
@@ -249,7 +249,17 @@ function openSettings() {
   if (notifications) notifications.checked = state.notificationsEnabled;
   renderNotificationPermissionStatus();
   renderModeNotice();
+  $("#duplicateThresholdError").textContent = "";
+  $("#duplicateThreshold").value = state.duplicateThreshold.toFixed(2);
   $("#settingsDialog").showModal();
+  try {
+    const settings = await api("/api/settings");
+    const threshold = Number(settings.auto_duplicate_threshold);
+    if (Number.isFinite(threshold)) state.duplicateThreshold = threshold;
+    $("#duplicateThreshold").value = state.duplicateThreshold.toFixed(2);
+  } catch (err) {
+    $("#duplicateThresholdError").textContent = `目前無法讀取伺服器設定：${err.message}`;
+  }
 }
 
 function renderNotificationPermissionStatus() {
@@ -297,12 +307,49 @@ function renderModeNotice() {
   notice.textContent = mode === "automatic"
     ? "全自動不會等待人工確認：模糊的重複候選會視為非重複，建議負責人會自動採用。處理失敗時仍會停止並顯示原因。"
     : "半自動保留目前行為：需要你確認重複結果與負責人，補丁由你手動啟動。";
+  syncDuplicateThresholdAvailability(mode);
+}
+
+function syncDuplicateThresholdAvailability(mode) {
+  const automatic = mode === "automatic";
+  const section = $("#duplicateThresholdSection");
+  const input = $("#duplicateThreshold");
+  section.classList.toggle("is-disabled", !automatic);
+  input.disabled = !automatic;
+  $("#duplicateThresholdAvailability").textContent = automatic
+    ? "全自動模式會使用這個門檻。"
+    : "切換到全自動後可調整。";
+  if (!automatic) $("#duplicateThresholdError").textContent = "";
 }
 
 async function saveSettings(event) {
   if (event.submitter && event.submitter.value === "cancel") return;
   event.preventDefault();
   const selected = document.querySelector('input[name="automationMode"]:checked');
+  const automatic = selected && selected.value === "automatic";
+  const thresholdInput = $("#duplicateThreshold");
+  const threshold = Number(thresholdInput.value);
+  if (automatic && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
+    $("#duplicateThresholdError").textContent = "請輸入 0 到 1 之間的數字。";
+    thresholdInput.focus();
+    return;
+  }
+  $("#duplicateThresholdError").textContent = "";
+  $("#saveSettings").disabled = true;
+  if (automatic) {
+    try {
+      const settings = await post("/api/settings", { auto_duplicate_threshold: threshold });
+      state.duplicateThreshold = Number(settings.auto_duplicate_threshold);
+    } catch (err) {
+      $("#duplicateThresholdError").textContent = err.message;
+      thresholdInput.focus();
+      return;
+    } finally {
+      $("#saveSettings").disabled = false;
+    }
+  } else {
+    $("#saveSettings").disabled = false;
+  }
   applyAutomationMode(selected ? selected.value : "semi");
   const theme = document.querySelector('input[name="colorTheme"]:checked');
   const target = document.querySelector('input[name="automaticTarget"]:checked');
@@ -316,7 +363,8 @@ async function saveSettings(event) {
     notificationsEnabled,
   });
   $("#settingsDialog").close();
-  toast(notificationDenied ? "設定已儲存；瀏覽器未允許通知" : "設定已儲存");
+  const savedMessage = automatic ? `設定已儲存；重複判定門檻 ${state.duplicateThreshold.toFixed(2)}` : "設定已儲存";
+  toast(notificationDenied ? `${savedMessage}；瀏覽器未允許通知` : savedMessage);
 }
 
 function runPreferences() {

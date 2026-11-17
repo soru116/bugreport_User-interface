@@ -40,6 +40,7 @@ from integration.status import readiness_report  # noqa: E402
 MAX_BODY_BYTES = 20_000_000
 ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json", "patch_result.json"}
 AUTOMATIC_TARGETS = {"localization", "patch", "commit"}
+DEFAULT_AUTO_DUPLICATE_THRESHOLD = 0.75
 
 
 def _automatic_target(value: Any) -> str:
@@ -87,6 +88,64 @@ class WorkspaceApp:
         self.pipeline = IntegratedPipeline(config)
         self._config_mtime = mtime
         print("偵測到設定檔變更，已重新載入。")
+
+    def workspace_settings(self) -> dict[str, Any]:
+        """Return the small, user-editable subset of integration settings."""
+
+        self.maybe_reload_config()
+        threshold = self.config.duplicate.auto_duplicate_threshold
+        return {
+            "auto_duplicate_threshold": (
+                DEFAULT_AUTO_DUPLICATE_THRESHOLD if threshold is None else float(threshold)
+            )
+        }
+
+    def update_workspace_settings(self, *, auto_duplicate_threshold: Any) -> dict[str, Any]:
+        """Persist and activate the duplicate auto-stop threshold.
+
+        Updating while a job is active would let one batch observe two policies, so the
+        settings page asks the user to wait until the queue is empty.
+        """
+
+        if isinstance(auto_duplicate_threshold, bool):
+            raise ValueError("重複判定門檻必須是 0 到 1 之間的數字。")
+        try:
+            threshold = float(auto_duplicate_threshold)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("重複判定門檻必須是 0 到 1 之間的數字。") from exc
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("重複判定門檻必須介於 0 和 1 之間。")
+        threshold = round(threshold, 4)
+
+        config_path = self.config.config_path
+        if config_path is None:
+            raise ValueError("目前未指定 integration_config.json，無法儲存門檻。")
+
+        with self._cv:
+            if self._queue:
+                raise ValueError("目前仍有 Ticket 正在處理；完成後再修改重複判定門檻。")
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("Integration config must be a JSON object.")
+            duplicate = data.setdefault("duplicate", {})
+            if not isinstance(duplicate, dict):
+                raise ValueError("設定檔 duplicate 必須是 JSON object。")
+            duplicate["auto_duplicate_threshold"] = threshold
+            temporary = config_path.with_suffix(config_path.suffix + ".tmp")
+            try:
+                temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                os.replace(temporary, config_path)
+            finally:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+            config = load_integration_config(config_path)
+            self.config = config
+            self.pipeline = IntegratedPipeline(config)
+            self._config_mtime = self._read_config_mtime()
+        return self.workspace_settings()
 
     # ----------------------------------------------------------- background
     # A FIFO queue served by two workers:
@@ -697,6 +756,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ticket": row})
             if parts[1:] == ["meta"]:
                 return self._json({"stages": [{"key": key, "label": STAGE_LABELS[key]} for key in STAGES]})
+            if parts[1:] == ["settings"]:
+                return self._json(self.app.workspace_settings())
             return self._error("Not found", 404)
         except KeyError:
             return self._error("找不到這張 Ticket。", 404)
@@ -710,6 +771,10 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             body = self._body()
             app = self.app
+            if parts == ["api", "settings"]:
+                return self._json(app.update_workspace_settings(
+                    auto_duplicate_threshold=body.get("auto_duplicate_threshold")
+                ))
             if parts == ["api", "import"]:
                 records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""),
                                                limit=MAX_HISTORY_RECORDS if body.get("as_history") else MAX_RECORDS)
