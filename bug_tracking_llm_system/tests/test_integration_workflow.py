@@ -240,6 +240,29 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(result["output"]["is_duplicate"])
         self.assertEqual(result["output"]["duplicate_of"], "H-1")
 
+    def test_workspace_settings_persist_duplicate_threshold(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("workspace_server_settings", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+        config_path = self.root / "settings.json"
+        config_path.write_text(json.dumps({
+            "workspace_root": str(WORKSPACE_ROOT),
+            "store_dir": str(self.root / "settings-store"),
+            "historical_tickets_paths": [str(self.history_path)],
+            "duplicate": {"auto_duplicate_threshold": 0.75},
+        }), encoding="utf-8")
+        app = server.WorkspaceApp(server.load_integration_config(config_path))
+
+        self.assertEqual(app.workspace_settings()["auto_duplicate_threshold"], 0.75)
+        updated = app.update_workspace_settings(auto_duplicate_threshold=0.72)
+        self.assertEqual(updated["auto_duplicate_threshold"], 0.72)
+        self.assertEqual(json.loads(config_path.read_text(encoding="utf-8"))["duplicate"]["auto_duplicate_threshold"], 0.72)
+        self.assertEqual(app.pipeline.config.duplicate.auto_duplicate_threshold, 0.72)
+        with self.assertRaisesRegex(ValueError, "0 和 1"):
+            app.update_workspace_settings(auto_duplicate_threshold=1.1)
+
     def test_priority_falls_back_without_pri_artifacts(self) -> None:
         self.config.priority.model_path = self.root / "missing.joblib"
         result = TeamPriorityPredictor(self.config).predict({"ticket_id": "T", "title": "crash"})
@@ -543,6 +566,32 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual(commit["commit_message"], "fix(auth): handle missing token")
         self.assertFalse(app.pipeline.store.feedback_path.exists(), "automatic routing is not human feedback")
 
+    def test_workspace_automatic_target_localization_does_not_start_patch(self) -> None:
+        import importlib.util
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server_auto_localization", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        class ForbiddenPatcher:
+            def generate(self, *_args, **_kwargs):
+                raise AssertionError("localization target must not generate a patch")
+
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        app.pipeline.patcher = ForbiddenPatcher()
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        self.assertTrue(app.start(record["key"], automatic=True, automatic_target="localization"))
+
+        deadline = _time.time() + 30
+        while not app.idle() and _time.time() < deadline:
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+        record = app.pipeline.get(record["key"])
+        self.assertEqual(record["stages"]["localization"]["status"], "done")
+        self.assertNotIn("patch", record["stages"])
+
     def test_workspace_automatic_mode_retries_no_valid_patch_once(self) -> None:
         import importlib.util
         import time as _time
@@ -723,8 +772,9 @@ class IntegrationWorkflowTests(unittest.TestCase):
         app.pipeline.store.write_artifact(key, "bug_location_raw.json", {"confidence_level": "low"})
         record = app.pipeline.generate_patch(key, automatic=True)
         warnings = record["stages"]["patch"]["warnings"]
-        self.assertFalse(any(item.startswith("錯誤定位信心為") for item in warnings))
-        self.assertTrue(any("已繼續產生補丁" in item for item in warnings))
+        self.assertFalse(any("正式流程不會自動產生補丁" in item for item in warnings))
+        self.assertTrue(any(item.startswith("錯誤定位信心為「低」") and "全自動模式執行，略過了這個確認" in item
+                            for item in warnings))
 
     def test_swebench_tickets_are_localized_in_their_own_commit(self) -> None:
         import shutil as _shutil

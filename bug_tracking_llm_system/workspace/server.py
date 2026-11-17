@@ -33,12 +33,18 @@ if str(SRC_ROOT) not in sys.path:
 
 from integration.config import IntegrationConfig, load_integration_config  # noqa: E402
 from integration.importers import MAX_HISTORY_RECORDS, MAX_RECORDS, parse_import_payload  # noqa: E402
-from integration.pipeline import STAGE_LABELS, STAGES, IntegratedPipeline  # noqa: E402
+from integration.pipeline import LEGACY_AUTOMATIC_PATCH_WARNING, STAGE_LABELS, STAGES, IntegratedPipeline, automatic_patch_warning  # noqa: E402
 from integration.status import readiness_report  # noqa: E402
 
 
 MAX_BODY_BYTES = 20_000_000
 ARTIFACT_NAMES = {"duplicate_result.json", "priority_result.json", "localization_result.json", "bug_location_raw.json", "patch_result.json"}
+AUTOMATIC_TARGETS = {"localization", "patch", "commit"}
+DEFAULT_AUTO_DUPLICATE_THRESHOLD = 0.75
+
+
+def _automatic_target(value: Any) -> str:
+    return str(value) if str(value) in AUTOMATIC_TARGETS else "commit"
 
 
 def _coarse(seconds: float) -> int:
@@ -82,6 +88,64 @@ class WorkspaceApp:
         self.pipeline = IntegratedPipeline(config)
         self._config_mtime = mtime
         print("偵測到設定檔變更，已重新載入。")
+
+    def workspace_settings(self) -> dict[str, Any]:
+        """Return the small, user-editable subset of integration settings."""
+
+        self.maybe_reload_config()
+        threshold = self.config.duplicate.auto_duplicate_threshold
+        return {
+            "auto_duplicate_threshold": (
+                DEFAULT_AUTO_DUPLICATE_THRESHOLD if threshold is None else float(threshold)
+            )
+        }
+
+    def update_workspace_settings(self, *, auto_duplicate_threshold: Any) -> dict[str, Any]:
+        """Persist and activate the duplicate auto-stop threshold.
+
+        Updating while a job is active would let one batch observe two policies, so the
+        settings page asks the user to wait until the queue is empty.
+        """
+
+        if isinstance(auto_duplicate_threshold, bool):
+            raise ValueError("重複判定門檻必須是 0 到 1 之間的數字。")
+        try:
+            threshold = float(auto_duplicate_threshold)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("重複判定門檻必須是 0 到 1 之間的數字。") from exc
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("重複判定門檻必須介於 0 和 1 之間。")
+        threshold = round(threshold, 4)
+
+        config_path = self.config.config_path
+        if config_path is None:
+            raise ValueError("目前未指定 integration_config.json，無法儲存門檻。")
+
+        with self._cv:
+            if self._queue:
+                raise ValueError("目前仍有 Ticket 正在處理；完成後再修改重複判定門檻。")
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("Integration config must be a JSON object.")
+            duplicate = data.setdefault("duplicate", {})
+            if not isinstance(duplicate, dict):
+                raise ValueError("設定檔 duplicate 必須是 JSON object。")
+            duplicate["auto_duplicate_threshold"] = threshold
+            temporary = config_path.with_suffix(config_path.suffix + ".tmp")
+            try:
+                temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                os.replace(temporary, config_path)
+            finally:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+            config = load_integration_config(config_path)
+            self.config = config
+            self.pipeline = IntegratedPipeline(config)
+            self._config_mtime = self._read_config_mtime()
+        return self.workspace_settings()
 
     # ----------------------------------------------------------- background
     # A FIFO queue served by two workers:
@@ -257,7 +321,7 @@ class WorkspaceApp:
                             traceback.print_exc()
                         self._record("after", time.time() - job["started_at"])
                         self._finish(job)
-                        if job.get("automatic") and not job.get("stop"):
+                        if job.get("automatic") and not job.get("stop") and job.get("automatic_target", "commit") != "localization":
                             try:
                                 pipeline.patch_precheck(job["key"])
                             except ValueError as exc:  # e.g. no code for this project: not a failure of the ticket
@@ -265,14 +329,15 @@ class WorkspaceApp:
                             except Exception as exc:
                                 pipeline.skip_patch(job["key"], f"{type(exc).__name__}: {exc}")
                             else:
-                                self._submit(job["key"], "patch", automatic=True)
+                                self._submit(job["key"], "patch", automatic=True, automatic_target=job.get("automatic_target", "commit"))
                 elif phase == "patch":
                     job = batch[0]
                     automatic = bool(job.get("automatic"))
-                    record = pipeline.generate_patch(job["key"], automatic=automatic)
+                    include_commit = job.get("automatic_target", "commit") == "commit"
+                    record = pipeline.generate_patch(job["key"], automatic=automatic, generate_commit_message=include_commit)
                     output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
                     if automatic and not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
-                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1)
+                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1, generate_commit_message=include_commit)
                     self._record("patch", time.time() - job["started_at"])
                     self._finish(job)
                 elif phase == "commit":
@@ -431,9 +496,9 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return True
 
-    def start(self, key: str, *, automatic: bool = False) -> bool:
+    def start(self, key: str, *, automatic: bool = False, automatic_target: str = "commit") -> bool:
         self.maybe_reload_config()
-        return self._submit(key, "full", automatic=automatic)
+        return self._submit(key, "full", automatic=automatic, automatic_target=_automatic_target(automatic_target))
 
     def continue_after_duplicate(self, key: str) -> bool:
         self.maybe_reload_config()
@@ -537,7 +602,7 @@ class WorkspaceApp:
             "patch": {
                 "status": stages.get("patch", {}).get("status", ""),
                 "patch_status": (stages.get("patch", {}).get("output") or {}).get("patch_status", ""),
-                "official_resolved": ((stages.get("patch", {}).get("output") or {}).get("official") or {}).get("official_resolved"),
+                "official_resolved": (self._live_official(record) or {}).get("official_resolved"),
             },
             "created_at": record.get("created_at"),
             "updated_at": record.get("updated_at"),
@@ -545,8 +610,33 @@ class WorkspaceApp:
             "queue": self.queue_info(record["key"]),
         }
 
+    def _live_official(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        """Look the current patch up in the official-verdict index at read time.
+
+        The verdict stored at generation time goes stale when the same patch is evaluated later,
+        so the index (matched by patch sha256) is consulted every time the ticket is shown."""
+        output = ((record.get("stages") or {}).get("patch") or {}).get("output") or {}
+        patch = output.get("patch") or ""
+        if not patch:
+            return output.get("official")
+        try:
+            return self.pipeline.patcher.official_verdict(patch)
+        except Exception:
+            return output.get("official")
+
     def ticket_detail(self, key: str) -> dict[str, Any]:
         record = self.pipeline.get(key)
+        output = ((record.get("stages") or {}).get("patch") or {}).get("output")
+        if isinstance(output, dict) and output.get("patch"):
+            output["official"] = self._live_official(record)
+        patch_stage = (record.get("stages") or {}).get("patch") or {}
+        if LEGACY_AUTOMATIC_PATCH_WARNING in (patch_stage.get("warnings") or []):
+            loc = ((record.get("stages") or {}).get("localization") or {}).get("output") or {}
+            confidence = loc.get("confidence") or {}
+            reworded = automatic_patch_warning(loc.get("confidence_level") or confidence.get("confidence_level"),
+                                               confidence.get("confidence_score"))
+            patch_stage["warnings"] = [reworded if w == LEGACY_AUTOMATIC_PATCH_WARNING else w
+                                       for w in patch_stage["warnings"]]
         record["busy"] = self.busy(key)
         record["queue"] = self.queue_info(key)
         try:  # what the 6/36 patch run produced for this ticket, if it is one of the 36
@@ -666,6 +756,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ticket": row})
             if parts[1:] == ["meta"]:
                 return self._json({"stages": [{"key": key, "label": STAGE_LABELS[key]} for key in STAGES]})
+            if parts[1:] == ["settings"]:
+                return self._json(self.app.workspace_settings())
             return self._error("Not found", 404)
         except KeyError:
             return self._error("找不到這張 Ticket。", 404)
@@ -679,6 +771,10 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             body = self._body()
             app = self.app
+            if parts == ["api", "settings"]:
+                return self._json(app.update_workspace_settings(
+                    auto_duplicate_threshold=body.get("auto_duplicate_threshold")
+                ))
             if parts == ["api", "import"]:
                 records = parse_import_payload(str(body.get("content") or ""), filename=str(body.get("filename") or ""),
                                                limit=MAX_HISTORY_RECORDS if body.get("as_history") else MAX_RECORDS)
@@ -692,7 +788,8 @@ class Handler(SimpleHTTPRequestHandler):
                 created = app.pipeline.import_raw(records, source=str(body.get("source") or "工作台匯入"), project=str(body.get("project") or ""))
                 if body.get("auto_start", True):
                     for record in created:
-                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic")
+                        app.start(record["key"], automatic=str(body.get("automation_mode") or "semi") == "automatic",
+                                  automatic_target=_automatic_target(body.get("automatic_target")))
                 return self._json({"created": [record["key"] for record in created]})
             if parts == ["api", "delete-tickets"]:
                 deleted, deferred, skipped = [], [], []
@@ -729,7 +826,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if app.busy(key):
                     return self._error("這張 Ticket 正在處理中，請稍候。", 409)
                 if action == "run":
-                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic")
+                    app.start(key, automatic=str(body.get("automation_mode") or "semi") == "automatic",
+                              automatic_target=_automatic_target(body.get("automatic_target")))
                     return self._json({"started": True})
                 if action == "duplicate":
                     record = app.pipeline.decide_duplicate(

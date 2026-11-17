@@ -1,0 +1,4 @@
+images/
+runs/
+# GitHub Actions run logs are the evidence for official verdicts; keep them despite the root *.log rule
+!github_actions/*.log

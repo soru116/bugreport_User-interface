@@ -88,6 +88,13 @@ class CommitMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(commit["commit_message"], "fix(names): return an empty string for None input")
         self.assertNotIn("\n", commit["commit_message"])
 
+    def test_patch_target_stops_before_commit_message(self) -> None:
+        pipeline = self._pipeline(json.dumps({"type": "fix", "subject": "should not be called"}))
+        stage = pipeline.generate_patch("T-1", automatic=True, generate_commit_message=False)["stages"]["patch"]
+        self.assertEqual(stage["status"], "done")
+        self.assertEqual(stage["output"]["patch_status"], "generated")
+        self.assertNotIn("commit_message", stage["output"])
+
     def test_overlong_model_subject_is_shortened_instead_of_blocking_automatic_flow(self) -> None:
         generator = TeamCommitMessageGenerator(
             self.config,

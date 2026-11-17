@@ -24,7 +24,7 @@
     "metadata_rerank_fields": ["component:0.02"],
     "stable_rerank": true,
     "top_k": 10,
-    "auto_duplicate_threshold": null,
+    "auto_duplicate_threshold": 0.75,
     "review_threshold": null
   },
 

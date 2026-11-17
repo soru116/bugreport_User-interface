@@ -1,0 +1,726 @@
+evaluate	Set up job	﻿2026-11-16T02:24:58.5846015Z Current runner version: '2.338.2'
+evaluate	Set up job	2026-11-16T02:24:58.5926173Z ##[group]Runner Image Provisioner
+evaluate	Set up job	2026-11-16T02:24:58.5927444Z Hosted Compute Agent
+evaluate	Set up job	2026-11-16T02:24:58.5928213Z Version: 20261103.629
+evaluate	Set up job	2026-11-16T02:24:58.5929060Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+evaluate	Set up job	2026-11-16T02:24:58.5930286Z Build Date: 2026-11-03T17:26:59Z
+evaluate	Set up job	2026-11-16T02:24:58.5931172Z Worker ID: {eb7bc2b4-5c9f-41fb-9353-84f2155ed3ae}
+evaluate	Set up job	2026-11-16T02:24:58.5932208Z Region: westus3
+evaluate	Set up job	2026-11-16T02:24:58.5932929Z Cloud: Azure
+evaluate	Set up job	2026-11-16T02:24:58.5933634Z ##[endgroup]
+evaluate	Set up job	2026-11-16T02:24:58.5935915Z ##[group]Operating System
+evaluate	Set up job	2026-11-16T02:24:58.5936718Z Ubuntu
+evaluate	Set up job	2026-11-16T02:24:58.5937335Z 24.04.5
+evaluate	Set up job	2026-11-16T02:24:58.5938063Z LTS
+evaluate	Set up job	2026-11-16T02:24:58.5938728Z ##[endgroup]
+evaluate	Set up job	2026-11-16T02:24:58.5939470Z ##[group]Runner Image
+evaluate	Set up job	2026-11-16T02:24:58.5960726Z Image: ubuntu-24.04
+evaluate	Set up job	2026-11-16T02:24:58.5961533Z Version: 20261111.370.1
+evaluate	Set up job	2026-11-16T02:24:58.5963542Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261111.370/images/ubuntu/Ubuntu2404-Readme.md
+evaluate	Set up job	2026-11-16T02:24:58.5965917Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261111.370
+evaluate	Set up job	2026-11-16T02:24:58.5967339Z ##[endgroup]
+evaluate	Set up job	2026-11-16T02:24:58.5968838Z ##[group]GITHUB_TOKEN Permissions
+evaluate	Set up job	2026-11-16T02:24:58.5971915Z Contents: read
+evaluate	Set up job	2026-11-16T02:24:58.5972618Z Metadata: read
+evaluate	Set up job	2026-11-16T02:24:58.5973418Z ##[endgroup]
+evaluate	Set up job	2026-11-16T02:24:58.5976005Z Secret source: Actions
+evaluate	Set up job	2026-11-16T02:24:58.5977266Z Cache mode: write
+evaluate	Set up job	2026-11-16T02:24:58.5978391Z Prepare workflow directory
+evaluate	Set up job	2026-11-16T02:24:58.6478003Z Prepare all required actions
+evaluate	Set up job	2026-11-16T02:24:58.6520015Z Getting action download info
+evaluate	Set up job	2026-11-16T02:24:58.9498189Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+evaluate	Set up job	2026-11-16T02:24:59.1049154Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+evaluate	Set up job	2026-11-16T02:24:59.2536121Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+evaluate	Set up job	2026-11-16T02:24:59.5842003Z Complete job name: evaluate
+evaluate	Run actions/checkout@v4	﻿2026-11-16T02:24:59.6527416Z ##[group]Run actions/checkout@v4
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6528163Z with:
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6528515Z   lfs: false
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6528887Z   repository: soru116/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6532132Z   token: ***
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6532511Z   ssh-strict: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6532880Z   ssh-user: git
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6533249Z   persist-credentials: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6533651Z   clean: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6534015Z   sparse-checkout-cone-mode: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6534440Z   fetch-depth: 1
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6534803Z   fetch-tags: false
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6535172Z   show-progress: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6535545Z   submodules: false
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6535941Z   set-safe-directory: true
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6536360Z   allow-unsafe-pr-checkout: false
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6536964Z env:
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6537313Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6537741Z   DATASET_SPLIT: test
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6538215Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6538720Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6558700Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6579435Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6580134Z   TEST_TIMEOUT: 1800
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6580503Z   PYTHONUTF8: 1
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6580849Z   NO_COLOR: 1
+evaluate	Run actions/checkout@v4	2026-11-16T02:24:59.6581233Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.2788493Z Syncing repository: soru116/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.2791293Z ##[group]Getting Git version info
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.2792571Z Working directory is '/home/runner/work/fixed-patch/fixed-patch'
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3271444Z [command]/usr/bin/git version
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3401628Z git version 2.56.1
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3452784Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3462988Z Temporarily overriding HOME='/home/runner/work/_temp/74522901-27c0-42da-a31a-801bafc5d84d' before making global git config changes
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3481097Z Adding repository directory to the temporary git global config as a safe directory
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3483611Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fixed-patch/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3582081Z Deleting the contents of '/home/runner/work/fixed-patch/fixed-patch'
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3585164Z ##[group]Initializing the repository
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.3587293Z [command]/usr/bin/git init /home/runner/work/fixed-patch/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4117265Z hint: Using 'master' as the name for the initial branch. This default branch name
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4120968Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4153339Z hint: to use in all of your new repositories, which will suppress this warning,
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4155894Z hint: call:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4156997Z hint:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4158345Z hint: 	git config --global init.defaultBranch <name>
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4160201Z hint:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4161971Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4164573Z hint: 'development'. The just-created branch can be renamed via this command:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4166606Z hint:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4167748Z hint: 	git branch -m <name>
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4169049Z hint:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4171043Z hint: Disable this message with "git config set advice.defaultBranchName false"
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4173814Z Initialized empty Git repository in /home/runner/work/fixed-patch/fixed-patch/.git/
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4177787Z [command]/usr/bin/git remote add origin https://github.com/soru116/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4207977Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4210787Z ##[group]Disabling automatic garbage collection
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4213393Z [command]/usr/bin/git config --local gc.auto 0
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4259609Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4263021Z ##[group]Setting up auth
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4265790Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.4314157Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.5364655Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.5527806Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.5680948Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.5727283Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.5955781Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.6006254Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.6008493Z ##[group]Fetching the repository
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:00.6023126Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +fab902d6990fdfc307cb4d46e5415d1dd8959172:refs/remotes/origin/main
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6960504Z From https://github.com/soru116/fixed-patch
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6971363Z  * [new ref]         fab902d6990fdfc307cb4d46e5415d1dd8959172 -> origin/main
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6994381Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6995087Z ##[group]Determining the checkout info
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6995813Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.6999591Z [command]/usr/bin/git sparse-checkout disable
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.7112486Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.7184860Z ##[group]Checking out the ref
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:02.7185827Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7282233Z Updating files:  31% (1090/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7316012Z Updating files:  32% (1112/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7346616Z Updating files:  33% (1147/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7378952Z Updating files:  34% (1181/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7413881Z Updating files:  35% (1216/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7444599Z Updating files:  36% (1251/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7494486Z Updating files:  37% (1286/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7526509Z Updating files:  38% (1320/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7562130Z Updating files:  39% (1355/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7597126Z Updating files:  40% (1390/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7668849Z Updating files:  41% (1424/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7704156Z Updating files:  42% (1459/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7737093Z Updating files:  43% (1494/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7800662Z Updating files:  44% (1529/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7876883Z Updating files:  45% (1563/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7913527Z Updating files:  46% (1598/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.7961568Z Updating files:  47% (1633/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8023658Z Updating files:  48% (1668/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8058898Z Updating files:  49% (1702/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8104403Z Updating files:  50% (1737/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8132111Z Updating files:  51% (1772/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8204503Z Updating files:  52% (1806/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8259025Z Updating files:  53% (1841/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8292554Z Updating files:  54% (1876/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8405172Z Updating files:  55% (1911/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8451586Z Updating files:  56% (1945/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8495566Z Updating files:  57% (1980/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8542522Z Updating files:  58% (2015/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8583734Z Updating files:  59% (2050/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8617808Z Updating files:  60% (2084/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8663836Z Updating files:  61% (2119/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8698849Z Updating files:  62% (2154/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8734271Z Updating files:  63% (2188/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8768508Z Updating files:  64% (2223/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8805431Z Updating files:  65% (2258/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8837326Z Updating files:  66% (2293/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8873965Z Updating files:  67% (2327/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8907024Z Updating files:  68% (2362/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8968889Z Updating files:  69% (2397/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.8990416Z Updating files:  70% (2432/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9046514Z Updating files:  71% (2466/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9080163Z Updating files:  72% (2501/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9115999Z Updating files:  73% (2536/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9150983Z Updating files:  74% (2571/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9184514Z Updating files:  75% (2605/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9247153Z Updating files:  76% (2640/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9280117Z Updating files:  77% (2675/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9318754Z Updating files:  78% (2709/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9359088Z Updating files:  79% (2744/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9394475Z Updating files:  80% (2779/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9424017Z Updating files:  81% (2814/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9458916Z Updating files:  82% (2848/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9490587Z Updating files:  83% (2883/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9521856Z Updating files:  84% (2918/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9550194Z Updating files:  85% (2953/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9581655Z Updating files:  86% (2987/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9611470Z Updating files:  87% (3022/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9654406Z Updating files:  88% (3057/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9679045Z Updating files:  89% (3091/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9697711Z Updating files:  90% (3126/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9712675Z Updating files:  91% (3161/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9732422Z Updating files:  92% (3196/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9753287Z Updating files:  93% (3230/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9777902Z Updating files:  94% (3265/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9799807Z Updating files:  95% (3300/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9824076Z Updating files:  96% (3335/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9843126Z Updating files:  97% (3369/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9860407Z Updating files:  98% (3404/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9879855Z Updating files:  99% (3439/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9880371Z Updating files: 100% (3473/3473)
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9880877Z Updating files: 100% (3473/3473), done.
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9931383Z Switched to a new branch 'main'
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:03.9940300Z branch 'main' set up to track 'origin/main'.
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:04.0636213Z ##[endgroup]
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:04.0638385Z [command]/usr/bin/git log -1 --format=%H
+evaluate	Run actions/checkout@v4	2026-11-16T02:25:04.0639107Z fab902d6990fdfc307cb4d46e5415d1dd8959172
+evaluate	Run actions/setup-python@v5	﻿2026-11-16T02:25:04.0857161Z ##[group]Run actions/setup-python@v5
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0857413Z with:
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0857604Z   python-version: 3.11
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0857801Z   check-latest: false
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0859851Z   token: ***
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0860055Z   update-environment: true
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0860259Z   allow-prereleases: false
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0860451Z   freethreaded: false
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0860628Z env:
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0860801Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0861049Z   DATASET_SPLIT: test
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0861241Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0861482Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0876021Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0890926Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0891400Z   TEST_TIMEOUT: 1800
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0891582Z   PYTHONUTF8: 1
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0891754Z   NO_COLOR: 1
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.0891920Z ##[endgroup]
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.2191561Z ##[group]Installed versions
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.2276244Z (node:2058) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.2276963Z Successfully set up CPython (3.11.18)
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.2277693Z ##[endgroup]
+evaluate	Run actions/setup-python@v5	2026-11-16T02:25:04.2278567Z (Use `node --trace-deprecation ...` to show where the warning was created)
+evaluate	Validate and prepare submitted candidate	﻿2026-11-16T02:25:04.2497242Z ##[group]Run python scripts/cloud_official_bridge.py prepare
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2498255Z [36;1mpython scripts/cloud_official_bridge.py prepare[0m
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2562835Z shell: /usr/bin/bash -e {0}
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2563208Z env:
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2563499Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2563845Z   DATASET_SPLIT: test
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2564164Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2564529Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2593683Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2620390Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2620928Z   TEST_TIMEOUT: 1800
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2621219Z   PYTHONUTF8: 1
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2621454Z   NO_COLOR: 1
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2621776Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2622332Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2622890Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2623383Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2623897Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2624398Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Validate and prepare submitted candidate	2026-11-16T02:25:04.2624816Z ##[endgroup]
+evaluate	Check runner capacity	﻿2026-11-16T02:25:04.8136789Z ##[group]Run df -h
+evaluate	Check runner capacity	2026-11-16T02:25:04.8137025Z [36;1mdf -h[0m
+evaluate	Check runner capacity	2026-11-16T02:25:04.8137196Z [36;1mdocker info[0m
+evaluate	Check runner capacity	2026-11-16T02:25:04.8154931Z shell: /usr/bin/bash -e {0}
+evaluate	Check runner capacity	2026-11-16T02:25:04.8155145Z env:
+evaluate	Check runner capacity	2026-11-16T02:25:04.8155322Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Check runner capacity	2026-11-16T02:25:04.8155542Z   DATASET_SPLIT: test
+evaluate	Check runner capacity	2026-11-16T02:25:04.8155737Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Check runner capacity	2026-11-16T02:25:04.8155979Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Check runner capacity	2026-11-16T02:25:04.8170856Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Check runner capacity	2026-11-16T02:25:04.8186713Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Check runner capacity	2026-11-16T02:25:04.8187029Z   TEST_TIMEOUT: 1800
+evaluate	Check runner capacity	2026-11-16T02:25:04.8187207Z   PYTHONUTF8: 1
+evaluate	Check runner capacity	2026-11-16T02:25:04.8187383Z   NO_COLOR: 1
+evaluate	Check runner capacity	2026-11-16T02:25:04.8187602Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Check runner capacity	2026-11-16T02:25:04.8187943Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Check runner capacity	2026-11-16T02:25:04.8188270Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Check runner capacity	2026-11-16T02:25:04.8188566Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Check runner capacity	2026-11-16T02:25:04.8188862Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Check runner capacity	2026-11-16T02:25:04.8189151Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Check runner capacity	2026-11-16T02:25:04.8189402Z ##[endgroup]
+evaluate	Check runner capacity	2026-11-16T02:25:04.8362089Z Filesystem       Size  Used Avail Use% Mounted on
+evaluate	Check runner capacity	2026-11-16T02:25:04.8362635Z /dev/root         72G   60G   13G  83% /
+evaluate	Check runner capacity	2026-11-16T02:25:04.8366965Z tmpfs            3.9G   84K  3.9G   1% /dev/shm
+evaluate	Check runner capacity	2026-11-16T02:25:04.8368855Z tmpfs            1.6G 1016K  1.6G   1% /run
+evaluate	Check runner capacity	2026-11-16T02:25:04.8369319Z tmpfs            5.0M     0  5.0M   0% /run/lock
+evaluate	Check runner capacity	2026-11-16T02:25:04.8370100Z efivarfs         128M   32K  128M   1% /sys/firmware/efi/efivars
+evaluate	Check runner capacity	2026-11-16T02:25:04.8370612Z /dev/nvme0n1p16  881M   85M  735M  11% /boot
+evaluate	Check runner capacity	2026-11-16T02:25:04.8371337Z /dev/nvme0n1p15  105M  6.2M   99M   6% /boot/efi
+evaluate	Check runner capacity	2026-11-16T02:25:04.8372027Z tmpfs            794M   12K  794M   1% /run/user/1001
+evaluate	Check runner capacity	2026-11-16T02:25:07.0139389Z Client: Docker Engine - Community
+evaluate	Check runner capacity	2026-11-16T02:25:07.0140195Z  Version:    28.0.4
+evaluate	Check runner capacity	2026-11-16T02:25:07.0151071Z  Context:    default
+evaluate	Check runner capacity	2026-11-16T02:25:07.0151703Z  Debug Mode: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0152279Z  Plugins:
+evaluate	Check runner capacity	2026-11-16T02:25:07.0152699Z   buildx: Docker Buildx (Docker Inc.)
+evaluate	Check runner capacity	2026-11-16T02:25:07.0153168Z     Version:  v0.38.2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0153671Z     Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+evaluate	Check runner capacity	2026-11-16T02:25:07.0154297Z   compose: Docker Compose (Docker Inc.)
+evaluate	Check runner capacity	2026-11-16T02:25:07.0154772Z     Version:  v2.38.2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0155251Z     Path:     /usr/libexec/docker/cli-plugins/docker-compose
+evaluate	Check runner capacity	2026-11-16T02:25:07.0155698Z 
+evaluate	Check runner capacity	2026-11-16T02:25:07.0156429Z Server:
+evaluate	Check runner capacity	2026-11-16T02:25:07.0156786Z  Containers: 0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0157162Z   Running: 0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0157521Z   Paused: 0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0157875Z   Stopped: 0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0158225Z  Images: 6
+evaluate	Check runner capacity	2026-11-16T02:25:07.0158596Z  Server Version: 28.0.4
+evaluate	Check runner capacity	2026-11-16T02:25:07.0159029Z  Storage Driver: overlay2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0159463Z   Backing Filesystem: extfs
+evaluate	Check runner capacity	2026-11-16T02:25:07.0160176Z   Supports d_type: true
+evaluate	Check runner capacity	2026-11-16T02:25:07.0160599Z   Using metacopy: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0161009Z   Native Overlay Diff: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0161547Z   userxattr: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0161947Z  Logging Driver: json-file
+evaluate	Check runner capacity	2026-11-16T02:25:07.0162485Z  Cgroup Driver: systemd
+evaluate	Check runner capacity	2026-11-16T02:25:07.0165758Z  Cgroup Version: 2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0166190Z  Plugins:
+evaluate	Check runner capacity	2026-11-16T02:25:07.0166556Z   Volume: local
+evaluate	Check runner capacity	2026-11-16T02:25:07.0166978Z   Network: bridge host ipvlan macvlan null overlay
+evaluate	Check runner capacity	2026-11-16T02:25:07.0167556Z   Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+evaluate	Check runner capacity	2026-11-16T02:25:07.0168153Z  Swarm: inactive
+evaluate	Check runner capacity	2026-11-16T02:25:07.0168571Z  Runtimes: io.containerd.runc.v2 runc
+evaluate	Check runner capacity	2026-11-16T02:25:07.0169048Z  Default Runtime: runc
+evaluate	Check runner capacity	2026-11-16T02:25:07.0169468Z  Init Binary: docker-init
+evaluate	Check runner capacity	2026-11-16T02:25:07.0170393Z  containerd version: b7a25261e029d68978bbf290df0a62fc819b3c51
+evaluate	Check runner capacity	2026-11-16T02:25:07.0170991Z  runc version: v1.5.2-0-g29dd3dc2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0171445Z  init version: de40ad0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0171870Z  Security Options:
+evaluate	Check runner capacity	2026-11-16T02:25:07.0172284Z   apparmor
+evaluate	Check runner capacity	2026-11-16T02:25:07.0172693Z   seccomp
+evaluate	Check runner capacity	2026-11-16T02:25:07.0173088Z    Profile: builtin
+evaluate	Check runner capacity	2026-11-16T02:25:07.0173497Z   cgroupns
+evaluate	Check runner capacity	2026-11-16T02:25:07.0173916Z  Kernel Version: 7.0.0-1017-azure
+evaluate	Check runner capacity	2026-11-16T02:25:07.0174411Z  Operating System: Ubuntu 24.04.5 LTS
+evaluate	Check runner capacity	2026-11-16T02:25:07.0174898Z  OSType: linux
+evaluate	Check runner capacity	2026-11-16T02:25:07.0175325Z  Architecture: x86_64
+evaluate	Check runner capacity	2026-11-16T02:25:07.0175785Z  CPUs: 2
+evaluate	Check runner capacity	2026-11-16T02:25:07.0176187Z  Total Memory: 7.747GiB
+evaluate	Check runner capacity	2026-11-16T02:25:07.0176634Z  Name: runnervm8axu0
+evaluate	Check runner capacity	2026-11-16T02:25:07.0177097Z  ID: 0fef2a29-aadb-43ca-98b5-edbc7a28f18a
+evaluate	Check runner capacity	2026-11-16T02:25:07.0177632Z  Docker Root Dir: /var/lib/docker
+evaluate	Check runner capacity	2026-11-16T02:25:07.0177939Z  Debug Mode: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0178202Z  Username: githubactions
+evaluate	Check runner capacity	2026-11-16T02:25:07.0178484Z  Experimental: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0178745Z  Insecure Registries:
+evaluate	Check runner capacity	2026-11-16T02:25:07.0179039Z   ::1/128
+evaluate	Check runner capacity	2026-11-16T02:25:07.0179251Z   127.0.0.0/8
+evaluate	Check runner capacity	2026-11-16T02:25:07.0179487Z  Live Restore Enabled: false
+evaluate	Check runner capacity	2026-11-16T02:25:07.0179878Z 
+evaluate	Install pinned official evaluator	﻿2026-11-16T02:25:07.0208388Z ##[group]Run python -m pip install 'swebench==5.0.2'
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0208732Z [36;1mpython -m pip install 'swebench==5.0.2'[0m
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0226879Z shell: /usr/bin/bash -e {0}
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0227095Z env:
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0227268Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0227487Z   DATASET_SPLIT: test
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0227716Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0227954Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0245576Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0261535Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0261859Z   TEST_TIMEOUT: 1800
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0262046Z   PYTHONUTF8: 1
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0262243Z   NO_COLOR: 1
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0262468Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0262814Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0263332Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0263633Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0263927Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0264224Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Install pinned official evaluator	2026-11-16T02:25:07.0264483Z ##[endgroup]
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.1272499Z Collecting swebench==5.0.2
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.1764587Z   Downloading swebench-5.0.2-py3-none-any.whl.metadata (16 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.1973960Z Collecting beautifulsoup4 (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.2016017Z   Downloading beautifulsoup4-4.15.0-py3-none-any.whl.metadata (3.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.2818589Z Collecting chardet (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.2880242Z   Downloading chardet-7.7.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3064527Z Collecting datasets (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3117622Z   Downloading datasets-5.2.0-py3-none-any.whl.metadata (24 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3370079Z Collecting docker (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3412016Z   Downloading docker-7.2.0-py3-none-any.whl.metadata (3.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3557729Z Collecting ghapi<2 (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3630587Z   Downloading ghapi-1.1.1-py3-none-any.whl.metadata (13 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3819792Z Collecting GitPython (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.3859106Z   Downloading gitpython-3.2.1-py3-none-any.whl.metadata (13 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.5488320Z Collecting modal (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.5543066Z   Downloading modal-1.6.4-py3-none-any.whl.metadata (2.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.5838417Z Collecting pre-commit (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.5909347Z   Downloading pre_commit-4.7.0-py2.py3-none-any.whl.metadata (1.2 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.6037704Z Collecting python-dotenv (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.6076937Z   Downloading python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.6363742Z Collecting PyYAML (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.6404868Z   Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.7066893Z Collecting requests (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.7109165Z   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.7364718Z Collecting rich (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.7487491Z   Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8028640Z Collecting typer (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8067304Z   Downloading typer-0.29.1-py3-none-any.whl.metadata (16 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8516299Z Collecting tenacity (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8558100Z   Downloading tenacity-9.2.1-py3-none-any.whl.metadata (1.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8808548Z Collecting tqdm (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.8857111Z   Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.9191730Z Collecting unidiff (from swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.9230566Z   Downloading unidiff-1.0.1-py3-none-any.whl.metadata (8.2 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.9801845Z Collecting fastcore<2,>=1.12.19 (from ghapi<2->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:09.9868360Z   Downloading fastcore-1.14.5-py3-none-any.whl.metadata (3.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.0350871Z Collecting soupsieve>=1.6.1 (from beautifulsoup4->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.0391214Z   Downloading soupsieve-4.1.1-py3-none-any.whl.metadata (4.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.0542501Z Collecting typing-extensions>=4.0.0 (from beautifulsoup4->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.0578029Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.1050870Z Collecting filelock (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.1131719Z   Downloading filelock-4.2.10-py3-none-any.whl.metadata (2.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.3278452Z Collecting numpy>=1.17 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.3321974Z   Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.4309436Z Collecting pyarrow>=24.0.0 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.4358191Z   Downloading pyarrow-26.0.1-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (3.0 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.4470438Z Collecting dill<0.4.2,>=0.3.0 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.4516875Z   Downloading dill-0.4.1-py3-none-any.whl.metadata (10 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.5632781Z Collecting pandas (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.5677521Z   Downloading pandas-3.1.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (16 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7221276Z Collecting xxhash (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7262476Z   Downloading xxhash-4.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7425420Z Collecting multiprocess<0.70.20 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7465148Z   Downloading multiprocess-0.70.19-py311-none-any.whl.metadata (7.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7618516Z Collecting fsspec<=2026.9.0,>=2023.1.0 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.7654811Z   Downloading fsspec-2026.9.0-py3-none-any.whl.metadata (10 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8218985Z Collecting huggingface-hub<3.0,>=1.31.0 (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8262288Z   Downloading huggingface_hub-2.4.0-py3-none-any.whl.metadata (16 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8492913Z Collecting packaging (from datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8535446Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8690518Z Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:10.8725994Z   Downloading click-8.5.1-py3-none-any.whl.metadata (2.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.0557800Z Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.0614194Z   Downloading hf_xet-1.8.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.2445628Z Collecting httpx2<3,>=2.0.0 (from huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.2491659Z   Downloading httpx2-2.16.0-py3-none-any.whl.metadata (10 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.2870781Z Collecting anyio>=4.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.2916268Z   Downloading anyio-4.16.0-py3-none-any.whl.metadata (4.7 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3089874Z Collecting httpcore2==2.16.0 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3145372Z   Downloading httpcore2-2.16.0-py3-none-any.whl.metadata (27 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3348278Z Collecting idna>=3.18 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3388997Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3496894Z Collecting truststore>=0.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3537835Z   Downloading truststore-0.10.5-py3-none-any.whl.metadata (4.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3650231Z Collecting h11>=0.16 (from httpcore2==2.16.0->httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.3685663Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.4077480Z Collecting urllib3>=1.26.0 (from docker->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.4114513Z   Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5413192Z Collecting charset_normalizer<4,>=2 (from requests->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5477122Z   Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5660130Z Collecting certifi>=2023.5.7 (from requests->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5699343Z   Downloading certifi-2026.10.23-py3-none-any.whl.metadata (2.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5811479Z Collecting gitdb<5,>=4.0.1 (from GitPython->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5850084Z   Downloading gitdb-4.0.12-py3-none-any.whl.metadata (1.2 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5953392Z Collecting smmap<6,>=3.0.1 (from gitdb<5,>=4.0.1->GitPython->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:11.5994128Z   Downloading smmap-5.0.3-py3-none-any.whl.metadata (4.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0110558Z Collecting aiohttp (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0152975Z   Downloading aiohttp-3.14.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0712596Z Collecting cbor2 (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0772052Z   Downloading cbor2-6.3.0-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (6.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0902076Z Collecting grpclib<0.4.10,>=0.4.7 (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.0939947Z   Downloading grpclib-0.4.9-py3-none-any.whl.metadata (6.1 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.2536203Z Collecting protobuf!=4.24.0,<8.0,>=3.19 (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.2577352Z   Downloading protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3505720Z Collecting synchronicity~=0.12.7 (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3562479Z   Downloading synchronicity-0.12.7-py3-none-any.whl.metadata (14 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3678611Z Collecting toml (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3727522Z   Downloading toml-0.10.2-py2.py3-none-any.whl.metadata (7.1 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3937497Z Collecting types-certifi (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.3981969Z   Downloading types_certifi-2021.10.8.3-py3-none-any.whl.metadata (1.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.4090645Z Collecting types-toml (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.4136936Z   Downloading types_toml-0.10.8.20260518-py3-none-any.whl.metadata (1.7 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.4711915Z Collecting watchfiles (from modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.4752868Z   Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.4976106Z Collecting h2<5,>=3.1.0 (from grpclib<0.4.10,>=0.4.7->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.5025138Z   Downloading h2-4.4.1-py3-none-any.whl.metadata (3.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.6919269Z Collecting multidict (from grpclib<0.4.10,>=0.4.7->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.6983365Z   Downloading multidict-7.2.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (6.1 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7093375Z Collecting hyperframe<7,>=6.1 (from h2<5,>=3.1.0->grpclib<0.4.10,>=0.4.7->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7133252Z   Downloading hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7240897Z Collecting hpack<5,>=4.2 (from h2<5,>=3.1.0->grpclib<0.4.10,>=0.4.7->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7279291Z   Downloading hpack-4.2.0-py3-none-any.whl.metadata (3.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7425909Z Collecting markdown-it-py>=2.2.0 (from rich->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7464450Z   Downloading markdown_it_py-4.3.0-py3-none-any.whl.metadata (7.9 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7622790Z Collecting pygments<3.0.0,>=2.13.0 (from rich->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7667254Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7780118Z Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7832481Z   Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.7983401Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.8025763Z   Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.8137806Z Collecting aiosignal>=1.4.0 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.8178035Z   Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.8318274Z Collecting attrs>=17.3.0 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.8356720Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.9551682Z Collecting frozenlist>=1.1.1 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:12.9601298Z   Downloading frozenlist-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.0161380Z Collecting propcache>=0.2.0 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.0199918Z   Downloading propcache-0.5.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (25 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.1944963Z Collecting yarl<2.0,>=1.25.1 (from aiohttp->modal->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.1998307Z   Downloading yarl-1.25.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (111 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2262792Z Collecting python-dateutil>=2.9.0 (from pandas->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2312346Z   Downloading python_dateutil-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2603235Z Collecting tzdata (from python-dateutil>=2.9.0->pandas->datasets->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2657976Z   Downloading tzdata-2026.6-py2.py3-none-any.whl.metadata (1.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2788135Z Collecting cfgv>=2.0.0 (from pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.2856399Z   Downloading cfgv-3.5.0-py2.py3-none-any.whl.metadata (8.9 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3102328Z Collecting identify>=1.0.0 (from pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3148610Z   Downloading identify-2.6.20-py2.py3-none-any.whl.metadata (4.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3275551Z Collecting nodeenv>=0.11.1 (from pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3318926Z   Downloading nodeenv-1.12.0-py3-none-any.whl.metadata (49 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3647522Z Collecting virtualenv>=20.10.0 (from pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3689331Z   Downloading virtualenv-21.15.6-py3-none-any.whl.metadata (4.1 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3820275Z Collecting distlib<1,>=0.4.3 (from virtualenv>=20.10.0->pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.3858127Z   Downloading distlib-0.4.4-py2.py3-none-any.whl.metadata (5.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.4066231Z Collecting platformdirs<5,>=4.4 (from virtualenv>=20.10.0->pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.4127340Z   Downloading platformdirs-4.14.5-py3-none-any.whl.metadata (5.7 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.4248058Z Collecting python-discovery>=1.6.1 (from virtualenv>=20.10.0->pre-commit->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.4290179Z   Downloading python_discovery-1.9.5-py3-none-any.whl.metadata (4.2 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.5905402Z Collecting pydantic>=2.5.3 (from typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.5952142Z   Downloading pydantic-2.14.3-py3-none-any.whl.metadata (141 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.6105287Z Collecting shellingham>=1.3.0 (from typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.6145964Z   Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.6258121Z Collecting annotated-doc>=0.0.2 (from typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:13.6295800Z   Downloading annotated_doc-0.0.6-py3-none-any.whl.metadata (6.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:14.3586461Z Collecting annotated-types>=0.6.0 (from pydantic>=2.5.3->typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:14.3622460Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.0902912Z Collecting pydantic-core==2.50.4 (from pydantic>=2.5.3->typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.0945369Z   Downloading pydantic_core-2.50.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.1056287Z Collecting typing-inspection>=0.4.4 (from pydantic>=2.5.3->typer->swebench==5.0.2)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.1097806Z   Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.1987154Z Downloading swebench-5.0.2-py3-none-any.whl (142 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2052691Z Downloading ghapi-1.1.1-py3-none-any.whl (80 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2108720Z Downloading fastcore-1.14.5-py3-none-any.whl (108 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2166515Z Downloading beautifulsoup4-4.15.0-py3-none-any.whl (109 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2223838Z Downloading soupsieve-4.1.1-py3-none-any.whl (55 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2285441Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2336264Z Downloading chardet-7.7.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.6 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2545732Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 110.5 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2585633Z Downloading datasets-5.2.0-py3-none-any.whl (608 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2648834Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 608.3/608.3 kB 82.4 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2688044Z Downloading dill-0.4.1-py3-none-any.whl (120 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2773269Z Downloading fsspec-2026.9.0-py3-none-any.whl (221 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.2831213Z Downloading huggingface_hub-2.4.0-py3-none-any.whl (857 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.3856861Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 857.0/857.0 kB 5.9 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.3905644Z Downloading click-8.5.1-py3-none-any.whl (126 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.3961994Z Downloading hf_xet-1.8.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.3 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4446674Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 87.7 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4487766Z Downloading httpx2-2.16.0-py3-none-any.whl (97 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4547214Z Downloading httpcore2-2.16.0-py3-none-any.whl (85 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4599408Z Downloading multiprocess-0.70.19-py311-none-any.whl (144 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4773176Z Downloading anyio-4.16.0-py3-none-any.whl (134 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4832442Z Downloading filelock-4.2.10-py3-none-any.whl (218 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4893321Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.4944325Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.5006666Z Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.7976993Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.9/16.9 MB 56.7 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.8012793Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:15.8069169Z Downloading pyarrow-26.0.1-cp311-cp311-manylinux_2_28_x86_64.whl (55.0 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6145662Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 55.0/55.0 MB 68.2 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6208285Z Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6306281Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.6/806.6 kB 72.8 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6344594Z Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6411819Z Downloading truststore-0.10.5-py3-none-any.whl (19 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6467443Z Downloading docker-7.2.0-py3-none-any.whl (148 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6524876Z Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6581404Z Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (269 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6647708Z Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6706853Z Downloading certifi-2026.10.23-py3-none-any.whl (135 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6761304Z Downloading gitpython-3.2.1-py3-none-any.whl (231 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6826217Z Downloading gitdb-4.0.12-py3-none-any.whl (62 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6881976Z Downloading smmap-5.0.3-py3-none-any.whl (24 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.6997476Z Downloading modal-1.6.4-py3-none-any.whl (1.2 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7610401Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 15.8 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7648958Z Downloading grpclib-0.4.9-py3-none-any.whl (77 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7714239Z Downloading h2-4.4.1-py3-none-any.whl (62 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7772980Z Downloading hpack-4.2.0-py3-none-any.whl (34 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7884697Z Downloading hyperframe-6.1.0-py3-none-any.whl (13 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.7937680Z Downloading protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl (343 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8005325Z Downloading synchronicity-0.12.7-py3-none-any.whl (42 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8067897Z Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8143356Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8297373Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 74.6 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8340534Z Downloading markdown_it_py-4.3.0-py3-none-any.whl (96 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8421754Z Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8476810Z Downloading aiohttp-3.14.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.9 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8707538Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.9/1.9 MB 80.7 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8787410Z Downloading multidict-7.2.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (510 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8862261Z Downloading yarl-1.25.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (117 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8915501Z Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.8966185Z Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.9021982Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.9076428Z Downloading frozenlist-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (231 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:16.9164262Z Downloading propcache-0.5.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (235 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.3113973Z Downloading cbor2-6.3.0-cp311-cp311-manylinux_2_28_x86_64.whl (480 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.3200394Z Downloading pandas-3.1.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.4 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.4728997Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.4/12.4 MB 80.8 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.4770194Z Downloading python_dateutil-4.0.0-py3-none-any.whl (92 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.4816448Z Downloading pre_commit-4.7.0-py2.py3-none-any.whl (226 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.5315243Z Downloading cfgv-3.5.0-py2.py3-none-any.whl (7.4 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.5464862Z Downloading identify-2.6.20-py2.py3-none-any.whl (99 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.5524182Z Downloading nodeenv-1.12.0-py3-none-any.whl (39 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.5590343Z Downloading virtualenv-21.15.6-py3-none-any.whl (5.7 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6199551Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.7/5.7 MB 92.7 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6238104Z Downloading distlib-0.4.4-py2.py3-none-any.whl (472 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6312494Z Downloading platformdirs-4.14.5-py3-none-any.whl (35 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6372360Z Downloading python_discovery-1.9.5-py3-none-any.whl (44 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6428695Z Downloading python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.6483230Z Downloading tenacity-9.2.1-py3-none-any.whl (32 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7489316Z Downloading toml-0.10.2-py2.py3-none-any.whl (16 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7562835Z Downloading typer-0.29.1-py3-none-any.whl (121 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7618674Z Downloading annotated_doc-0.0.6-py3-none-any.whl (5.3 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7672833Z Downloading pydantic-2.14.3-py3-none-any.whl (494 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7738365Z Downloading pydantic_core-2.50.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (2.3 MB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.7992784Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.3/2.3 MB 86.8 MB/s  0:00:00
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8045393Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8110710Z Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8165410Z Downloading typing_inspection-0.4.5-py3-none-any.whl (14 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8229570Z Downloading types_certifi-2021.10.8.3-py3-none-any.whl (2.1 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8280677Z Downloading types_toml-0.10.8.20260518-py3-none-any.whl (9.7 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8336636Z Downloading tzdata-2026.6-py2.py3-none-any.whl (348 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8397968Z Downloading unidiff-1.0.1-py3-none-any.whl (18 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8471828Z Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:17.8551486Z Downloading xxhash-4.1.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (471 kB)
+evaluate	Install pinned official evaluator	2026-11-16T02:25:18.6286194Z Installing collected packages: types-certifi, distlib, xxhash, urllib3, unidiff, tzdata, typing-extensions, types-toml, truststore, tqdm, toml, tenacity, soupsieve, smmap, shellingham, PyYAML, python-dotenv, pygments, pyarrow, protobuf, propcache, platformdirs, packaging, numpy, nodeenv, multidict, mdurl, idna, identify, hyperframe, hpack, hf-xet, h11, fsspec, frozenlist, filelock, fastcore, dill, click, charset_normalizer, chardet, cfgv, certifi, cbor2, attrs, annotated-types, annotated-doc, aiohappyeyeballs, yarl, typing-inspection, synchronicity, requests, python-discovery, python-dateutil, pydantic-core, multiprocess, markdown-it-py, httpcore2, h2, gitdb, ghapi, beautifulsoup4, anyio, aiosignal, watchfiles, virtualenv, rich, pydantic, pandas, httpx2, grpclib, GitPython, docker, aiohttp, typer, pre-commit, modal, huggingface-hub, datasets, swebench
+evaluate	Install pinned official evaluator	2026-11-16T02:25:31.1540192Z 
+evaluate	Install pinned official evaluator	2026-11-16T02:25:31.1552482Z Successfully installed GitPython-3.2.1 PyYAML-6.0.3 aiohappyeyeballs-2.7.1 aiohttp-3.14.5 aiosignal-1.4.0 annotated-doc-0.0.6 annotated-types-0.8.0 anyio-4.16.0 attrs-26.1.0 beautifulsoup4-4.15.0 cbor2-6.3.0 certifi-2026.10.23 cfgv-3.5.0 chardet-7.7.0 charset_normalizer-3.5.2 click-8.5.1 datasets-5.2.0 dill-0.4.1 distlib-0.4.4 docker-7.2.0 fastcore-1.14.5 filelock-4.2.10 frozenlist-1.8.0 fsspec-2026.9.0 ghapi-1.1.1 gitdb-4.0.12 grpclib-0.4.9 h11-0.16.0 h2-4.4.1 hf-xet-1.8.0 hpack-4.2.0 httpcore2-2.16.0 httpx2-2.16.0 huggingface-hub-2.4.0 hyperframe-6.1.0 identify-2.6.20 idna-3.20 markdown-it-py-4.3.0 mdurl-0.1.2 modal-1.6.4 multidict-7.2.1 multiprocess-0.70.19 nodeenv-1.12.0 numpy-2.4.6 packaging-26.3 pandas-3.1.1 platformdirs-4.14.5 pre-commit-4.7.0 propcache-0.5.4 protobuf-7.36.2 pyarrow-26.0.1 pydantic-2.14.3 pydantic-core-2.50.4 pygments-2.21.0 python-dateutil-4.0.0 python-discovery-1.9.5 python-dotenv-1.2.4 requests-2.34.2 rich-15.0.0 shellingham-1.5.4 smmap-5.0.3 soupsieve-4.1.1 swebench-5.0.2 synchronicity-0.12.7 tenacity-9.2.1 toml-0.10.2 tqdm-4.70.1 truststore-0.10.5 typer-0.29.1 types-certifi-2021.10.8.3 types-toml-0.10.8.20260518 typing-extensions-4.16.0 typing-inspection-0.4.5 tzdata-2026.6 unidiff-1.0.1 urllib3-2.8.0 virtualenv-21.15.6 watchfiles-1.3.0 xxhash-4.1.0 yarl-1.25.1
+evaluate	Run one official evaluation	﻿2026-11-16T02:25:31.6535877Z ##[group]Run python -m swebench.harness.run_evaluation --dataset_name "$DATASET_NAME" --split "$DATASET_SPLIT" --predictions_path predictions.jsonl --max_workers 1 --run_id "$RUN_ID" --timeout "$TEST_TIMEOUT" --instance_ids "$INSTANCE_ID"
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6537343Z [36;1mpython -m swebench.harness.run_evaluation --dataset_name "$DATASET_NAME" --split "$DATASET_SPLIT" --predictions_path predictions.jsonl --max_workers 1 --run_id "$RUN_ID" --timeout "$TEST_TIMEOUT" --instance_ids "$INSTANCE_ID"[0m
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6556289Z shell: /usr/bin/bash -e {0}
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6556511Z env:
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6556685Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6556904Z   DATASET_SPLIT: test
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6557097Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6557324Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6572152Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6587122Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6587434Z   TEST_TIMEOUT: 1800
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6587616Z   PYTHONUTF8: 1
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6587773Z   NO_COLOR: 1
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6587985Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6588315Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6588646Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6588944Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6589232Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6589530Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Run one official evaluation	2026-11-16T02:25:31.6589998Z ##[endgroup]
+evaluate	Run one official evaluation	2026-11-16T02:25:33.7040298Z Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+evaluate	Run one official evaluation	2026-11-16T02:26:09.1610243Z 
+evaluate	Run one official evaluation	2026-11-16T02:26:09.2214524Z Generating test split:   0%|          | 0/2294 [00:00<?, ? examples/s]
+evaluate	Run one official evaluation	2026-11-16T02:26:09.2218357Z Generating test split: 100%|██████████| 2294/2294 [00:00<00:00, 38075.57 examples/s]
+evaluate	Run one official evaluation	2026-11-16T02:26:09.2219112Z 
+evaluate	Run one official evaluation	2026-11-16T02:26:09.2311006Z Generating dev split:   0%|          | 0/225 [00:00<?, ? examples/s]
+evaluate	Run one official evaluation	2026-11-16T02:26:09.2324206Z Generating dev split: 100%|██████████| 225/225 [00:00<00:00, 24923.90 examples/s]
+evaluate	Run one official evaluation	2026-11-16T02:26:10.4109326Z 
+evaluate	Run one official evaluation	2026-11-16T02:26:10.4110264Z Running 1 instances...
+evaluate	Run one official evaluation	2026-11-16T02:27:26.6419485Z   0%|          | 0/1 [00:00<?, ?it/s]
+evaluate	Run one official evaluation	2026-11-16T02:27:26.6420874Z 100%|██████████| 1/1 [01:16<00:00, 76.23s/it]
+evaluate	Run one official evaluation	2026-11-16T02:27:26.6424515Z 1 ran successfully, 0 failed: 100%|██████████| 1/1 [01:16<00:00, 76.23s/it]
+evaluate	Run one official evaluation	2026-11-16T02:27:26.6430302Z 1 ran successfully, 0 failed: 100%|██████████| 1/1 [01:16<00:00, 76.23s/it]
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0431086Z All instances run.
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0431602Z Total instances: 1
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0432296Z Instances submitted: 1
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0432639Z Instances completed: 1
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0432968Z Instances incomplete: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0433296Z Instances resolved: 1
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0433610Z Instances unresolved: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0433971Z Instances with likely infrastructure failures: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0434399Z Instances with ambiguous failures: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0434798Z Instances with empty patches: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0435162Z Instances with errors: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0435500Z Unstopped containers: 0
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0435821Z Unremoved images: 1
+evaluate	Run one official evaluation	2026-11-16T02:27:27.0436275Z Report written to iterative-repair.workspace-demo-7336-20261116-1025.json
+evaluate	Collect verdict and bounded diagnostic logs	﻿2026-11-16T02:27:27.3288488Z ##[group]Run python scripts/cloud_official_bridge.py collect
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3288871Z [36;1mpython scripts/cloud_official_bridge.py collect[0m
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3306915Z shell: /usr/bin/bash -e {0}
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3307124Z env:
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3307292Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3307525Z   DATASET_SPLIT: test
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3307724Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3307977Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3322940Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3337865Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3338188Z   TEST_TIMEOUT: 1800
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3338366Z   PYTHONUTF8: 1
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3338526Z   NO_COLOR: 1
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3338741Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3339078Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3339408Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3339845Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3340150Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3340461Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3340729Z   HARNESS_OUTCOME: success
+evaluate	Collect verdict and bounded diagnostic logs	2026-11-16T02:27:27.3340914Z ##[endgroup]
+evaluate	Upload official verdict	﻿2026-11-16T02:27:27.3791737Z ##[group]Run actions/upload-artifact@v4
+evaluate	Upload official verdict	2026-11-16T02:27:27.3791981Z with:
+evaluate	Upload official verdict	2026-11-16T02:27:27.3792188Z   name: swebench-workspace-demo-7336-20261116-1025
+evaluate	Upload official verdict	2026-11-16T02:27:27.3792447Z   if-no-files-found: error
+evaluate	Upload official verdict	2026-11-16T02:27:27.3792638Z   retention-days: 3
+evaluate	Upload official verdict	2026-11-16T02:27:27.3792821Z   path: official-artifacts/
+evaluate	Upload official verdict	2026-11-16T02:27:27.3793016Z   compression-level: 6
+evaluate	Upload official verdict	2026-11-16T02:27:27.3793193Z   overwrite: false
+evaluate	Upload official verdict	2026-11-16T02:27:27.3793378Z   include-hidden-files: false
+evaluate	Upload official verdict	2026-11-16T02:27:27.3793581Z env:
+evaluate	Upload official verdict	2026-11-16T02:27:27.3793749Z   DATASET_NAME: SWE-bench/SWE-bench
+evaluate	Upload official verdict	2026-11-16T02:27:27.3794121Z   DATASET_SPLIT: test
+evaluate	Upload official verdict	2026-11-16T02:27:27.3794310Z   INSTANCE_ID: astropy__astropy-7336
+evaluate	Upload official verdict	2026-11-16T02:27:27.3794540Z   RUN_ID: workspace-demo-7336-20261116-1025
+evaluate	Upload official verdict	2026-11-16T02:27:27.3809223Z   PATCH_B64: LS0tIGEvYXN0cm9weS91bml0cy9kZWNvcmF0b3JzLnB5CisrKyBiL2FzdHJvcHkvdW5pdHMvZGVjb3JhdG9ycy5weQpAQCAtMTU1LDYgKzE1NSw4IEBACiAgICAgZGVmIF9fY2FsbF9fKHNlbGYsIHdyYXBwZWRfZnVuY3Rpb24pOgogCiAgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgorCisgICAgICAgICMgRXh0cmFjdCB0aGUgZnVuY3Rpb24gc2lnbmF0dXJlIGZvciB0aGUgZnVuY3Rpb24gd2UgYXJlIHdyYXBwaW5nLgogICAgICAgICB3cmFwcGVkX3NpZ25hdHVyZSA9IGluc3BlY3Quc2lnbmF0dXJlKHdyYXBwZWRfZnVuY3Rpb24pCiAKICAgICAgICAgIyBEZWZpbmUgYSBuZXcgZnVuY3Rpb24gdG8gcmV0dXJuIGluIHBsYWNlIG9mIHRoZSB3cmFwcGVkIG9uZQpAQCAtMjIxLDcgKzIyMywxMCBAQAogICAgICAgICAgICAgd2l0aCBhZGRfZW5hYmxlZF9lcXVpdmFsZW5jaWVzKHNlbGYuZXF1aXZhbGVuY2llcyk6CiAgICAgICAgICAgICAgICAgcmV0dXJuXyA9IHdyYXBwZWRfZnVuY3Rpb24oKmZ1bmNfYXJncywgKipmdW5jX2t3YXJncykKICAgICAgICAgICAgIGlmIHdyYXBwZWRfc2lnbmF0dXJlLnJldHVybl9hbm5vdGF0aW9uIGlzIG5vdCBpbnNwZWN0LlNpZ25hdHVyZS5lbXB0eToKLSAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBpZiByZXR1cm5fIGlzIG5vdCBOb25lIGFuZCBoYXNhdHRyKHJldHVybl8sICJ0byIpOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXy50byh3cmFwcGVkX3NpZ25hdHVyZS5yZXR1cm5fYW5ub3RhdGlvbikKKyAgICAgICAgICAgICAgICBlbHNlOgorICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogICAgICAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgICByZXR1cm4gcmV0dXJuXwogCg==
+evaluate	Upload official verdict	2026-11-16T02:27:27.3824604Z   PATCH_SHA256: 32ae351a7784476952150c6734cd71717a903501d14ef0abaf209b3012e6e192
+evaluate	Upload official verdict	2026-11-16T02:27:27.3824925Z   TEST_TIMEOUT: 1800
+evaluate	Upload official verdict	2026-11-16T02:27:27.3825109Z   PYTHONUTF8: 1
+evaluate	Upload official verdict	2026-11-16T02:27:27.3825271Z   NO_COLOR: 1
+evaluate	Upload official verdict	2026-11-16T02:27:27.3825498Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Upload official verdict	2026-11-16T02:27:27.3825839Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib/pkgconfig
+evaluate	Upload official verdict	2026-11-16T02:27:27.3826201Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Upload official verdict	2026-11-16T02:27:27.3826516Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Upload official verdict	2026-11-16T02:27:27.3826809Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.18/x64
+evaluate	Upload official verdict	2026-11-16T02:27:27.3827113Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.18/x64/lib
+evaluate	Upload official verdict	2026-11-16T02:27:27.3827368Z ##[endgroup]
+evaluate	Upload official verdict	2026-11-16T02:27:27.5270716Z (node:2642) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+evaluate	Upload official verdict	2026-11-16T02:27:27.5271886Z (Use `node --trace-deprecation ...` to show where the warning was created)
+evaluate	Upload official verdict	2026-11-16T02:27:27.5541402Z With the provided path, there will be 5 files uploaded
+evaluate	Upload official verdict	2026-11-16T02:27:27.5573740Z Artifact name is valid!
+evaluate	Upload official verdict	2026-11-16T02:27:27.5610272Z Root directory input is valid!
+evaluate	Upload official verdict	2026-11-16T02:27:28.6950312Z Beginning upload of artifact content to blob storage
+evaluate	Upload official verdict	2026-11-16T02:27:28.7467807Z (node:2642) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+evaluate	Upload official verdict	2026-11-16T02:27:29.0200886Z Uploaded bytes 21810
+evaluate	Upload official verdict	2026-11-16T02:27:29.0929830Z Finished uploading artifact content to blob storage!
+evaluate	Upload official verdict	2026-11-16T02:27:29.0930950Z SHA256 digest of uploaded artifact zip is b9d7c0a8cf06ee71b0bdf911ef341bc8fe4030a616c9d7065869cc17d12297f0
+evaluate	Upload official verdict	2026-11-16T02:27:29.0931727Z Finalizing artifact upload
+evaluate	Upload official verdict	2026-11-16T02:27:29.4861142Z Artifact swebench-workspace-demo-7336-20261116-1025.zip successfully finalized. Artifact ID 14192294780
+evaluate	Upload official verdict	2026-11-16T02:27:29.4862459Z Artifact swebench-workspace-demo-7336-20261116-1025 has been successfully uploaded! Final size is 21810 bytes. Artifact ID is 14192294780
+evaluate	Upload official verdict	2026-11-16T02:27:29.4867286Z Artifact download URL: https://github.com/soru116/fixed-patch/actions/runs/43792013647/artifacts/14192294780
+evaluate	Post Run actions/setup-python@v5	﻿2026-11-16T02:27:29.5072828Z Post job cleanup.
+evaluate	Post Run actions/setup-python@v5	2026-11-16T02:27:29.6176524Z (node:2655) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+evaluate	Post Run actions/setup-python@v5	2026-11-16T02:27:29.6178143Z (Use `node --trace-deprecation ...` to show where the warning was created)
+evaluate	Post Run actions/checkout@v4	﻿2026-11-16T02:27:29.6352930Z Post job cleanup.
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7530901Z [command]/usr/bin/git version
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7620956Z git version 2.56.1
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7704578Z Temporarily overriding HOME='/home/runner/work/_temp/4ec5ad5e-e3c3-4616-b1d6-e86aa4fe86a4' before making global git config changes
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7720565Z Adding repository directory to the temporary git global config as a safe directory
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7740827Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fixed-patch/fixed-patch
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7836149Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.7893672Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8218416Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8280120Z http.https://github.com/.extraheader
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8301466Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8413536Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8695789Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+evaluate	Post Run actions/checkout@v4	2026-11-16T02:27:29.8754756Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+evaluate	Complete job	﻿2026-11-16T02:27:29.9151725Z Cleaning up orphan processes
+evaluate	Complete job	2026-11-16T02:27:29.9482107Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
