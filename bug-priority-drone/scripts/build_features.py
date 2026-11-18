@@ -209,16 +209,28 @@ def empty_related_stats() -> dict[str, float]:
     return row
 
 
-def add_same_severity_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
+def _eligible_history_mask(df: pd.DataFrame, exclude_targets_from_history: bool) -> pd.Series:
+    """Rows whose labels may be used as historical features for another row."""
+
+    if exclude_targets_from_history and "__is_target" in df.columns:
+        return ~df["__is_target"].astype(bool)
+    return pd.Series(True, index=df.index)
+
+
+def add_same_severity_temporal_features(
+    df: pd.DataFrame,
+    exclude_targets_from_history: bool = False,
+) -> pd.DataFrame:
     """Literature TMP2/TMP5/TMP8/TMP11: same-severity counts in 7/30/1/3 day windows."""
     df = df.sort_values("creation_time").copy()
     windows = [1, 3, 7, 30]
     values = {f"past_{days}d_same_severity_count": [] for days in windows}
 
+    eligible_history = _eligible_history_mask(df, exclude_targets_from_history)
     for _, row in df.iterrows():
         current_time = row["creation_time"]
         severity = str(row["severity"]).lower()
-        earlier_mask = df["creation_time"] < current_time
+        earlier_mask = (df["creation_time"] < current_time) & eligible_history
         same_severity_mask = earlier_mask & (df["severity"].astype(str).str.lower() == severity)
         for days in windows:
             window_mask = same_severity_mask & (df["creation_time"] >= current_time - pd.Timedelta(days=days))
@@ -231,7 +243,10 @@ def add_same_severity_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_literature_product_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_literature_product_features(
+    df: pd.DataFrame,
+    exclude_targets_from_history: bool = False,
+) -> pd.DataFrame:
     """
     Literature PRO2-11 / PRO13-22: product/component stats over all prior reports,
     not just a 30-day window.
@@ -257,10 +272,11 @@ def add_literature_product_features(df: pd.DataFrame) -> pd.DataFrame:
 
     severity_series = df["severity"].astype(str).str.lower().map(SEVERITY_RANK).fillna(SEVERITY_RANK["unknown"])
 
+    eligible_history = _eligible_history_mask(df, exclude_targets_from_history)
     for _, row in df.iterrows():
         current_time = row["creation_time"]
         current_severity_rank = SEVERITY_RANK.get(str(row["severity"]).lower(), SEVERITY_RANK["unknown"])
-        earlier_mask = df["creation_time"] < current_time
+        earlier_mask = (df["creation_time"] < current_time) & eligible_history
 
         for field, prefix in field_specs:
             field_mask = earlier_mask & (df[field] == row[field])
@@ -746,42 +762,47 @@ def build_related_feature_rows(
     rep_product_weight: float,
     rep_component_weight: float,
     rep_severity_weight: float,
+    exclude_targets_from_history: bool = False,
 ) -> list[dict[str, float]]:
     """Compute top-k historical related-report statistics for each target report."""
     related_feature_rows = []
+    eligible_history = _eligible_history_mask(df, exclude_targets_from_history).to_numpy()
     for i in range(len(df)):
-        if i == 0:
+        previous_indices = np.arange(i)
+        if exclude_targets_from_history:
+            previous_indices = previous_indices[eligible_history[:i]]
+        if len(previous_indices) == 0:
             related_feature_rows.append(empty_related_stats())
             continue
 
         if related_mode == "rep_minus":
             X_doc_uni, X_query_uni, X_doc_bi, X_query_bi = rep_matrices
-            unigram_sims = (X_query_uni[i] @ X_doc_uni[:i].T).toarray().ravel()
-            bigram_sims = (X_query_bi[i] @ X_doc_bi[:i].T).toarray().ravel()
+            unigram_sims = (X_query_uni[i] @ X_doc_uni[previous_indices].T).toarray().ravel()
+            bigram_sims = (X_query_bi[i] @ X_doc_bi[previous_indices].T).toarray().ravel()
             sims = (
                 rep_unigram_feature_weight * unigram_sims
                 + rep_bigram_feature_weight * bigram_sims
-                + rep_product_weight * (products[:i] == products[i])
-                + rep_component_weight * (components[:i] == components[i])
-                + rep_severity_weight * (severities[:i] == severities[i])
+                + rep_product_weight * (products[previous_indices] == products[i])
+                + rep_component_weight * (components[previous_indices] == components[i])
+                + rep_severity_weight * (severities[previous_indices] == severities[i])
             )
         else:
-            sims = (X_related[i] @ X_related[:i].T).toarray().ravel()
+            sims = (X_related[i] @ X_related[previous_indices].T).toarray().ravel()
 
-        prev_priorities = df.iloc[:i]["priority_num"].to_numpy()
+        prev_priorities = df.iloc[previous_indices]["priority_num"].to_numpy()
         related_feature_rows.append(
             compute_topk_related_stats(
                 prev_priorities,
                 sims,
-                same_product=(products[:i] == products[i]).astype(float),
-                same_component=(components[:i] == components[i]).astype(float),
-                same_severity=(severities[:i] == severities[i]).astype(float),
+                same_product=(products[previous_indices] == products[i]).astype(float),
+                same_component=(components[previous_indices] == components[i]).astype(float),
+                same_severity=(severities[previous_indices] == severities[i]).astype(float),
             )
         )
     return related_feature_rows
 
 
-def add_author_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_author_features(df: pd.DataFrame, exclude_targets_from_history: bool = False) -> pd.DataFrame:
     df = df.sort_values("creation_time").copy()
 
     past_count = []
@@ -790,7 +811,8 @@ def add_author_features(df: pd.DataFrame) -> pd.DataFrame:
 
     history = {}
 
-    for _, row in df.iterrows():
+    eligible_history = _eligible_history_mask(df, exclude_targets_from_history)
+    for index, row in df.iterrows():
         author = row["creator"]
         prev = history.get(author, [])
 
@@ -803,8 +825,9 @@ def add_author_features(df: pd.DataFrame) -> pd.DataFrame:
             past_mean.append(float(np.mean(prev)))
             past_median.append(float(np.median(prev)))
 
-        prev.append(row["priority_num"])
-        history[author] = prev
+        if eligible_history.loc[index]:
+            prev.append(row["priority_num"])
+            history[author] = prev
 
     df["author_past_count"] = past_count
     df["author_past_mean_priority"] = past_mean
@@ -812,7 +835,7 @@ def add_author_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_temporal_features(df: pd.DataFrame, exclude_targets_from_history: bool = False) -> pd.DataFrame:
     df = df.sort_values("creation_time").copy()
 
     past_1d_count = []
@@ -846,6 +869,7 @@ def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     component_past_30d_p4_ratio = []
     component_past_30d_p5_ratio = []
 
+    eligible_history = _eligible_history_mask(df, exclude_targets_from_history)
     for _, row in df.iterrows():
         current_time = row["creation_time"]
         product = row["product"]
@@ -853,7 +877,7 @@ def add_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
         author = row["creator"]
         current_severity_rank = SEVERITY_RANK.get(str(row["severity"]).lower(), SEVERITY_RANK["unknown"])
 
-        earlier_mask = df["creation_time"] < current_time
+        earlier_mask = (df["creation_time"] < current_time) & eligible_history
         same_or_higher_severity_mask = earlier_mask & (
             df["severity"].astype(str).str.lower().map(SEVERITY_RANK).fillna(SEVERITY_RANK["unknown"]) <= current_severity_rank
         )
@@ -964,6 +988,7 @@ def add_related_report_features(
     rep_k3_bigram: float = 100.0,
     rep_summary_b_bigram: float = 0.75,
     rep_description_b_bigram: float = 0.75,
+    exclude_targets_from_history: bool = False,
 ):
     """
     DRONE related-report factor：
@@ -1034,6 +1059,7 @@ def add_related_report_features(
         rep_product_weight,
         rep_component_weight,
         rep_severity_weight,
+        exclude_targets_from_history,
     )
 
     related_df = pd.DataFrame(related_feature_rows, index=df.index)
@@ -1052,6 +1078,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--history-input",
         default=None,
         help="Optional cleaned CSV used as historical tickets when transforming an evaluation set.",
+    )
+    parser.add_argument(
+        "--exclude-targets-from-history",
+        action="store_true",
+        help="Do not use other transform targets or their placeholder labels as historical features.",
     )
     parser.add_argument(
         "--text-feature-mode",
@@ -1189,12 +1220,12 @@ def main():
     df = load_feature_dataframe(args)
 
     # 1. Author factor
-    df = add_author_features(df)
+    df = add_author_features(df, args.exclude_targets_from_history)
 
     # 2. Temporal factor
-    df = add_temporal_features(df)
-    df = add_same_severity_temporal_features(df)
-    df = add_literature_product_features(df)
+    df = add_temporal_features(df, args.exclude_targets_from_history)
+    df = add_same_severity_temporal_features(df, args.exclude_targets_from_history)
+    df = add_literature_product_features(df, args.exclude_targets_from_history)
     df = add_error_driven_features(df)
 
     # 3. Related-report factor + Textual factor
@@ -1223,6 +1254,7 @@ def main():
         rep_k3_bigram=args.rep_k3_bigram,
         rep_summary_b_bigram=args.rep_summary_b_bigram,
         rep_description_b_bigram=args.rep_description_b_bigram,
+        exclude_targets_from_history=args.exclude_targets_from_history,
     )
 
     if "__is_target" in df.columns:
