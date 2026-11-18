@@ -223,6 +223,7 @@ class TeamPriorityPredictor:
                 str(self.paths["reference_feature_dir"]),
                 "--feature-dir",
                 str(feature_dir),
+                "--exclude-targets-from-history",
             ]
             if self.paths.get("rep_weights_json") and Path(self.paths["rep_weights_json"]).exists():
                 command += ["--rep-weights-json", str(self.paths["rep_weights_json"])]
