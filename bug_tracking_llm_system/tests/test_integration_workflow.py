@@ -663,6 +663,85 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertEqual(output["commit_message"]["status"], "generated")
         self.assertTrue(any("自動重試 1 次" in item for item in record["stages"]["patch"]["warnings"]))
 
+    def test_workspace_uses_unverified_draft_after_two_rejected_rounds(self) -> None:
+        import importlib.util
+        import time as _time
+
+        spec = importlib.util.spec_from_file_location("workspace_server_draft_fallback", PROJECT_ROOT / "workspace" / "server.py")
+        server = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(server)
+
+        class DraftFallbackPatcher:
+            def __init__(self):
+                self.kwargs = []
+
+            def generate(self, record, project, raw, *, output_dir, **kwargs):
+                self.kwargs.append(kwargs)
+                if len(self.kwargs) < 3:
+                    return {
+                        "stage": "patch", "status": "done", "module": "fake-patch", "implementation": "test",
+                        "output": {
+                            "patch_status": "no_valid_candidate", "patch": "", "modified_files": [],
+                            "candidates": [
+                                {"candidate_id": index, "status": "rejected", "reason": "no_op"}
+                                for index in range(1, 4)
+                            ],
+                        },
+                    }
+                self.assert_draft_kwargs(kwargs)
+                return {
+                    "stage": "patch", "status": "done", "module": "fake-patch", "implementation": "test",
+                    "output": {
+                        "patch_status": "unverified_draft",
+                        "patch": "--- a/src/auth.py\n+++ b/src/auth.py\n@@ -1 +1 @@\n-old = True\n+new = True\n",
+                        "modified_files": ["src/auth.py"],
+                        "draft_fallback_attempted": True,
+                    },
+                }
+
+            @staticmethod
+            def assert_draft_kwargs(kwargs):
+                if not kwargs.get("draft_required"):
+                    raise AssertionError("third attempt must require a draft change")
+
+        class DraftCommitMessenger:
+            def generate(self, record, patch, *, official=None):
+                return {
+                    "status": "generated",
+                    "commit_message": "fix(auth): update fallback behavior",
+                    "model": "fake",
+                }
+
+        app = server.WorkspaceApp(self.config)
+        app.pipeline.extractor = ToJsonExtractor(self.config, llm_call=fake_code_llama)
+        patcher = DraftFallbackPatcher()
+        app.pipeline.patcher = patcher
+        app.pipeline.commit_messenger = DraftCommitMessenger()
+        [record] = app.pipeline.import_raw([self.raw_ticket()], source="test")
+        self.assertTrue(app.start(record["key"], automatic=True))
+
+        deadline = _time.time() + 30
+        while _time.time() < deadline:
+            current = app.pipeline.get(record["key"])
+            patch_output = ((current.get("stages") or {}).get("patch") or {}).get("output") or {}
+            if app.idle() and patch_output.get("patch_status") == "unverified_draft":
+                break
+            _time.sleep(0.05)
+        self.assertTrue(app.idle())
+
+        record = app.pipeline.get(record["key"])
+        output = record["stages"]["patch"]["output"]
+        self.assertEqual(len(patcher.kwargs), 3)
+        self.assertEqual(output["patch_status"], "unverified_draft")
+        self.assertTrue(output["draft_fallback_attempted"])
+        self.assertEqual(patcher.kwargs[1]["seed_override"], 45)
+        self.assertEqual(patcher.kwargs[2]["seed_override"], 48)
+        self.assertTrue(patcher.kwargs[2]["draft_required"])
+        self.assertIn("do not return NO_CHANGE", patcher.kwargs[2]["retry_feedback"])
+        self.assertEqual(output["commit_message"]["status"], "generated")
+        self.assertEqual(output["commit_message"]["commit_message"], "fix(auth): update fallback behavior")
+        self.assertIn("未驗證補丁草稿待人工審查", record["attention"])
+
     def test_automatic_assignee_uses_closest_same_domain_history_when_model_abstains(self) -> None:
         pipeline = IntegratedPipeline(self.config)
         [record] = pipeline.import_raw([self.raw_ticket()], source="test", project="smoke")
@@ -1107,6 +1186,26 @@ class IntegrationWorkflowTests(unittest.TestCase):
         self.assertTrue(retry_output["retry_feedback_applied"])
         self.assertIn("Previous candidates were no_op (3)", retry_fake.prompts[0])
         self.assertNotIn("SECRET", retry_fake.prompts[0])
+
+        # The opt-in third round requires an executable draft without changing the frozen baseline mode.
+        draft_fake = FakeGemma()
+        draft_patcher = TeamPatchGenerator(self.config, backend_factory=lambda: draft_fake)
+        draft_stage = draft_patcher.generate(
+            record,
+            self.config.project("demo"),
+            raw_location,
+            output_dir=self.root / "draft_patch_out",
+            seed_override=48,
+            retry_feedback="Final draft attempt; do not return NO_CHANGE.",
+            draft_required=True,
+        )
+        draft_output = draft_stage["output"]
+        self.assertEqual(draft_output["patch_status"], "unverified_draft")
+        self.assertTrue(draft_output["draft_fallback_attempted"])
+        self.assertEqual(draft_output["draft_status"], "static_checks_passed")
+        self.assertIn("Do not return NO_CHANGE", draft_fake.prompts[0])
+        self.assertNotIn("If this function should not be changed", draft_fake.prompts[0])
+        self.assertNotIn("commit_message", draft_output)
 
         # The draft carries the evidence footer, and can be regenerated without a new patch run.
         commit = output["commit_message"]

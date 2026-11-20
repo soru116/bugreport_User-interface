@@ -412,7 +412,8 @@ class TeamPatchGenerator:
             temperature=float(settings.temperature),
         )
 
-    def _generator(self, modules: dict[str, Any], backend: Any, *, seed: int | None = None) -> Any:
+    def _generator(self, modules: dict[str, Any], backend: Any, *, seed: int | None = None,
+                   require_change: bool = False) -> Any:
         settings = self.config.patch
         frozen = {key: value for key, value in FROZEN_RUN_CONFIG.items() if key != "max_targets"}
         return modules["generator"].FIMPatchGenerator(
@@ -420,6 +421,7 @@ class TeamPatchGenerator:
             candidates=int(settings.candidates),
             seed=int(settings.seed if seed is None else seed),
             research_mode=bool(settings.research_mode),
+            require_change=require_change,
             **frozen,
         )
 
@@ -433,6 +435,7 @@ class TeamPatchGenerator:
         output_dir: Path,
         seed_override: int | None = None,
         retry_feedback: str = "",
+        draft_required: bool = False,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         settings = self.config.patch
@@ -506,7 +509,7 @@ class TeamPatchGenerator:
                 ) from exc
 
             pipeline = modules["pipeline"].RepairPipeline(
-                self._generator(modules, backend, seed=seed_override)
+                self._generator(modules, backend, seed=seed_override, require_change=draft_required)
             )
             try:
                 location, result = pipeline.run(ticket, str(snapshot), location)
@@ -518,6 +521,20 @@ class TeamPatchGenerator:
 
         output = self._summarize(result, location, ticket, output_dir, model_info, aligned)
         output["retry_feedback_applied"] = bool(retry_feedback)
+        output["draft_fallback_attempted"] = bool(draft_required)
+        if draft_required and output.get("patch_status") == "generated":
+            output["patch_status"] = "unverified_draft"
+            output["draft_status"] = "static_checks_passed"
+            output["explanation"] = (
+                "前兩輪沒有有效補丁；這是模型在最終草稿模式提出、已通過語法與套用檢查的修改。"
+                "尚未完成行為與回歸測試；提交訊息只描述程式變更，不代表修復已驗證。"
+            )
+        elif draft_required:
+            output["draft_status"] = "unavailable"
+            output["explanation"] = (
+                "模型已執行最終草稿嘗試，但仍未產生能通過語法與套用檢查的修改；"
+                "系統保留候選拒絕原因供人工修補。"
+            )
         output["public_code_context"] = public_context_audit
         if public_base_commit:
             output["base_commit"] = public_base_commit
@@ -607,6 +624,8 @@ class TeamPatchGenerator:
         official = output.get("official")
         if output.get("patch_status") == "generated" and not official:
             warnings.append("補丁已通過基本結構與套用檢查，但尚未執行完整測試；請在合併前完成功能與回歸測試。")
+        if output.get("patch_status") == "unverified_draft":
+            warnings.append("這是最終 fallback 產生的未驗證補丁草稿；請先執行功能與回歸測試，不可直接合併。")
         if official and official.get("official_resolved") is False:
             warnings.append("既有完整測試紀錄顯示此補丁未通過，請勿直接合併。")
         return warnings

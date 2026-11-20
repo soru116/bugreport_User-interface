@@ -685,6 +685,14 @@ class RewritePromptTests(unittest.TestCase):
                        "SECRET SYMBOL"):
             self.assertNotIn(secret, prompt)
 
+    def test_required_change_draft_removes_no_change_option(self):
+        prompt = self.prompt(require_change=True)
+        self.assertIn("final, explicitly unverified draft attempt", prompt)
+        self.assertIn("Do not return NO_CHANGE", prompt)
+        self.assertNotIn("return exactly NO_CHANGE", prompt)
+        self.assertNotIn("or exactly NO_CHANGE", prompt)
+        self.assertIn("one final corrected def/async def", prompt)
+
     def test_decorated_nested_async_crlf_bom_function_is_complete(self):
         source = (
             "class Worker:\r\n"

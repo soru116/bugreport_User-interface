@@ -117,6 +117,7 @@ class PatchSettings:
     max_new_tokens: int = 2048
     timeout_seconds: int = 600
     research_mode: bool = True
+    draft_fallback_enabled: bool = True
     verdicts_path: Path | None = None  # default: <code_dir>/official_verdicts.jsonl
 
 
@@ -217,6 +218,7 @@ class IntegrationConfig:
                 "model": self.patch.model,
                 "candidates": self.patch.candidates,
                 "research_mode": self.patch.research_mode,
+                "draft_fallback_enabled": self.patch.draft_fallback_enabled,
             },
             "commit_message": {
                 "enabled": self.commit_message.enabled,

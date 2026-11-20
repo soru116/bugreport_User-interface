@@ -336,8 +336,18 @@ class WorkspaceApp:
                     include_commit = job.get("automatic_target", "commit") == "commit"
                     record = pipeline.generate_patch(job["key"], automatic=automatic, generate_commit_message=include_commit)
                     output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
-                    if automatic and not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
-                        pipeline.generate_patch(job["key"], automatic=True, automatic_retry=1, generate_commit_message=include_commit)
+                    if not job.get("stop") and output.get("patch_status") == "no_valid_candidate":
+                        record = pipeline.generate_patch(
+                            job["key"], automatic=automatic, automatic_retry=1,
+                            generate_commit_message=include_commit,
+                        )
+                        output = (record.get("stages", {}).get("patch") or {}).get("output") or {}
+                    if (not job.get("stop") and pipeline.config.patch.draft_fallback_enabled
+                            and output.get("patch_status") == "no_valid_candidate"):
+                        pipeline.generate_patch(
+                            job["key"], automatic=automatic, automatic_retry=2,
+                            generate_commit_message=include_commit, draft_fallback=True,
+                        )
                     self._record("patch", time.time() - job["started_at"])
                     self._finish(job)
                 elif phase == "commit":

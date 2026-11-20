@@ -576,7 +576,8 @@ REWRITE_REQUIREMENT_CHAR_LIMIT = 4000
 
 
 def rewrite_prompt(ticket_json, span, localization_rows, selected_rank, *,
-                   max_requirement_chars=REWRITE_REQUIREMENT_CHAR_LIMIT):
+                   max_requirement_chars=REWRITE_REQUIREMENT_CHAR_LIMIT,
+                   require_change=False):
     """Build a non-FIM prompt for one complete-function rewrite.
 
     Requirements retain ``evidence()``'s public-field allowlist, localization
@@ -605,6 +606,19 @@ def rewrite_prompt(ticket_json, span, localization_rows, selected_rank, *,
         ticket_json, max_requirement_chars=max_requirement_chars,
         requirement_keys=REWRITE_PUBLIC_REQUIREMENT_KEYS)
     guidance = localization_guidance(localization_rows, selected_rank)
+    if type(require_change) is not bool:
+        raise ValueError("Rewrite require_change must be a boolean")
+    change_contract = (
+        "# This is a final, explicitly unverified draft attempt. Propose the smallest evidence-based executable change.\n"
+        "# Do not return NO_CHANGE. If evidence is incomplete, keep the change narrow and avoid unrelated behavior.\n"
+        if require_change else
+        "# If this function should not be changed for the issue, return exactly NO_CHANGE.\n"
+    )
+    response_contract = (
+        "(including its decorators).\n"
+        if require_change else
+        "(including its decorators), or exactly NO_CHANGE.\n"
+    )
     return (
         f"# Rewrite protocol: {REWRITE_PROMPT_VERSION}\n"
         + requirements
@@ -614,14 +628,14 @@ def rewrite_prompt(ticket_json, span, localization_rows, selected_rank, *,
         + "# Preserve the function name, def/async kind, decorators, parameters, defaults, and return annotation exactly.\n"
         + "# Return exactly one complete Python function and nothing else.\n"
         + "# Do not return Markdown, analysis, a diff, module statements, classes, or sibling functions.\n"
-        + "# If this function should not be changed for the issue, return exactly NO_CHANGE.\n"
+        + change_contract
         + "# Original function:\n"
         + function_text.rstrip("\n")
         + "\n# End of original function.\n"
         + "# The original function above is input context, not part of your response.\n"
         + "# Do not emit a BEFORE/AFTER pair and do not repeat the buggy function first.\n"
         + "# Begin your response immediately with the one final corrected def/async def "
-          "(including its decorators), or exactly NO_CHANGE.\n"
+        + response_contract
     )
 
 
@@ -1510,10 +1524,16 @@ class FIMPatchGenerator:
                  fixed_body_extraction=False, local_fim=False, local_fim_expressions=False,
                  scope_adjustment=False, fim_scope=None, fim_output_ceiling=None, safe_body_feedback=False,
                  operation_contract_preview=False, contract_feedback=False, domain_adapters=(),
-                 fim_context_mode='local',body_boundary_extraction=None,source_none_probe=None):
+                 fim_context_mode='local',body_boundary_extraction=None,source_none_probe=None,
+                 require_change=False):
         if generation_mode not in GENERATION_MODES:
             raise ValueError("Unknown generation mode")
         self.generation_mode = generation_mode
+        if type(require_change) is not bool:
+            raise ValueError("require_change must be a boolean")
+        if require_change and generation_mode != "rewrite":
+            raise ValueError("require_change is supported only in rewrite mode")
+        self.require_change = require_change
         self.helper_implementations = bool(helper_implementations)
         if self.helper_implementations and not helper_contracts:
             raise ValueError("helper implementations require helper contracts")
@@ -1856,7 +1876,8 @@ class FIMPatchGenerator:
                     include_signature=True,
                 )
                 prompt_prefix = rewrite_prompt(
-                    ticket_json, rewrite_source_span, rows, target_rank)
+                    ticket_json, rewrite_source_span, rows, target_rank,
+                    require_change=self.require_change)
                 prompt_suffix = None
                 context_info = {"strategy": "complete_target_function",
                                 "truncated": False}
@@ -2160,7 +2181,7 @@ class FIMPatchGenerator:
                       production_eligible=production_eligible, prompt_context=context_info,
                       span={k: v for k, v in span.items() if k not in ("prefix", "suffix", "original_middle")},
                       prompt_version=(
-                          REWRITE_PROMPT_VERSION
+                          REWRITE_PROMPT_VERSION + ("-required-change-draft-v1" if self.require_change else "")
                           if self.generation_mode == "rewrite" else
                           fim_prompt_version(
                               generation_scope=generation_scope,
