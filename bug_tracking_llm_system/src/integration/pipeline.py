@@ -412,7 +412,7 @@ class IntegratedPipeline:
         return self.store.update(key, mutate)
 
     def generate_patch(self, key: str, *, automatic: bool = False, automatic_retry: int = 0,
-                       generate_commit_message: bool = True) -> dict[str, Any]:
+                       generate_commit_message: bool = True, draft_fallback: bool = False) -> dict[str, Any]:
         with self._patch_lock:
             record = self.patch_precheck(key)
             previous = {"status": record["status"], "current_stage": record.get("current_stage", "")}
@@ -431,6 +431,13 @@ class IntegratedPipeline:
                         "or return NO_CHANGE if the public evidence is still insufficient."
                     ),
                 }
+            if draft_fallback:
+                patch_kwargs["draft_required"] = True
+                patch_kwargs["retry_feedback"] = (
+                    patch_kwargs.get("retry_feedback", "")
+                    + " This is the final unverified draft attempt. Propose the smallest executable change supported "
+                      "by the public ticket and source context; do not return NO_CHANGE."
+                ).strip()
 
             def running(rec: dict[str, Any]) -> None:
                 rec["status"], rec["current_stage"] = "running", "patch"
@@ -465,7 +472,11 @@ class IntegratedPipeline:
                     result.setdefault("warnings", []).append(
                         f"第一次未產生有效補丁，系統已根據失敗原因自動重試 {automatic_retry} 次。"
                     )
-                if generate_commit_message and result.get("status") == "done" and output.get("patch_status") == "generated" and output.get("patch"):
+                if draft_fallback:
+                    output["draft_fallback_round"] = automatic_retry + 1
+                if (generate_commit_message and result.get("status") == "done"
+                        and output.get("patch_status") in {"generated", "unverified_draft"}
+                        and output.get("patch")):
                     commit = self._commit_message(record, str(output["patch"]), output.get("official"))
                     output["commit_message"] = commit
                     if commit["status"] == "failed":
@@ -480,6 +491,8 @@ class IntegratedPipeline:
                 output = result.get("output") or {}
                 if result["status"] == "done" and output.get("patch_status") == "generated":
                     attention.append("補丁待人工審查")
+                elif result["status"] == "done" and output.get("patch_status") == "unverified_draft":
+                    attention.append("未驗證補丁草稿待人工審查")
                 rec["attention"] = attention
 
             return self._set_stage(key, "patch", result, extra=finish)
@@ -510,7 +523,8 @@ class IntegratedPipeline:
     def commit_message_patch(self, record: dict[str, Any], source: str) -> tuple[str, dict[str, Any] | None]:
         if source == "current":
             output = (record["stages"].get("patch") or {}).get("output") or {}
-            return (str(output.get("patch") or "") if output.get("patch_status") == "generated" else ""), output.get("official")
+            usable = output.get("patch_status") in {"generated", "unverified_draft"}
+            return (str(output.get("patch") or "") if usable else ""), output.get("official")
         if source == "experiment":
             experiment = self.patcher.experiment_record(str(record.get("ticket_id") or "")) or {}
             return str(experiment.get("patch") or ""), experiment.get("official")

@@ -922,12 +922,15 @@ details.raw pre { background: var(--code-bg); padding: 12px 14px; border-radius:
 .track li:has(+ li[data-optional])::after { background: var(--line); }
 .track li[data-s="done"]:has(+ li[data-optional])::after,
 .track li[data-s="fallback"]:has(+ li[data-optional])::after,
+.track li[data-s="draft"]:has(+ li[data-optional])::after,
 .track li[data-s="generated"]:has(+ li[data-optional])::after,
 .track li[data-s="resolved"]:has(+ li[data-optional])::after { background: #c9e9da; }
 .track li[data-optional][data-s="pending"] .node, .track li[data-optional][data-s="ready"] .node { border-style: solid; }
 .track li[data-optional][data-s="ready"] .node { border-color: var(--primary); color: var(--primary); }
 .track li[data-optional][data-s="generated"] .node, .track li[data-optional][data-s="resolved"] .node { background: var(--done); border-color: var(--done); color: #fff; }
 .track li[data-optional][data-s="generated"] .node::before, .track li[data-optional][data-s="resolved"] .node::before { content: "✓"; }
+.track li[data-optional][data-s="draft"] .node { background: var(--done); border-color: var(--done); color: #fff; }
+.track li[data-optional][data-s="draft"] .node::before { content: "✓"; }
 .track li[data-optional][data-s="none"] .node { background: var(--fallback-soft); border-color: var(--fallback-mark); color: var(--fallback); }
 .track li[data-optional][data-s="none"] .node::before { content: "–"; }
 

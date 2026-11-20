@@ -484,7 +484,8 @@ function tile(t, terms, showProject = false) {
     t.assignee ? `<span class="tag tag-person ${t.assignee_confirmed ? "is-confirmed" : ""}" title="${t.assignee_confirmed ? "已確認負責人" : "建議負責人"}">${markTerms(t.assignee, terms)}</span>` : "",
     t.duplicate_of ? `<span class="tag">重複 ${markTerms(t.duplicate_of, terms)}</span>` : "",
     t.patch && t.patch.official_resolved === true ? `<span class="tag tag-patch is-resolved" title="這個補丁有 SWE-bench 官方測試通過紀錄">官方測試通過</span>`
-      : t.patch && t.patch.patch_status === "generated" ? `<span class="tag tag-patch" title="已產生補丁，待人工審查">有補丁</span>` : "",
+      : t.patch && t.patch.patch_status === "generated" ? `<span class="tag tag-patch" title="已產生補丁，待人工審查">有補丁</span>`
+      : t.patch && t.patch.patch_status === "unverified_draft" ? `<span class="tag tag-patch" title="未驗證補丁草稿，必須人工測試">補丁草稿</span>` : "",
   ].join("");
   const picked = state.selecting && state.picked.has(t.key);
   return `<li class="tile ${state.selecting ? "is-selecting" : ""} ${picked ? "is-picked" : ""}" data-tone="${coverTone(t)}" data-key="${esc(t.key)}">
@@ -1402,7 +1403,7 @@ function renderLocalization(r, o, projectOptions) {
 }
 
 /* ------------------------------------------------------------------ patch */
-const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", none: "沒有補丁", resolved: "官方測試通過" };
+const PATCH_TAB_TEXT = { pending: "手動執行", ready: "可以產生", running: "產生中…", failed: "失敗", skipped: "略過", generated: "有補丁", draft: "未驗證草稿", none: "沒有補丁", resolved: "官方測試通過" };
 const COMMIT_TAB_TEXT = { pending: "等待補丁", running: "產生中…", generated: "已產生", failed: "失敗", skipped: "略過", none: "沒有補丁" };
 const PATCH_REASON = {
   no_op: "沒有實際改動",
@@ -1421,6 +1422,7 @@ function patchTabState(r) {
   if (s !== "done") return s === "pending" && stageStatus(r, "localization") === "done" ? "ready" : s;
   const o = (r.stages.patch || {}).output || {};
   if (o.official && o.official.official_resolved === true) return "resolved";
+  if (o.patch_status === "unverified_draft") return "draft";
   return o.patch_status === "generated" ? "generated" : "none";
 }
 
@@ -1435,7 +1437,7 @@ function currentCommit(r) {
 
 function commitTabState(r) {
   const patchState = patchTabState(r);
-  if (!["generated", "resolved"].includes(patchState)) {
+  if (!["generated", "draft", "resolved"].includes(patchState)) {
     if (patchState === "none") return "none";
     if (patchState === "skipped") return "skipped";
     return "pending";
@@ -1502,6 +1504,9 @@ function renderCommitStage(r, n) {
     content = `<p class="stage-pending">提交訊息功能目前未啟用，請聯絡系統管理員。</p>`;
   } else if (state === "none") {
     content = `<p class="stage-pending">沒有通過檢查的補丁，因此不會生成提交訊息。</p>`;
+  } else if (["generated", "draft", "resolved"].includes(patchTabState(r))) {
+    content = `<div class="commit-box"><div class="commit-head"><b>提交訊息</b>${commitRegenerate(r, "current", "產生提交訊息")}</div>
+      <p class="hint">系統會根據 Ticket 與補丁內容產生一行提交訊息草稿；尚未完成完整測試的補丁，其提交訊息只描述程式變更。</p></div>`;
   } else {
     content = `<p class="stage-pending">先完成補丁生成；選出補丁後會自動產生提交訊息草稿。</p>`;
   }
@@ -1596,7 +1601,7 @@ function renderPatchStage(r, n) {
   const tabState = patchTabState(r);
   const locDone = stageStatus(r, "localization") === "done";
   const loc = (r.stages.localization || {}).output || {};
-  const chipCls = { resolved: "chip-done", generated: "chip-done", none: "chip-fallback", failed: "chip-failed", running: "chip-running" }[tabState] || "";
+  const chipCls = { resolved: "chip-done", generated: "chip-done", draft: "chip-fallback", none: "chip-fallback", failed: "chip-failed", running: "chip-running" }[tabState] || "";
   const level = { high: "高", medium: "中", low: "低" }[loc.confidence_level] || loc.confidence_level || "—";
   const method = `<p class="patch-method">系統會依錯誤定位結果產生多個修正方案，完成程式結構與套用檢查後，選擇改動範圍最小的方案。</p>`;
   const button = (again) => `<button class="btn ${again ? "btn-quiet" : "btn-primary"} btn-small" data-action="patch" ${again ? 'data-again="1"' : ""} ${r.busy || !locDone ? "disabled" : ""}>${again ? "重新產生" : "產生補丁"}</button>`;
@@ -1630,8 +1635,13 @@ function renderPatchStage(r, n) {
         <span>${generated} / ${(o.candidates || []).length} 個修正方案通過基本檢查</span>
         <span>定位信心 <b>${esc(level)}</b></span>
       </div>`;
-    const diff = o.patch_status === "generated"
-      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">補丁 <span class="hint">修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">提交訊息草稿在第 7 步「提交訊息」。</p>`
+    const hasPatch = ["generated", "unverified_draft"].includes(o.patch_status) && o.patch;
+    const patchTitle = o.patch_status === "unverified_draft" ? "未驗證補丁草稿" : "補丁";
+    const patchNote = o.patch_status === "unverified_draft"
+      ? "這份草稿已通過語法與套用檢查，提交訊息草稿在第 7 步；合併前仍須執行功能與回歸測試。"
+      : "提交訊息草稿在第 7 步「提交訊息」。";
+    const diff = hasPatch
+      ? `${officialBox(o.official)}<div class="patch-head"><h4 class="sub-head">${patchTitle} <span class="hint">修改 ${(o.modified_files || []).map(esc).join("、")}</span></h4>${patchTools(o.patch, diffFileName(r), "current")}</div>${diffHtml(o.patch)}<p class="hint">${patchNote}</p>`
       : `<p class="loc-note">${esc(o.explanation || "沒有候選通過檢查，所以沒有補丁。")}</p>`;
     const others = (o.candidates || []).filter((c) => c.status === "generated" && c.patch && c.candidate_id !== o.selected_candidate_id)
       .map((c, index) => `<details class="raw"><summary>其他可用方案 ${index + 1}（改動範圍較大）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
