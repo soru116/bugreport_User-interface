@@ -7,6 +7,7 @@ manual-triage routing result does not pause the pipeline).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import traceback
@@ -369,6 +370,66 @@ class IntegratedPipeline:
             except Exception as exc:  # pragma: no cover
                 return self._fail(key, "localization", exc)
 
+    def select_localization_candidate(self, key: str, candidate_index: int) -> dict[str, Any]:
+        """Use a reviewed localization candidate as the first patch-generation target."""
+
+        with self._after_lock:
+            record = self.get(key)
+            stage = (record.get("stages") or {}).get("localization") or {}
+            output = stage.get("output") or {}
+            candidates = output.get("ranked_symbols") or []
+            if stage.get("status") != "done" or not candidates:
+                raise ValueError("這張 Ticket 還沒有可選擇的錯誤定位候選。")
+            if candidate_index < 0 or candidate_index >= len(candidates):
+                raise ValueError("找不到這個錯誤定位候選。")
+            artifact_path = self.store.artifact_path(key, "bug_location_raw.json")
+            if not artifact_path.is_file():
+                raise ValueError("找不到錯誤定位原始結果，請重新執行錯誤定位。")
+
+            selected = candidates[candidate_index]
+            raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+            raw_candidates = list(raw.get("stage3_ranked_symbols") or [])
+
+            def same_symbol(item: dict[str, Any]) -> bool:
+                selected_symbol = selected.get("symbol_qualified_name") or selected.get("symbol_name")
+                item_symbol = item.get("symbol_qualified_name") or item.get("symbol_name")
+                return (
+                    str(item.get("file_path") or "") == str(selected.get("file_path") or "")
+                    and str(item_symbol or "") == str(selected_symbol or "")
+                    and int(item.get("start_line") or 0) == int(selected.get("start_line") or 0)
+                )
+
+            raw_index = next((index for index, item in enumerate(raw_candidates) if same_symbol(item)), None)
+            if raw_index is None:
+                raise ValueError("錯誤定位候選與原始結果不一致，請重新執行錯誤定位。")
+            chosen = raw_candidates.pop(raw_index)
+            raw["stage3_ranked_symbols"] = [chosen, *raw_candidates]
+            raw["manual_selection"] = {
+                "file_path": selected.get("file_path"),
+                "symbol": selected.get("symbol_qualified_name") or selected.get("symbol_name"),
+                "start_line": selected.get("start_line"),
+                "original_rank": selected.get("rank") or candidate_index + 1,
+                "selected_at": utc_now(),
+            }
+
+            def mutate(rec: dict[str, Any]) -> None:
+                selected_stage = (rec.get("stages") or {}).get("localization") or {}
+                selected_output = selected_stage.get("output") or {}
+                selected_output["selected_symbol_index"] = candidate_index
+                selected_output["selected_symbol"] = dict(selected)
+                selected_output["selection_method"] = "manual"
+                if rec.get("stages", {}).pop("patch", None):
+                    self._event(rec, "錯誤定位候選已改選，先前產生的補丁已清除")
+                self._drop_patch_drafts(rec)
+                rec["attention"] = [item for item in rec.get("attention", []) if "補丁" not in item]
+                label = selected.get("symbol_qualified_name") or selected.get("symbol_name") or "未命名符號"
+                self._event(rec, f"已選用錯誤定位候選：{selected.get('file_path')} {label}")
+
+            updated = self.store.update(key, mutate)
+            self.store.write_artifact(key, "bug_location_raw.json", raw)
+            self.store.write_artifact(key, "localization_result.json", updated["stages"]["localization"])
+            return updated
+
     # ------------------------------------------------------ patch (on demand)
     def patch_precheck(self, key: str) -> dict[str, Any]:
         """Raise ValueError with a readable reason when the patch step cannot start."""
@@ -504,6 +565,57 @@ class IntegratedPipeline:
         result = stage_result(stage="patch", status="skipped", module="補丁生成", implementation="",
                               warnings=[f"全自動模式略過補丁生成：{reason}"])
         return self._set_stage(key, "patch", result)
+
+    def select_patch_candidate(self, key: str, candidate_id: str | int) -> dict[str, Any]:
+        """Make a generated candidate the current patch before drafting its commit message."""
+
+        wanted = str(candidate_id).strip()
+        if not wanted:
+            raise ValueError("請選擇候選補丁。")
+
+        with self._patch_lock:
+            record = self.get(key)
+            stage = (record.get("stages") or {}).get("patch") or {}
+            output = stage.get("output") or {}
+            candidate = next(
+                (item for item in output.get("candidates") or [] if str(item.get("candidate_id")) == wanted),
+                None,
+            )
+            if candidate is None:
+                raise ValueError("找不到這個候選補丁。")
+            patch = str(candidate.get("patch") or "")
+            if candidate.get("status") != "generated" or not patch:
+                raise ValueError("這個候選未通過基本檢查，不能選用。")
+
+            patch_sha256 = hashlib.sha256(patch.encode("utf-8")).hexdigest()
+            official_verdict = getattr(self.patcher, "official_verdict", None)
+            official = official_verdict(patch) if callable(official_verdict) else None
+
+            def mutate(rec: dict[str, Any]) -> None:
+                selected_stage = (rec.get("stages") or {}).get("patch") or {}
+                selected_output = selected_stage.get("output") or {}
+                selected_output["patch"] = patch
+                selected_output["patch_sha256"] = patch_sha256
+                selected_output["modified_files"] = list(candidate.get("modified_files") or [])
+                selected_output["selected_candidate_id"] = candidate.get("candidate_id")
+                selected_output["official"] = official
+                selected_output["selection_method"] = "manual"
+                selected_output.pop("commit_message", None)
+                experiment = selected_output.get("experiment")
+                if isinstance(experiment, dict):
+                    experiment["same_as_this_run"] = bool(
+                        experiment.get("patch_sha256") and experiment.get("patch_sha256") == patch_sha256
+                    )
+                selected_stage["warnings"] = [
+                    warning for warning in selected_stage.get("warnings", [])
+                    if "提交訊息" not in str(warning)
+                ]
+                self._drop_patch_drafts(rec)
+                self._event(rec, f"已選用候選補丁 {wanted}，將重新產生提交訊息")
+
+            updated = self.store.update(key, mutate)
+            self.store.write_artifact(key, "patch_result.json", updated["stages"]["patch"])
+            return updated
 
     # ------------------------------------------------------- commit messages
     def _commit_message(self, record: dict[str, Any], patch: str, official: dict[str, Any] | None) -> dict[str, Any]:

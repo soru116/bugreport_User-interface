@@ -1377,17 +1377,24 @@ function renderLocalization(r, o, projectOptions) {
   if (!o.ranked_symbols) return r.busy ? "" : locControls(r, projectOptions);
   const summary = o.summary || {};
   const level = { high: "高", medium: "中", low: "低" }[o.confidence_level] || o.confidence_level || "—";
-  const symbols = (o.ranked_symbols || []).map((s) => {
+  const selectedIndex = Number.isInteger(o.selected_symbol_index) ? o.selected_symbol_index : 0;
+  const canChooseCandidate = state.automationMode !== "automatic";
+  const symbols = (o.ranked_symbols || []).map((s, index) => {
     const lines = String(s.code || "").split("\n").map((line) => `<span>${esc(line)}</span>`).join("");
     const why = String(s.reason || "").toLowerCase();
     const reason = why.includes("stack") ? "符合錯誤紀錄中的檔案或行號"
       : why.includes("identifier") ? "符合回報中的函式或類別名稱"
       : "與回報內容及程式碼線索相符";
-    return `<li><details class="symbol" ${s.rank === 1 ? "open" : ""}><summary>
+    const selection = index === selectedIndex
+      ? `<span class="loc-choice"><span class="chip chip-done">${o.selection_method === "manual" ? "人工選用" : "系統首選"}</span></span>`
+      : canChooseCandidate
+        ? `<span class="loc-choice"><button type="button" class="btn btn-quiet btn-small" data-action="select-localization" data-candidate-index="${index}" ${r.busy ? "disabled" : ""}>選用此定位</button></span>`
+        : "";
+    return `<li><details class="symbol" ${index === selectedIndex ? "open" : ""}><summary>
         <span class="rank">${s.rank}</span>
         <span class="path">${esc(s.file_path)} <b>${esc(s.symbol_qualified_name || "")}</b></span>
         <span class="lines">第 ${s.start_line}–${s.end_line} 行，分數 ${num(s.score)}</span>
-        <span class="why">${esc(reason)}</span></summary>
+        <span class="why">${esc(reason)}</span>${selection}</summary>
         <pre class="code" style="--start:${Math.max(0, (s.start_line || 1) - 1)}">${lines}</pre></details></li>`;
   }).join("");
   return `<div class="loc-summary">
@@ -1625,10 +1632,18 @@ function renderPatchStage(r, n) {
     const warnings = patchWarnings.length ? `<ul class="warn-list">${patchWarnings.map((w) => `<li>${esc(publicStageMessage("patch", w, "部分檢查尚未完成，請在合併前人工審查。"))}</li>`).join("")}</ul>` : "";
     const target = o.bug_location || {};
     const generated = (o.candidates || []).filter((c) => c.status === "generated").length;
+    const canChooseCandidate = state.automationMode !== "automatic";
     const candRows = (o.candidates || []).map((c, index) => `<tr class="${c.candidate_id === o.selected_candidate_id ? "is-selected" : ""}">
         <td>${index + 1}</td>
         <td>${c.status === "generated" ? (c.candidate_id === o.selected_candidate_id ? "<b>已選用</b>" : "基本檢查通過") : "未通過檢查"}</td>
-        <td>${esc(patchReason(c.reason)) || (c.modified_files || []).map(esc).join("、")}</td></tr>`).join("");
+        <td>${esc(patchReason(c.reason)) || (c.modified_files || []).map(esc).join("、")}</td>
+        <td>${c.candidate_id === o.selected_candidate_id
+          ? "目前選用"
+          : c.status !== "generated" || !c.patch
+            ? "—"
+            : canChooseCandidate
+              ? `<button type="button" class="btn btn-quiet btn-small" data-action="select-patch" data-candidate-id="${esc(c.candidate_id)}" ${r.busy ? "disabled" : ""}>選用此補丁</button>`
+              : "由系統自動選擇"}</td></tr>`).join("");
     const summary = `<div class="loc-summary">
         <span>結果 <span class="chip ${chipCls}">${esc(PATCH_TAB_TEXT[tabState] || tabState)}</span></span>
         <span>改寫目標 <b class="mono">${esc(target.file || "—")}</b> <b>${esc(target.function || "")}</b>${o.target_rank ? `（定位第 ${esc(o.target_rank)} 名${o.target_fallback_used ? "，前面的候選不能改寫" : ""}）` : ""}</span>
@@ -1647,7 +1662,7 @@ function renderPatchStage(r, n) {
       .map((c, index) => `<details class="raw"><summary>其他可用方案 ${index + 1}（改動範圍較大）</summary>${patchTools(c.patch, diffFileName(r, `-candidate${c.candidate_id}`), `candidate-${c.candidate_id}`)}${diffHtml(c.patch)}</details>`).join("");
     content = `${warnings}${summary}${diff}
       <h4 class="sub-head">修正方案檢查結果</h4>
-      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>結果</th><th>原因／修改的檔案</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
+      <div class="table-wrap"><table class="cand-table"><thead><tr><th>#</th><th>結果</th><th>原因／修改的檔案</th><th>操作</th></tr></thead><tbody>${candRows}</tbody></table></div>${others}
       <div class="loc-controls">${button(true)}<a class="btn btn-quiet btn-small" href="/api/tickets/${encodeURIComponent(r.key)}/artifact/patch_result.json">下載完整結果 JSON</a></div>`;
   }
   const foot = s !== "running" ? `<div class="stage-foot"><span>${esc(STAGE_PURPOSE.patch)}</span></div>` : "";
@@ -1741,6 +1756,19 @@ async function onDetailClick(event) {
       case "commit-message":
         await post(`${path}/commit-message`, { source: btn.dataset.source });
         toast("已開始產生提交訊息草稿");
+        break;
+      case "select-patch":
+        if (!confirm(`確定要將修正方案 ${btn.dataset.candidateId} 設為主要補丁？提交訊息也會依此補丁重新產生。`)) { btn.disabled = false; return; }
+        await post(`${path}/select-patch`, { candidate_id: btn.dataset.candidateId });
+        state.tab = "patch";
+        toast(`已選用修正方案 ${btn.dataset.candidateId}，正在重新產生提交訊息`);
+        break;
+      case "select-localization":
+        event.preventDefault();
+        if (!confirm("確定要選用這個錯誤定位？如果已有補丁，舊補丁與提交訊息會被清除。")) { btn.disabled = false; return; }
+        await post(`${path}/select-localization`, { candidate_index: Number(btn.dataset.candidateIndex) });
+        state.tab = "localization";
+        toast("已改選錯誤定位，請依新位置重新產生補丁");
         break;
       case "patch":
         if (btn.dataset.again && !confirm("重新產生可能得到不同結果，且會取代目前的補丁。確定嗎？")) { btn.disabled = false; return; }
