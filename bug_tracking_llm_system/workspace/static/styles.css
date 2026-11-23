@@ -89,7 +89,7 @@ code, pre, .mono { font-family: var(--font-mono); font-size: 13px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 [hidden] { display: none !important; }
-mark { background: #ffe5a0; color: inherit; border-radius: 4px; padding: 0 1px; }
+mark { background: #ffe5a0; color: #3b2a00; border-radius: 4px; padding: 0 2px; }
 
 /* ---------------------------------------------------------------- topbar */
 .topbar {
