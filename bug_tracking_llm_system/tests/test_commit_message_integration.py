@@ -1,6 +1,7 @@
 """Focused tests for generated patch -> Code Llama commit message integration."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -28,13 +29,34 @@ PATCH = """--- a/pkg/names.py
      return value.strip()
 """
 
+ALTERNATE_PATCH = """--- a/pkg/names.py
++++ b/pkg/names.py
+@@ -1,2 +1,3 @@
+ def clean(value):
++    value = value or ""
+     return value.strip()
+"""
+
 
 class _PatchGenerator:
     def generate(self, record, project, raw, *, output_dir):
         return stage_result(
             stage="patch", status="done", module="fake-patch", implementation="test",
-            output={"patch_status": "generated", "patch": PATCH, "modified_files": ["pkg/names.py"]},
+            output={
+                "patch_status": "generated", "patch": PATCH, "modified_files": ["pkg/names.py"],
+                "patch_sha256": hashlib.sha256(PATCH.encode("utf-8")).hexdigest(),
+                "selected_candidate_id": 1,
+                "candidates": [
+                    {"candidate_id": 1, "status": "generated", "patch": PATCH,
+                     "modified_files": ["pkg/names.py"]},
+                    {"candidate_id": 2, "status": "generated", "patch": ALTERNATE_PATCH,
+                     "modified_files": ["pkg/names.py"]},
+                ],
+            },
         )
+
+    def official_verdict(self, patch):
+        return {"official_resolved": True, "run_id": "alternate"} if patch == ALTERNATE_PATCH else None
 
 
 class CommitMessageIntegrationTests(unittest.TestCase):
@@ -94,6 +116,39 @@ class CommitMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(stage["status"], "done")
         self.assertEqual(stage["output"]["patch_status"], "generated")
         self.assertNotIn("commit_message", stage["output"])
+
+    def test_selecting_another_candidate_updates_current_patch_and_commit_source(self) -> None:
+        seen_patches = []
+
+        class CapturingMessenger:
+            model = "fake"
+
+            def generate(self, record, patch, *, official=None):
+                seen_patches.append(patch)
+                return {"status": "generated", "commit_message": "fix(names): normalize empty values", "model": "fake"}
+
+        unused = object()
+        pipeline = IntegratedPipeline(
+            self.config, store=self.store, extractor=unused, duplicate_detector=unused,
+            priority_predictor=unused, assignee_recommender=unused, localizer=unused,
+            patcher=_PatchGenerator(), commit_messenger=CapturingMessenger(),
+        )
+        pipeline.generate_patch("T-1", generate_commit_message=False)
+
+        selected = pipeline.select_patch_candidate("T-1", 2)
+        output = selected["stages"]["patch"]["output"]
+        self.assertEqual(output["selected_candidate_id"], 2)
+        self.assertEqual(output["patch"], ALTERNATE_PATCH)
+        self.assertEqual(output["patch_sha256"], hashlib.sha256(ALTERNATE_PATCH.encode("utf-8")).hexdigest())
+        self.assertEqual(output["official"]["run_id"], "alternate")
+        self.assertNotIn("commit_message", output)
+
+        drafted = pipeline.draft_commit_message("T-1", "current")
+        self.assertEqual(seen_patches, [ALTERNATE_PATCH])
+        self.assertEqual(
+            drafted["stages"]["patch"]["output"]["commit_message"]["commit_message"],
+            "fix(names): normalize empty values",
+        )
 
     def test_overlong_model_subject_is_shortened_instead_of_blocking_automatic_flow(self) -> None:
         generator = TeamCommitMessageGenerator(

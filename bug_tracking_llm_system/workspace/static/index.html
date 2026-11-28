@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261116-2">
+  <link rel="stylesheet" href="styles.css?v=20261123-1">
 </head>
 <body>
   <header class="topbar">
@@ -123,7 +123,8 @@
       </div>
 
       <label class="field project-field"><span id="importProjectLabel">這張 Ticket 所屬的專案</span>
-        <select id="importProject"></select>
+        <input id="importProject" list="importProjectOptions" autocomplete="off" placeholder="選擇既有專案，或輸入新專案名稱">
+        <datalist id="importProjectOptions"></datalist>
       </label>
       <div class="import-project-note" id="importProjectNote" hidden></div>
       <p class="form-error" id="importError" role="alert"></p>
@@ -306,6 +307,6 @@
 
   <div class="queue-pill" id="queuePill" role="status" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
-  <script src="app.js?v=20261116-2"></script>
+  <script src="app.js?v=20261123-1"></script>
 </body>
 </html>

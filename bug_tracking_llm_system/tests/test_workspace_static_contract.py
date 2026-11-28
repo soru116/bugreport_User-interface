@@ -30,6 +30,23 @@ class WorkspaceStaticContractTests(unittest.TestCase):
         self.assertIn('["generated", "draft", "resolved"].includes(patchState)', app)
         self.assertIn('commitRegenerate(r, "current", "產生提交訊息")', app)
 
+    def test_semi_automatic_mode_can_select_another_patch_candidate(self) -> None:
+        app = (PROJECT_ROOT / "workspace" / "static" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('state.automationMode !== "automatic"', app)
+        self.assertIn('data-action="select-patch"', app)
+        self.assertIn('case "select-patch":', app)
+        self.assertIn('`${path}/select-patch`', app)
+        self.assertIn("提交訊息也會依此補丁重新產生", app)
+
+    def test_semi_automatic_mode_can_select_another_localization_candidate(self) -> None:
+        app = (PROJECT_ROOT / "workspace" / "static" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('data-action="select-localization"', app)
+        self.assertIn('case "select-localization":', app)
+        self.assertIn('`${path}/select-localization`', app)
+        self.assertIn("舊補丁與提交訊息會被清除", app)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -518,10 +518,23 @@ class WorkspaceApp:
         self.maybe_reload_config()
         return self._submit(key, "localize", project=project)
 
+    def select_localization_candidate(self, key: str, candidate_index: int) -> dict[str, Any]:
+        self.maybe_reload_config()
+        if self.busy(key):
+            raise ValueError("這張 Ticket 正在處理中，請完成後再改選錯誤定位。")
+        return self.pipeline.select_localization_candidate(key, candidate_index)
+
     def generate_patch(self, key: str) -> bool:
         self.maybe_reload_config()
         self.pipeline.patch_precheck(key)  # readable error right away instead of a failed job
         return self._submit(key, "patch")
+
+    def select_patch_candidate(self, key: str, candidate_id: str | int) -> bool:
+        self.maybe_reload_config()
+        if self.busy(key):
+            raise ValueError("這張 Ticket 正在處理中，請完成後再改選補丁。")
+        self.pipeline.select_patch_candidate(key, candidate_id)
+        return self._submit(key, "commit", source="current")
 
     def patched_code(self, key: str, source: str) -> dict[str, Any]:
         """The functions a patch touches, after applying it to the ticket's version of the code."""
@@ -869,6 +882,13 @@ class Handler(SimpleHTTPRequestHandler):
                 if action == "patch":
                     app.generate_patch(key)
                     return self._json({"started": True})
+                if action == "select-patch":
+                    started = app.select_patch_candidate(key, str(body.get("candidate_id") or ""))
+                    return self._json({"started": started})
+                if action == "select-localization":
+                    record = app.select_localization_candidate(key, int(body.get("candidate_index", -1)))
+                    output = record["stages"]["localization"]["output"]
+                    return self._json({"selected_symbol_index": output.get("selected_symbol_index")})
                 if action == "commit-message":
                     app.draft_commit_message(key, str(body.get("source") or "current"))
                     return self._json({"started": True})
