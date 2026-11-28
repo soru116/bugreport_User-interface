@@ -1843,16 +1843,17 @@ function recordsFromText(text, name) {
 }
 
 function importProjectOptions(history) {
-  const select = $("#importProject");
-  if (select.dataset.history === String(history) && select.options.length) return;
-  const previous = select.dataset.history ? select.value : null;
+  const input = $("#importProject");
+  const list = $("#importProjectOptions");
+  if (input.dataset.history === String(history) && list.children.length) return;
+  const previous = input.dataset.history ? input.value : null;
   const preferred = previous ?? (state.folder && state.folder !== NO_PROJECT ? state.folder : state.folder === NO_PROJECT ? "" : state.defaultProject);
   const none = history ? "不指定（和所有專案的 Ticket 比對）" : state.projects.length ? "不指定專案（略過錯誤定位）" : "（設定檔沒有專案，將略過錯誤定位）";
   const options = state.projects.map((p) => [p.project, p.project]);
-  if (history || !state.projects.length || preferred === "") options.push(["", none]);
-  select.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join("");
-  select.value = options.some(([value]) => value === preferred) ? preferred : options[0][0];
-  select.dataset.history = String(history);
+  list.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join("");
+  input.value = preferred || "";
+  input.placeholder = `${none}；也可輸入新專案名稱`;
+  input.dataset.history = String(history);
 }
 
 // The project dropdown only applies to tickets that do not name a project

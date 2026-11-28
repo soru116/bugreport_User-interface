@@ -123,7 +123,8 @@
       </div>
 
       <label class="field project-field"><span id="importProjectLabel">這張 Ticket 所屬的專案</span>
-        <select id="importProject"></select>
+        <input id="importProject" list="importProjectOptions" autocomplete="off" placeholder="選擇既有專案，或輸入新專案名稱">
+        <datalist id="importProjectOptions"></datalist>
       </label>
       <div class="import-project-note" id="importProjectNote" hidden></div>
       <p class="form-error" id="importError" role="alert"></p>
